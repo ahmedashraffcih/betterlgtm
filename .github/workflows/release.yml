@@ -82,12 +82,58 @@ jobs:
 
       - run: npm ci
 
+      # Signs with the Developer ID certificate and notarizes with an App Store Connect API key
+      # when those secrets exist; without them the macOS build stays unsigned.
+      - name: macOS signing setup
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning::No APPLE_CERTIFICATE secret: building an unsigned macOS app."
+            exit 0
+          fi
+          {
+            echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+            echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+            echo "MACOS_SIGNED=1"
+          } >> "$GITHUB_ENV"
+          if [ -n "$APPLE_API_KEY_P8" ]; then
+            key_path="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY.p8"
+            printf '%s' "$APPLE_API_KEY_P8" > "$key_path"
+            {
+              echo "APPLE_API_ISSUER=$APPLE_API_ISSUER"
+              echo "APPLE_API_KEY=$APPLE_API_KEY"
+              echo "APPLE_API_KEY_PATH=$key_path"
+              echo "MACOS_NOTARIZED=1"
+            } >> "$GITHUB_ENV"
+          else
+            echo "::warning::No APPLE_API_KEY_P8 secret: the app is signed but not notarized."
+          fi
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           releaseId: ${{ needs.create-release.outputs.id }}
           args: ${{ matrix.args }}
+
+      - name: Verify macOS signature
+        if: runner.os == 'macOS' && env.MACOS_SIGNED == '1'
+        run: |
+          app=$(ls -d src-tauri/target/${{ matrix.rust-targets }}/release/bundle/macos/*.app | head -1)
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | grep -E "Authority|TeamIdentifier|flags"
+          if [ "$MACOS_NOTARIZED" = "1" ]; then
+            xcrun stapler validate "$app"
+            spctl --assess --type execute --verbose=4 "$app"
+          fi
 
   publish-release:
     needs: [create-release, build]

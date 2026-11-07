@@ -79,6 +79,8 @@ Maintainers only:
 
 The [Release workflow](.github/workflows/release.yml) builds macOS (Apple silicon and Intel), Windows and Linux installers, attaches them to a GitHub release with those notes, and publishes it once every build succeeds.
 
+macOS builds are signed and notarized when the Apple secrets are set; see [docs/SIGNING.md](docs/SIGNING.md).
+
 ## Code of conduct
 
 Everyone taking part is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
