@@ -29,11 +29,6 @@ export interface Finding {
   anchors: Anchor[];
 }
 
-export interface ReadingStep {
-  path: string;
-  why: string;
-}
-
 /** One step of the guided review: related changes across files, read together. */
 export interface WalkStep {
   title: string;
@@ -50,7 +45,6 @@ export interface Analysis {
   recommendation?: { decision: Decision; reason: string };
   claims: Claim[];
   findings: Finding[];
-  readingOrder: ReadingStep[];
   /** Guided review steps. Missing in analyses from older versions; can be generated separately. */
   walkthrough?: WalkStep[];
 }
@@ -91,9 +85,11 @@ Do this, using only read-only commands:
 2. Find the most important things a reviewer should look at: bugs, security problems, behavior changes,
    missing tests, risky data handling. Also report changes the description doesn't mention (set notInDescription).
    Rank them by severity: critical, high, medium, low. Skip style nits.
-3. Suggest an order for reading the changed files.
-4. Summarize what the PR does and recommend a decision: approve, comment, or request_changes.
-5. ${WALKTHROUGH_RULES.replace(/\n/g, "\n   ")}
+3. Summarize what the PR does and recommend a decision: approve, comment, or request_changes.
+4. ${WALKTHROUGH_RULES.replace(/\n/g, "\n   ")}
+
+Don't read generated files (lockfiles, build output, snapshots, generated code) line by line;
+only mention them if their change is unexpected, for example a lockfile change with no dependency change.
 
 The reviewer skims. Be brief and concrete:
 - Use bullet points, not paragraphs. Every bullet is one short line, at most about 12 words.
@@ -113,7 +109,6 @@ When you are done, reply with only one JSON block in this shape:
   "findings": [{ "severity": "critical|high|medium|low", "category": "Correctness|Security|Behavior change|Tests|Data handling|Performance|Maintainability",
                  "title": "...", "body": ["...", "..."], "fix": "...", "confidence": "high|medium|low", "notInDescription": false,
                  "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
-  "readingOrder": [{ "path": "src/x.ts", "why": "..." }],
   ${WALKTHROUGH_SHAPE}
 }
 \`\`\`
@@ -181,7 +176,6 @@ export function parseAnalysis(text: string): Analysis | null {
           anchors: asArray<Anchor>(c.anchors),
           finding: typeof c.finding === "number" ? remap.get(c.finding) : undefined,
         })),
-        readingOrder: asArray<ReadingStep>(data.readingOrder),
         walkthrough: parseSteps(data.walkthrough),
       };
     } catch {

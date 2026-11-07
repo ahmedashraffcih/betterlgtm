@@ -81,6 +81,21 @@ index 3333333..4444444 100644
 -  res.status(201).json(serialize(charge));
 +  res.status(201).json(serialize(charge));
  });
+diff --git a/package-lock.json b/package-lock.json
+index 5555555..6666666 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -120,6 +120,13 @@
+       "integrity": "sha512-abc"
+     },
++    "node_modules/ioredis": {
++      "version": "5.4.1",
++      "resolved": "https://registry.npmjs.org/ioredis/-/ioredis-5.4.1.tgz",
++      "integrity": "sha512-def",
++      "dependencies": { "cluster-key-slot": "^1.1.0" }
++    },
++    "node_modules/cluster-key-slot": { "version": "1.1.2" },
+     "node_modules/zod": {
 `;
 
 const bodyHtml = `<h2 dir="auto">Summary</h2>
@@ -110,10 +125,6 @@ const analysis = {
     { severity: "critical", category: "Correctness", title: "Concurrent retries can double-charge", body: ["`save()` reads and writes the key in two calls", "Two requests arriving together both miss the cache", "Both create a charge"], fix: "Reserve the key with `SET NX` before charging.", confidence: "high", anchors: [{ path: "src/idempotency/store.ts", startLine: 21, endLine: 24 }, { path: "src/http/charges.ts", startLine: 41, endLine: 42 }] },
     { severity: "high", category: "Security", title: "Idempotency keys aren't scoped to the merchant", body: "Another merchant who sends the same key gets the first merchant's cached charge back.", fix: "Prefix the key with the merchant ID.", confidence: "high", anchors: [{ path: "src/idempotency/store.ts", startLine: 19, endLine: 21 }] },
     { severity: "low", category: "Data handling", title: "Cached response keeps the full charge body for 24 h", body: "The cached body includes card brand and last4.", confidence: "medium", anchors: [{ path: "src/http/charges.ts", startLine: 45, endLine: 45 }] },
-  ],
-  readingOrder: [
-    { path: "src/idempotency/store.ts", why: "The core of the change." },
-    { path: "src/http/charges.ts", why: "How the route calls the store." },
   ],
 };
 

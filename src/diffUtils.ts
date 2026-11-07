@@ -7,6 +7,25 @@ export function findFile(files: FileData[], path: string): FileData | undefined 
   return files.find((f) => filePath(f) === path) ?? files.find((f) => filePath(f).endsWith(path) || path.endsWith(filePath(f)));
 }
 
+const GENERATED_PATHS = [
+  /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|Cargo\.lock|Gemfile\.lock|composer\.lock|poetry\.lock|Pipfile\.lock|uv\.lock|go\.sum|flake\.lock|mix\.lock|pubspec\.lock|Podfile\.lock|packages\.lock\.json)$/,
+  /\.min\.(js|css)$/,
+  /\.(map|snap)$/,
+  /\.pb\.go$/,
+  /_pb2(_grpc)?\.py$/,
+  /\.(g|freezed)\.dart$/,
+  /\.generated\.\w+$/,
+  /(^|\/)(dist|vendor|node_modules|__generated__|generated)\//,
+];
+const GENERATED_MARKER = /@generated|Code generated .* DO NOT EDIT|auto-?generated|this file (is|was) generated/i;
+
+/** Lockfiles, build output, snapshots and files that say they're generated. Their diffs start hidden. */
+export function isGenerated(f: FileData): boolean {
+  const path = filePath(f);
+  if (GENERATED_PATHS.some((r) => r.test(path))) return true;
+  return (f.hunks[0]?.changes.slice(0, 8) ?? []).some((c) => GENERATED_MARKER.test(c.content));
+}
+
 export function fileStats(f: FileData) {
   let add = 0;
   let del = 0;

@@ -8,13 +8,13 @@ import { useState } from "react";
 import type { FileData } from "react-diff-view";
 import { anchorLabel, type Analysis, type Anchor, type Decision } from "../analysis";
 import type { PrDetails } from "../api";
-import { categoryIcon, fileIcon, SEVERITY, VERDICT } from "../icons";
+import { categoryIcon, SEVERITY, VERDICT } from "../icons";
 import { changesInRange, findFile, lineNumbers } from "../diffUtils";
 import { useElementWidth } from "../hooks";
 import { GithubHtml, Markdown } from "./Markdown";
 
-/** s0 = overview, d0 = PR description, c = claim, f = finding, o = reading-order step. */
-export type OutlineKey = `s${number}` | `d${number}` | `f${number}` | `c${number}` | `o${number}`;
+/** s0 = overview, d0 = PR description, c = claim, f = finding. */
+export type OutlineKey = `s${number}` | `d${number}` | `f${number}` | `c${number}`;
 
 export interface RunState {
   running: boolean;
@@ -125,11 +125,6 @@ export function AnalysisView(p: Props) {
         )}
         {showMinor && minor.map(({ f, i }) => <Row key={i} k={`f${i}`} sub Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} />)}
         {a.findings.length === 0 && <p className="muted" style={{ margin: "2px 10px", fontSize: 12 }}>No findings.</p>}
-
-        {a.readingOrder.length > 0 && <Group title="Reading order" />}
-        {a.readingOrder.map((r, i) => (
-          <Row key={i} k={`o${i}`} Icon={fileIcon(r.path)} tone="tone-muted" text={r.path.split("/").pop() ?? r.path} meta={String(i + 1)} />
-        ))}
       </nav>
     </div>
   );
@@ -371,33 +366,6 @@ function Detail(p: Props & { analysis: Analysis }) {
             <button type="button" className="btn sm" onClick={() => p.onSelect(`f${fi}`)}><Flag size={13} />See finding {fi + 1}</button>
           )}
           <button type="button" className="btn sm" onClick={() => p.onSelect("d0")}><FileText size={13} />Read the full description</button>
-        </div>
-      </>
-    );
-  }
-
-  if (kind === "o" && a.readingOrder[idx]) {
-    const r = a.readingOrder[idx];
-    const related = a.findings.map((f, i) => ({ f, i })).filter(({ f }) => f.anchors.some((an) => an.path === r.path));
-    return (
-      <>
-        <span className="muted" style={{ fontSize: 12 }}>Reading order · step {idx + 1} of {a.readingOrder.length}</span>
-        <h2 className="mono" style={{ margin: 0, fontSize: 15, fontWeight: 600, overflowWrap: "anywhere" }}>{r.path}</h2>
-        <Markdown text={r.why} />
-        {related.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", margin: "0 -10px" }}>
-            {related.map(({ f, i }) => {
-              const sev = SEVERITY[f.severity];
-              return (
-                <button key={i} type="button" className="attn" onClick={() => p.onSelect(`f${i}`)}>
-                  <sev.icon size={16} className={sev.tone} /><span style={{ flex: 1 }}>{f.title}</span><ChevronRight size={14} className="tone-muted" />
-                </button>
-              );
-            })}
-          </div>
-        )}
-        <div>
-          <button type="button" className="btn" onClick={() => p.onOpenAnchor({ path: r.path, startLine: 0, endLine: -1 }, null)}><FileDiff size={14} />Open in Diff</button>
         </div>
       </>
     );

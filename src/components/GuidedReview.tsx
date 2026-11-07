@@ -2,7 +2,7 @@ import { Check, ChevronDown, ChevronRight, Columns2, Files, Loader, Rows3, Spark
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Decoration, Diff, Hunk, getChangeKey, type FileData, type HunkData, type RenderGutter } from "react-diff-view";
 import type { Anchor, Finding, WalkStep } from "../analysis";
-import { allReviewed, changesInRange, filePath, fileStats, findFile, hunkKey, hunksForRanges } from "../diffUtils";
+import { allReviewed, changesInRange, filePath, fileStats, findFile, hunkKey, hunksForRanges, isGenerated } from "../diffUtils";
 import { useElementWidth } from "../hooks";
 import { fileIcon } from "../icons";
 import { DiffModeSwitch, type DiffMode } from "./DiffView";
@@ -65,8 +65,10 @@ function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; revi
   const Icon = fileIcon(path);
   const s = fileStats(part.file);
   // Reviewed files fold away, like GitHub's "Viewed", so the remaining work stays in view.
-  const [open, setOpen] = useState(!p.reviewed);
-  useEffect(() => setOpen(!p.reviewed), [p.reviewed]);
+  // Generated files (lockfiles, build output) start folded too.
+  const generated = useMemo(() => isGenerated(part.file), [part.file]);
+  const [open, setOpen] = useState(!p.reviewed && !generated);
+  useEffect(() => setOpen(!p.reviewed && !generated), [p.reviewed, generated]);
 
   // Everything shown already belongs to the section, so lines aren't highlighted; only finding markers stand out.
   const markers = useMemo(() => {
@@ -98,6 +100,7 @@ function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; revi
         </button>
         <Icon size={14} className="tone-muted" />
         <span className="mono ellipsis" style={{ flex: 1 }} title={path}>{path}</span>
+        {generated && <span className="tag" title="Generated file: diff hidden until you open it">Generated</span>}
         <span className="mono muted" style={{ fontSize: 11 }}>+{s.add} −{s.del}</span>
         <label className={p.reviewed ? "review-check on" : "review-check"}>
           <input type="checkbox" checked={p.reviewed} onChange={(e) => p.onToggle(e.target.checked)} />
