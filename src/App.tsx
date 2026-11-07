@@ -1,5 +1,6 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Code, ExternalLink, FileDiff, GitBranch, Inbox as InboxIcon, ListChecks, Loader, Lock, MessageSquare, RefreshCw, Send } from "lucide-react";
+import { Code, ExternalLink, FileDiff, GitBranch, GitPullRequestArrow, Inbox as InboxIcon, ListChecks, ListOrdered, Loader, Lock, MessageSquare, RefreshCw, Send, Terminal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
@@ -12,6 +13,11 @@ import { GuidedReview } from "./components/GuidedReview";
 import { Inbox, InboxRail, prKey } from "./components/Inbox";
 import { TitleBar } from "./components/TitleBar";
 import { useElementWidth } from "./hooks";
+import { matches, shortcutLabel, type Command } from "./commands";
+import { CommandPalette, type PaletteItem } from "./components/CommandPalette";
+import { InfoDialog } from "./components/InfoDialog";
+import { filePath } from "./diffUtils";
+import { fileIcon, SEVERITY } from "./icons";
 import { emptySession, useSessions, useStoredState, type ChatItem } from "./sessions";
 import { Settings, type SettingsSection } from "./components/Settings";
 import { ownerVisible, useSettings } from "./settings";
@@ -34,6 +40,8 @@ export default function App() {
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [settings, updateSettings] = useSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [infoDialog, setInfoDialog] = useState<"shortcuts" | "about" | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [orgs, setOrgs] = useState<{ login: string; orgs: string[] } | null>(null);
   const [orgsError, setOrgsError] = useState<string | null>(null);
@@ -112,19 +120,28 @@ export default function App() {
     return () => clearInterval(t);
   }, [refresh, configReady, settings.refreshMinutes]);
 
-  // Ctrl+, opens settings and Escape closes them.
+  // Shortcuts come from the command list (menus and palette use the same list); Escape closes Settings.
+  const commandsRef = useRef<Command[]>([]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
-        e.preventDefault();
-        setSettingsOpen(true);
-      } else if (e.key === "Escape" && settingsOpen) {
+      if (e.key === "Escape" && settingsOpen && !paletteOpen && !infoDialog) {
         setSettingsOpen(false);
+        return;
+      }
+      const t = e.target;
+      const typing = t instanceof Element && !!t.closest("input, textarea, select");
+      for (const c of commandsRef.current) {
+        // While typing, only Ctrl shortcuts and function keys apply, so letters still reach the field.
+        if (c.keys && c.enabled !== false && matches(e, c.keys) && (!typing || c.keys.ctrl || /^F\d+$/.test(c.keys.key))) {
+          e.preventDefault();
+          c.run();
+          return;
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [settingsOpen]);
+  }, [settingsOpen, paletteOpen, infoDialog]);
 
   /** Review requests that pass the organization and draft settings. */
   const visibleRequests = useMemo(
@@ -400,6 +417,87 @@ export default function App() {
     onHide: () => setChatOpen(false),
   };
 
+  const openInEditor = () => session?.worktree && openUrl(`vscode://file${session.worktree}`);
+  const canAnalyze = !!(details && !run?.running);
+  const commands: Command[] = [
+    { id: "refresh", menu: "File", label: "Refresh review requests", keys: { key: "F5" }, run: refresh },
+    { id: "github", menu: "File", label: "Open pull request on GitHub", enabled: !!selected, run: () => selected && openUrl(selected.url), separatorBefore: true },
+    { id: "editor", menu: "File", label: "Open worktree in VS Code", enabled: !!session?.worktree, run: openInEditor },
+    { id: "settings", menu: "File", label: "Settings…", keys: { key: ",", ctrl: true }, run: () => openSettings("general"), separatorBefore: true },
+    { id: "quit", menu: "File", label: "Quit", keys: { key: "q", ctrl: true }, run: () => getCurrentWindow().close(), separatorBefore: true },
+
+    { id: "palette", menu: "View", label: "Go to…", keys: { key: "k", ctrl: true }, run: () => setPaletteOpen(true) },
+    { id: "inbox", menu: "View", label: "Inbox panel", checked: inboxOpen, keys: { key: "b", ctrl: true }, run: () => setInboxOpen(!inboxOpen), separatorBefore: true },
+    { id: "chat", menu: "View", label: "Claude panel", checked: chatOpen, keys: { key: "j", ctrl: true }, run: () => setChatOpen(!chatOpen) },
+    { id: "tab-analysis", menu: "View", label: "Analysis", checked: !!selected && tab === "analysis", enabled: !!selected, keys: { key: "1", ctrl: true }, run: () => setTab("analysis"), separatorBefore: true },
+    { id: "tab-diff", menu: "View", label: "Diff", checked: !!selected && tab === "diff", enabled: !!selected, keys: { key: "2", ctrl: true }, run: () => setTab("diff") },
+    { id: "guided", menu: "View", label: "Guided review", checked: diffMode === "guided", run: () => { setDiffMode("guided"); if (selected) setTab("diff"); }, separatorBefore: true },
+    { id: "files", menu: "View", label: "All files", checked: diffMode === "files", run: () => { setDiffMode("files"); if (selected) setTab("diff"); } },
+    { id: "split", menu: "View", label: "Split diff", checked: split, run: () => setSplit(!split) },
+    { id: "theme-system", menu: "View", label: "System theme", checked: settings.theme === "system", run: () => updateSettings({ theme: "system" }), separatorBefore: true },
+    { id: "theme-light", menu: "View", label: "Light theme", checked: settings.theme === "light", run: () => updateSettings({ theme: "light" }) },
+    { id: "theme-dark", menu: "View", label: "Dark theme", checked: settings.theme === "dark", run: () => updateSettings({ theme: "dark" }) },
+
+    { id: "analyze", menu: "Review", label: analysis ? "Re-run analysis" : "Start review", enabled: canAnalyze, run: () => { setTab("analysis"); startAnalysis(); } },
+    { id: "guide", menu: "Review", label: "Create guided review", enabled: !!(analysis && !analysis.walkthrough && session?.sessionId && !(key && guideRuns[key]?.running)), run: () => { setDiffMode("guided"); setTab("diff"); generateWalkthrough(); } },
+    { id: "next", menu: "Review", label: "Next finding", hint: "J", enabled: !!analysis?.findings.length, run: () => stepFinding(1), separatorBefore: true },
+    { id: "prev", menu: "Review", label: "Previous finding", hint: "K", enabled: !!analysis?.findings.length, run: () => stepFinding(-1) },
+    { id: "ask", menu: "Review", label: "Ask Claude", keys: { key: "l", ctrl: true }, enabled: !!selected, run: () => { setChatOpen(true); setChatFocus((n) => n + 1); }, separatorBefore: true },
+    { id: "clear-chat", menu: "Review", label: "Clear conversation", enabled: !!session?.chat.length, run: () => key && update(key, (s) => ({ ...s, chat: [] })) },
+
+    { id: "shortcuts", menu: "Help", label: "Keyboard shortcuts", keys: { key: "/", ctrl: true }, run: () => setInfoDialog("shortcuts") },
+    { id: "about", menu: "Help", label: "About better-lgtm", run: () => setInfoDialog("about") },
+  ];
+  commandsRef.current = commands;
+
+  // Everything the Ctrl+K palette can jump to.
+  const paletteItems: PaletteItem[] = paletteOpen
+    ? [
+        ...(visibleRequests ?? []).map((pr) => ({
+          id: `pr-${prKey(pr)}`,
+          group: "Pull requests",
+          label: pr.title,
+          detail: `${pr.repository.nameWithOwner} #${pr.number}`,
+          icon: <GitPullRequestArrow size={14} />,
+          run: () => selectPr(pr),
+        })),
+        ...(analysis?.findings ?? []).map((f, i) => {
+          const sev = SEVERITY[f.severity];
+          return {
+            id: `f-${i}`,
+            group: "Findings",
+            label: f.title,
+            detail: `${sev.label} · finding ${i + 1}`,
+            icon: <sev.icon size={14} className={sev.tone} />,
+            run: () => { setTab("analysis"); setOutlineKey(`f${i}`); setFocusPane("outline"); },
+          };
+        }),
+        ...(analysis?.walkthrough ?? []).map((s, i) => ({
+          id: `s-${i}`,
+          group: "Guided review sections",
+          label: s.title,
+          detail: `Section ${i + 1}`,
+          icon: <ListOrdered size={14} />,
+          run: () => { setDiffMode("guided"); setTab("diff"); setGuideStep(i); },
+        })),
+        ...files.map((f) => {
+          const path = filePath(f);
+          const Icon = fileIcon(path);
+          return {
+            id: `file-${path}`,
+            group: "Changed files",
+            label: path.split("/").pop() ?? path,
+            detail: path,
+            icon: <Icon size={14} />,
+            run: () => openAnchor({ path, startLine: 0, endLine: -1 }, null),
+          };
+        }),
+        ...commands
+          .filter((c) => c.enabled !== false && c.id !== "palette")
+          .map((c) => ({ id: `cmd-${c.id}`, group: "Commands", label: c.label, detail: shortcutLabel(c), icon: <Terminal size={14} />, run: c.run })),
+      ]
+    : [];
+
   const main = !selected ? (
     <div className="empty">
       <div>
@@ -514,6 +612,8 @@ export default function App() {
         onToggleInbox={() => setInboxOpen(!inboxOpen)}
         onToggleChat={() => setChatOpen(!chatOpen)}
         onOpenSettings={() => openSettings("general")}
+        onOpenPalette={() => setPaletteOpen(true)}
+        commands={commands}
       />
       {settingsOpen && (
         <div style={{ flex: 1, minHeight: 0 }}>
@@ -602,6 +702,8 @@ export default function App() {
         {details && <span className="sb opt ellipsis"><GitBranch size={13} />{details.headRefName} @ {details.headRefOid.slice(0, 7)}</span>}
         <span className="sb opt"><Lock size={13} />Read-only</span>
       </footer>
+      {paletteOpen && <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
+      {infoDialog && <InfoDialog kind={infoDialog} commands={commands} onClose={() => setInfoDialog(null)} />}
     </div>
   );
 }

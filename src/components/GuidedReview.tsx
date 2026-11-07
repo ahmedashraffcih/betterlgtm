@@ -172,6 +172,11 @@ export function GuidedReview(p: Props) {
     // Only once steps exist; after that the position comes from scrolling.
   }, [steps.length > 0]);
 
+  // Jumps requested from outside (the command palette) scroll to that section.
+  useEffect(() => {
+    if (steps.length && p.current !== active && p.current < steps.length) jumpTo(p.current);
+  }, [p.current]);
+
   // Keep the active item visible in the side menu as the diff scrolls.
   useEffect(() => {
     navItems.current[active]?.scrollIntoView({ block: "nearest" });
