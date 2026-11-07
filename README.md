@@ -44,15 +44,12 @@ Download the installer for your platform from [Releases](https://github.com/drma
 
 | Platform | File |
 |---|---|
-| macOS, Apple silicon | `…_aarch64.dmg` |
-| macOS, Intel | `…_x64.dmg` |
-| Windows | `…_x64-setup.exe` or `…_x64_en-US.msi` |
-| Linux | `.AppImage`, `.deb` or `.rpm` |
+| macOS, Apple silicon | [`BetterLGTM_0.1.1_aarch64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.1.1/BetterLGTM_0.1.1_aarch64.dmg) |
+| macOS, Intel | [`BetterLGTM_0.1.1_x64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.1.1/BetterLGTM_0.1.1_x64.dmg) |
+| Windows | [`BetterLGTM_0.1.1_x64-setup.exe`](https://github.com/drmas/betterlgtm/releases/download/v0.1.1/BetterLGTM_0.1.1_x64-setup.exe) or [`.msi`](https://github.com/drmas/betterlgtm/releases/download/v0.1.1/BetterLGTM_0.1.1_x64_en-US.msi) |
+| Linux | [`.AppImage`](https://github.com/drmas/betterlgtm/releases/download/v0.1.1/BetterLGTM_0.1.1_amd64.AppImage), [`.deb`](https://github.com/drmas/betterlgtm/releases/download/v0.1.1/BetterLGTM_0.1.1_amd64.deb) or [`.rpm`](https://github.com/drmas/betterlgtm/releases/download/v0.1.1/BetterLGTM-0.1.1-1.x86_64.rpm) |
 
-The builds aren't code-signed yet:
-
-- **macOS:** if macOS says the app is damaged or can't be opened, allow it in **System Settings › Privacy & Security**, or run `xattr -dr com.apple.quarantine /Applications/BetterLGTM.app` once.
-- **Windows:** SmartScreen may warn about an unknown publisher. Choose **More info › Run anyway**.
+The macOS app is signed with a Developer ID and notarized by Apple, so it opens like any other Mac app. Windows builds aren't signed yet: if SmartScreen warns about an unknown publisher, choose **More info › Run anyway**.
 
 ### Requirements
 
