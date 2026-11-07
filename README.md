@@ -7,6 +7,7 @@
 <p align="center">Mean it when you say lgtm.<br>A desktop app for reviewing GitHub pull requests with Claude Code.</p>
 
 <p align="center">
+  <a href="https://drmas.github.io/betterlgtm/">Website</a> ·
   <a href="https://github.com/drmas/betterlgtm/releases/latest">Download</a> ·
   <a href="#build-from-source">Build from source</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>

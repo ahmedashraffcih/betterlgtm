@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BetterLGTM — review pull requests you've actually read</title>
+<meta name="description" content="A desktop app for the pull requests waiting on your review. It checks each one out, has Claude Code compare the description with the code, and walks you through the changes.">
+<meta name="color-scheme" content="light dark">
+<meta property="og:title" content="BetterLGTM — mean it when you say lgtm">
+<meta property="og:description" content="Review GitHub pull requests with Claude Code, from your desktop. Free for macOS, Windows and Linux.">
+<meta property="og:image" content="https://drmas.github.io/betterlgtm/assets/og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans:wght@800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --brand: #2557BE;
+  --hero: #2557BE;
+  --hero-text: #E4ECFB;
+  --hero-muted: #DCE6FA;
+  --hero-shadow: #173C8C;
+  --bg: #F7F9FC;
+  --surface: #FFFFFF;
+  --surface-2: #F4F6FA;
+  --line: #E3E8F0;
+  --line-2: #EEF1F6;
+  --line-strong: #D5DDEA;
+  --text: #0F1E36;
+  --body: #3B4B63;
+  --muted: #52627A;
+  --faint: #6B7A90;
+  --link: #2557BE;
+  --bubble: #2557BE;
+  --bad: #A3261B;
+  --bad-icon: #B42318;
+  --add-bg: #EEF8F1;
+  --add-text: #1C5E31;
+  --hit-bg: #FFF1D6;
+  --hit-text: #5C3A00;
+  --hit-mark: #D98A12;
+  --shot-border: rgba(15, 30, 54, 0.18);
+  --shadow: rgba(10, 24, 56, 0.6);
+  --ring: rgba(255, 255, 255, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hero: #173A85;
+    --hero-text: #D6E1F7;
+    --hero-muted: #D6E1F7;
+    --hero-shadow: #0E2557;
+    --bg: #0C1524;
+    --surface: #111D31;
+    --surface-2: #1A2840;
+    --line: #22314B;
+    --line-2: #1A2840;
+    --line-strong: #2A3B58;
+    --text: #E6ECF6;
+    --body: #B9C5D8;
+    --muted: #A2B0C6;
+    --faint: #8D9BB2;
+    --link: #8AB4FF;
+    --bubble: #2B5FC7;
+    --bad: #F49A90;
+    --bad-icon: #F28B82;
+    --add-bg: #12281E;
+    --add-text: #8FDCA8;
+    --hit-bg: #33270F;
+    --hit-text: #F6CF8A;
+    --hit-mark: #E09A2A;
+    --shot-border: rgba(255, 255, 255, 0.16);
+    --shadow: rgba(0, 0, 0, 0.8);
+    --ring: rgba(255, 255, 255, 0.08);
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 18px/1.55 "Schibsted Grotesk", system-ui, sans-serif;
+  overflow-x: hidden;
+}
+a { color: var(--link); }
+a:focus-visible { outline: 3px solid #F2B33D; outline-offset: 3px; border-radius: 6px; }
+code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.85em; }
+img { display: block; max-width: 100%; height: auto; }
+h1, h2, h3 { margin: 0; }
+p { margin: 0; }
+
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
+.badge {
+  display: inline-flex; align-items: center;
+  height: 28px; padding: 0 9px; border-radius: 7px;
+  background: #FFFFFF; color: var(--brand);
+  font: 800 16px/1 "Noto Sans", sans-serif; letter-spacing: -0.03em;
+}
+
+/* Hero */
+.hero { background: var(--hero); color: #FFFFFF; }
+.nav { display: flex; align-items: center; gap: 24px; height: 80px; }
+.brand { display: flex; align-items: center; gap: 10px; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 19px; }
+.nav-links { display: flex; gap: 28px; margin-left: 24px; font-size: 16px; }
+.nav-links a { color: var(--hero-muted); text-decoration: none; }
+.nav-links a:hover { color: #FFFFFF; }
+.nav-cta {
+  margin-left: auto; display: inline-flex; align-items: center;
+  height: 44px; padding: 0 18px; border-radius: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  color: #FFFFFF; font-weight: 600; font-size: 16px; text-decoration: none;
+}
+.nav-cta:hover { background: rgba(255, 255, 255, 0.12); }
+.hero-copy { padding-top: 88px; padding-bottom: 72px; }
+.hero h1 { font-size: clamp(48px, 8.4vw, 128px); font-weight: 800; letter-spacing: -0.05em; line-height: 0.95; }
+.stamp {
+  display: inline-block; transform: rotate(-4deg);
+  padding: 0 0.15em 0.07em; border-radius: 0.15em;
+  background: #FFFFFF; color: var(--brand);
+  font-family: "Noto Sans", sans-serif; letter-spacing: -0.04em;
+  box-shadow: 0 0.06em 0 var(--hero-shadow);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .stamp { animation: stamp 0.55s cubic-bezier(0.2, 1.6, 0.4, 1) 0.3s both; }
+  @keyframes stamp {
+    from { transform: scale(1.7) rotate(-10deg); opacity: 0; }
+    to { transform: scale(1) rotate(-4deg); opacity: 1; }
+  }
+}
+.lede { margin-top: 44px; max-width: 32em; font-size: 21px; line-height: 1.5; color: var(--hero-text); }
+.cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 32px; }
+.cta {
+  display: inline-flex; align-items: center; gap: 10px;
+  height: 56px; padding: 0 26px; border-radius: 12px;
+  background: #FFFFFF; color: var(--hero-shadow);
+  font-weight: 700; font-size: 18px; text-decoration: none;
+}
+.cta:hover { background: #EEF3FD; }
+.cta-note { font-size: 15px; color: var(--hero-muted); }
+.cta-note a { color: #FFFFFF; }
+.shot { position: relative; margin-bottom: -200px; }
+.shot img {
+  width: 100%; border-radius: 14px; border: 1px solid var(--shot-border);
+  box-shadow: 0 40px 80px -40px var(--shadow), 0 0 0 8px var(--ring);
+}
+
+/* Features */
+.features { padding: 312px 0 120px; }
+.features .wrap { display: flex; flex-direction: column; gap: 120px; }
+.feature { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: center; }
+h2 { font-size: 42px; line-height: 1.06; letter-spacing: -0.03em; font-weight: 800; }
+.feature p { margin-top: 18px; color: var(--body); max-width: 30em; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; font-size: 16px; }
+.panel-shadow { box-shadow: 0 24px 48px -36px var(--shadow); }
+.claim { display: flex; gap: 14px; padding: 20px 22px 18px; }
+.claim svg { flex-shrink: 0; margin-top: 2px; }
+.claim-kind { font-weight: 700; color: var(--bad); }
+.claim-text { margin-top: 4px; font-size: 19px; font-weight: 600; }
+.claim-why { margin-top: 8px; color: var(--body); }
+.code { border-top: 1px solid var(--line); font: 13.5px/1.8 "JetBrains Mono", ui-monospace, monospace; overflow-x: auto; border-radius: 0 0 12px 12px; }
+.code .file { padding: 6px 22px; background: var(--surface-2); border-bottom: 1px solid var(--line); color: var(--muted); }
+.code .ln { padding: 0 22px; white-space: pre; background: var(--add-bg); color: var(--add-text); }
+.code .ln:last-child { padding-bottom: 4px; }
+.code .hit { background: var(--hit-bg); color: var(--hit-text); box-shadow: inset 4px 0 0 var(--hit-mark); }
+.feature-shot { width: 100%; border-radius: 12px; border: 1px solid var(--line-strong); box-shadow: 0 24px 48px -32px var(--shadow); }
+.chat { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.msg-me { align-self: flex-end; max-width: 80%; background: var(--bubble); color: #FFFFFF; padding: 10px 14px; border-radius: 14px 14px 4px 14px; }
+.msg-ai { max-width: 88%; background: var(--surface-2); padding: 12px 14px; border-radius: 14px 14px 14px 4px; }
+.composer { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 6px 0 14px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--faint); }
+.composer span:first-child { flex: 1; }
+.send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: var(--bubble); }
+
+/* Local */
+.local { background: var(--surface); border-top: 1px solid var(--line); padding: 112px 0; }
+@media (prefers-color-scheme: dark) { .local { background: #101B2E; } }
+.local h2 { max-width: 18em; }
+.local-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px 64px; margin-top: 56px; }
+.local h3 { margin-bottom: 8px; font-size: 21px; font-weight: 700; }
+.local p { color: var(--body); }
+
+/* Download */
+.download { background: var(--hero); color: #FFFFFF; padding: 104px 0; }
+.download h2 { font-size: clamp(36px, 5vw, 60px); line-height: 1.02; letter-spacing: -0.04em; }
+.download .sub { margin-top: 16px; font-size: 19px; color: var(--hero-muted); max-width: 34em; }
+.platforms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; margin-top: 48px; }
+.platform { display: flex; flex-direction: column; gap: 10px; }
+.platform h3 { margin-bottom: 4px; font-size: 22px; font-weight: 700; }
+.dl {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 56px; padding: 0 16px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #FFFFFF; text-decoration: none; font-weight: 600;
+}
+.dl:hover { background: rgba(255, 255, 255, 0.18); }
+.dl span:first-child { flex: 1; }
+.dl .meta { font-weight: 500; font-size: 15px; color: var(--hero-muted); }
+.download .fine { margin-top: 36px; font-size: 15px; color: var(--hero-muted); max-width: 46em; }
+.download .fine a { color: #FFFFFF; }
+
+footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding-top: 32px; padding-bottom: 40px; font-size: 15px; color: var(--muted); }
+footer .badge { height: 22px; padding: 0 7px; border-radius: 5px; background: var(--brand); color: #FFFFFF; font-size: 12px; }
+footer a { color: var(--muted); }
+footer .end { margin-left: auto; }
+
+@media (max-width: 860px) {
+  .wrap { padding: 0 16px; }
+  .nav-links { display: none; }
+  .hero-copy { padding-top: 56px; padding-bottom: 48px; }
+  .lede { margin-top: 32px; font-size: 19px; }
+  .shot { margin-bottom: -48px; }
+  .features { padding: 112px 0 96px; }
+  .features .wrap { gap: 88px; }
+  .feature { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  h2 { font-size: 34px; }
+  .local, .download { padding: 80px 0; }
+  .local-grid { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .platforms { grid-template-columns: minmax(0, 1fr); }
+  footer .end { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <header class="wrap nav">
+    <a class="brand" href="#top"><span class="badge">lgtm</span>BetterLGTM</a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#local">Privacy</a>
+      <a href="https://github.com/drmas/betterlgtm">GitHub</a>
+    </nav>
+    <a class="nav-cta" href="#download">Download</a>
+  </header>
+
+  <div id="top" class="wrap hero-copy">
+    <h1>Mean it when<br>you say <span class="stamp">lgtm</span></h1>
+    <p class="lede">A desktop app for the pull requests waiting on your review. It checks each one out, has Claude Code compare the description with the code, and walks you through the changes in an order that makes sense.</p>
+    <div class="cta-row">
+      <a class="cta" id="hero-cta" href="https://github.com/drmas/betterlgtm/releases/latest">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        <span id="hero-label">Download for free</span>
+      </a>
+      <span class="cta-note"><span id="hero-note">Free for macOS, Windows and Linux.</span> <a href="#download">Other platforms</a></span>
+    </div>
+  </div>
+
+  <div class="wrap shot">
+    <picture>
+      <source media="(max-width: 860px) and (prefers-color-scheme: dark)" srcset="assets/verdict-dark.webp">
+      <source media="(max-width: 860px)" srcset="assets/verdict-light.webp">
+      <source media="(prefers-color-scheme: dark)" srcset="assets/analysis-dark.webp">
+      <img src="assets/analysis-light.webp" width="2400" height="1500" alt="BetterLGTM showing a pull request analysis: a request-changes verdict, a short summary, and the findings and description claims that need attention">
+    </picture>
+  </div>
+</section>
+
+<main>
+<section id="how" class="features">
+  <div class="wrap">
+
+    <div class="feature">
+      <div>
+        <h2>Does the code do what the description says?</h2>
+        <p>Claude Code reads the pull request in its own checkout, then checks each claim from the description against what the code actually does. When a claim doesn't hold, you get the reason and the exact lines.</p>
+      </div>
+      <div class="panel panel-shadow">
+        <div class="claim">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--bad-icon)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/></svg>
+          <div>
+            <div class="claim-kind">Contradicted by the code</div>
+            <div class="claim-text">“Safe to retry, even when requests arrive concurrently.”</div>
+            <div class="claim-why">Two requests with the same key can both miss the cache before either saves, so both charge the card.</div>
+          </div>
+        </div>
+        <div class="code" role="img" aria-label="Lines 18 to 21 of src/idempotency/store.ts, with line 19 highlighted">
+          <div class="file">src/idempotency/store.ts</div>
+          <div class="ln">18  export async function save(key, res) {</div>
+          <div class="ln hit">19    const existing = await redis.get(`idem:${key}`);</div>
+          <div class="ln">20    if (existing) return JSON.parse(existing);</div>
+          <div class="ln">21    await redis.set(`idem:${key}`, …);</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div>
+        <h2>Read the change, not the file list</h2>
+        <p>Related edits are grouped into sections with a line on what each one does, in one continuous scroll. Tick off a section, a file or a single change as you go, and generated files stay folded until you open them.</p>
+      </div>
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="assets/guided-dark.webp">
+        <img class="feature-shot" src="assets/guided-light.webp" width="1600" height="1031" loading="lazy" alt="Guided review: the change split into three sections, each with a short summary above the diff of its file">
+      </picture>
+    </div>
+
+    <div class="feature">
+      <div>
+        <h2>Ask about the line you're on</h2>
+        <p>The chat knows which finding, section or file you're looking at, and Claude can read the whole repository to answer. It can't change your code or post anything to GitHub.</p>
+      </div>
+      <div class="panel chat">
+        <div class="msg-me">How would you fix the double charge?</div>
+        <div class="msg-ai">Take a short lock on the key before charging: <code>SET idem:lock:{key} NX EX 30</code> in <code>store.ts:19</code>. A second request that can't get the lock waits for the first response instead of charging again.</div>
+        <div class="composer" aria-hidden="true"><span>Ask about this…</span><span class="send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section id="local" class="local">
+  <div class="wrap">
+    <h2>Runs on your machine, with the tools you already use</h2>
+    <div class="local-grid">
+      <div><h3>No account, no server</h3><p>BetterLGTM talks to GitHub through your signed-in <code>gh</code> and to Claude through your <code>claude</code>. Your code and tokens never pass through us.</p></div>
+      <div><h3>A worktree per pull request</h3><p>Each PR gets its own checkout next to a shared clone, so Claude reads real files and your working copy is never touched.</p></div>
+      <div><h3>Read-only by design</h3><p>Claude Code can read, search and look at git history. It can't edit files, run other commands, or comment on GitHub.</p></div>
+      <div><h3>Open source</h3><p>MIT licensed. Read the code, file an issue, or send a pull request on <a href="https://github.com/drmas/betterlgtm">GitHub</a>.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="download" class="download">
+  <div class="wrap">
+    <h2>Download BetterLGTM</h2>
+    <p class="sub">Free. You'll need the <a href="https://cli.github.com/" style="color:#FFFFFF">GitHub CLI</a> and <a href="https://claude.com/claude-code" style="color:#FFFFFF">Claude Code</a> installed and signed in.</p>
+    <div class="platforms">
+      <div class="platform">
+        <h3>macOS</h3>
+        <a class="dl" data-asset="mac-arm" href="https://github.com/drmas/betterlgtm/releases/download/v0.1.0/betterlgtm_0.1.0_aarch64.dmg"><span>Apple silicon</span><span class="meta">.dmg, 2.2 MB</span></a>
+        <a class="dl" data-asset="mac-intel" href="https://github.com/drmas/betterlgtm/releases/download/v0.1.0/betterlgtm_0.1.0_x64.dmg"><span>Intel</span><span class="meta">.dmg, 2.3 MB</span></a>
+      </div>
+      <div class="platform">
+        <h3>Windows</h3>
+        <a class="dl" data-asset="win-exe" href="https://github.com/drmas/betterlgtm/releases/download/v0.1.0/betterlgtm_0.1.0_x64-setup.exe"><span>Installer</span><span class="meta">.exe, 1.6 MB</span></a>
+        <a class="dl" data-asset="win-msi" href="https://github.com/drmas/betterlgtm/releases/download/v0.1.0/betterlgtm_0.1.0_x64_en-US.msi"><span>Windows Installer</span><span class="meta">.msi, 2.3 MB</span></a>
+      </div>
+      <div class="platform">
+        <h3>Linux</h3>
+        <a class="dl" data-asset="appimage" href="https://github.com/drmas/betterlgtm/releases/download/v0.1.0/betterlgtm_0.1.0_amd64.AppImage"><span>AppImage</span><span class="meta">81 MB</span></a>
+        <a class="dl" data-asset="deb" href="https://github.com/drmas/betterlgtm/releases/download/v0.1.0/betterlgtm_0.1.0_amd64.deb"><span>Debian, Ubuntu</span><span class="meta">.deb, 2.7 MB</span></a>
+        <a class="dl" data-asset="rpm" href="https://github.com/drmas/betterlgtm/releases/download/v0.1.0/betterlgtm-0.1.0-1.x86_64.rpm"><span>Fedora</span><span class="meta">.rpm, 2.7 MB</span></a>
+      </div>
+    </div>
+    <p class="fine"><span id="version">Version 0.1.0.</span> Builds aren't code-signed yet: on macOS, allow it once in System Settings › Privacy &amp; Security; on Windows, choose More info › Run anyway. <a href="https://github.com/drmas/betterlgtm/releases">All releases</a></p>
+  </div>
+</section>
+</main>
+
+<footer class="wrap">
+  <span class="badge">lgtm</span>
+  <a href="https://github.com/drmas/betterlgtm">GitHub</a>
+  <a href="https://github.com/drmas/betterlgtm/blob/main/LICENSE">MIT License</a>
+  <span class="end">Not affiliated with GitHub or Anthropic.</span>
+</footer>
+
+<script>
+// Point the download links at the latest release and pick the hero button for this OS.
+// The links above are the fallback when the GitHub API can't be reached.
+(function () {
+  var patterns = {
+    "mac-arm": /aarch64\.dmg$/,
+    "mac-intel": /x64\.dmg$/,
+    "win-exe": /x64-setup\.exe$/,
+    "win-msi": /\.msi$/,
+    "appimage": /\.AppImage$/,
+    "deb": /\.deb$/,
+    "rpm": /\.rpm$/
+  };
+  var ua = navigator.userAgent.toLowerCase();
+  var os = ua.indexOf("windows") >= 0 ? "windows" : ua.indexOf("mac") >= 0 ? "mac" : ua.indexOf("linux") >= 0 && ua.indexOf("android") < 0 ? "linux" : null;
+  var hero = { mac: ["mac-arm", "Download for macOS", "for Apple silicon."], windows: ["win-exe", "Download for Windows", "64-bit installer."], linux: ["appimage", "Download for Linux", "AppImage."] }[os];
+
+  function link(key) { return document.querySelector('[data-asset="' + key + '"]'); }
+  function size(bytes) { var mb = bytes / 1048576; return (mb >= 10 ? Math.round(mb) : mb.toFixed(1)) + " MB"; }
+  function setHero(version) {
+    if (!hero) return;
+    document.getElementById("hero-cta").href = link(hero[0]).href;
+    document.getElementById("hero-label").textContent = hero[1];
+    document.getElementById("hero-note").textContent = "Version " + version + " " + hero[2];
+  }
+
+  setHero("0.1.0");
+  fetch("https://api.github.com/repos/drmas/betterlgtm/releases/latest")
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (release) {
+      var version = release.tag_name.replace(/^v/, "");
+      Object.keys(patterns).forEach(function (key) {
+        var asset = release.assets.filter(function (a) { return patterns[key].test(a.name); })[0];
+        if (!asset) return;
+        var el = link(key);
+        el.href = asset.browser_download_url;
+        var meta = el.querySelector(".meta");
+        var ext = key === "appimage" ? "" : asset.name.slice(asset.name.lastIndexOf(".")) + ", ";
+        meta.textContent = ext + size(asset.size);
+      });
+      document.getElementById("version").textContent = "Version " + version + ".";
+      setHero(version);
+    })
+    .catch(function () {});
+})();
+</script>
+</body>
+</html>
