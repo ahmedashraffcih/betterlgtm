@@ -27,6 +27,11 @@ const ALLOWED_TOOLS: &[&str] = &[
     "Bash(rg:*)",
 ];
 
+/// Added to every session: answers are read in a narrow side panel by someone mid-review.
+const STYLE: &str = "You are helping someone review a pull request inside a desktop app. \
+Answer briefly: lead with the answer, then at most 5 short bullet points. \
+No preamble, no recap, no headings. Use `inline code` for identifiers and file:line for locations.";
+
 /// Runs `claude -p` in `cwd` and forwards every stream-json event to the frontend.
 /// Pass `resume` to continue an earlier session, which is how the chat stays persistent.
 #[tauri::command]
@@ -42,6 +47,7 @@ pub async fn claude_run(
     cmd.arg("-p")
         .arg(&prompt)
         .args(["--output-format", "stream-json", "--verbose"])
+        .args(["--append-system-prompt", STYLE])
         .arg("--allowedTools")
         .args(ALLOWED_TOOLS)
         .args(["--disallowedTools", "Edit", "Write", "NotebookEdit"]);

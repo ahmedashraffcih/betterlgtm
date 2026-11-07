@@ -214,7 +214,7 @@ function Overview(p: Props & { analysis: Analysis }) {
       </div>
 
       <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <h2 className="section-title">What this PR does</h2>
+        <h2 className="section-title">In short</h2>
         {a.summary ? <Markdown text={a.summary} /> : <p className="muted" style={{ margin: 0 }}>Re-run the analysis to get a plain-language summary.</p>}
       </section>
 
@@ -260,15 +260,16 @@ function Overview(p: Props & { analysis: Analysis }) {
         </div>
       </section>
 
-      <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <h2 className="section-title" style={{ flex: 1 }}>PR description by {p.pr.author.login}</h2>
-          <button type="button" className="btn sm" onClick={() => openUrl(p.pr.url)}><ExternalLink size={13} />GitHub</button>
-        </div>
-        <div className="excerpt" style={{ padding: "12px 16px" }}>
+      {/* The full description is one click away, so it stays folded here to keep the page short. */}
+      <details className="excerpt fold">
+        <summary>
+          <ChevronRight size={14} className="fold-chev tone-muted" />
+          <span style={{ flex: 1 }}>PR description by {p.pr.author.login}</span>
+        </summary>
+        <div style={{ padding: "4px 16px 12px" }}>
           <GithubHtml html={p.bodyHtml} fallback={p.pr.body} />
         </div>
-      </section>
+      </details>
     </>
   );
 }

@@ -64,32 +64,41 @@ Do this, using only read-only commands:
    missing tests, risky data handling. Also report changes the description doesn't mention (set notInDescription).
    Rank them by severity: critical, high, medium, low. Skip style nits.
 3. Suggest an order for reading the changed files.
-4. Summarize what the PR does in two or three plain sentences, and recommend a decision:
-   approve, comment, or request_changes, with a one-sentence reason.
+4. Summarize what the PR does and recommend a decision: approve, comment, or request_changes.
 
-Write for a busy reviewer: short sentences, everyday words, no filler. Explain why something matters,
-not just what it is. You may use Markdown in "summary", "note", "body" and "fix" (for example
-\`inline code\` for identifiers and short lists), but no headings.
+The reviewer skims. Be brief and concrete:
+- Use bullet points, not paragraphs. Every bullet is one short line, at most about 12 words.
+- No filler, no hedging, no repeating the title. Say what breaks and why it matters.
+- Use \`inline code\` for identifiers. No headings, no bold.
+- Limits: title up to 8 words; summary 2–4 bullets; finding body 1–3 bullets; fix one line;
+  claim note one line; recommendation reason one line; reading-order "why" up to 8 words.
 Line numbers refer to the new version of the file. Paths are relative to the repository root.
 When you are done, reply with only one JSON block in this shape:
 
 \`\`\`json
 {
-  "summary": "...",
+  "summary": ["...", "..."],
   "recommendation": { "decision": "approve|comment|request_changes", "reason": "..." },
   "claims": [{ "text": "...", "verdict": "implemented|partial|contradicted|missing", "note": "...", "finding": 0,
                "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
   "findings": [{ "severity": "critical|high|medium|low", "category": "Correctness|Security|Behavior change|Tests|Data handling|Performance|Maintainability",
-                 "title": "...", "body": "...", "fix": "...", "confidence": "high|medium|low", "notInDescription": false,
+                 "title": "...", "body": ["...", "..."], "fix": "...", "confidence": "high|medium|low", "notInDescription": false,
                  "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
   "readingOrder": [{ "path": "src/x.ts", "why": "..." }]
 }
 \`\`\`
+"text" on a claim is the claim as the description states it, shortened to one line.
 "finding" on a claim is the index of the finding that explains the problem, or omit it.`;
 }
 
 function asArray<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
+}
+
+/** Bullet lists come back as arrays; older analyses used prose strings. Both become Markdown. */
+function asText(v: unknown): string {
+  if (Array.isArray(v)) return v.map((item) => `- ${String(item).replace(/^[-*•]\s*/, "")}`).join("\n");
+  return typeof v === "string" ? v : "";
 }
 
 /** Pulls the last JSON block out of Claude's final answer. Returns null when there is none. */
@@ -99,17 +108,23 @@ export function parseAnalysis(text: string): Analysis | null {
   for (const raw of candidates) {
     try {
       const data = JSON.parse(raw.trim());
-      const findings = asArray<Finding>(data.findings).map((f) => ({ ...f, anchors: asArray<Anchor>(f.anchors) }));
+      const findings = asArray<Finding>(data.findings).map((f) => ({
+        ...f,
+        body: asText(f.body),
+        fix: f.fix ? asText(f.fix) : undefined,
+        anchors: asArray<Anchor>(f.anchors),
+      }));
       const order = findings.map((_, i) => i).sort((a, b) => SEVERITY_RANK[findings[a].severity] - SEVERITY_RANK[findings[b].severity]);
       const remap = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
       const rec = data.recommendation;
       return {
-        summary: typeof data.summary === "string" ? data.summary : undefined,
+        summary: asText(data.summary) || undefined,
         recommendation:
           rec && ["approve", "comment", "request_changes"].includes(rec.decision) ? { decision: rec.decision, reason: String(rec.reason ?? "") } : undefined,
         findings: order.map((i) => findings[i]),
         claims: asArray<Claim>(data.claims).map((c) => ({
           ...c,
+          note: c.note ? asText(c.note) : undefined,
           anchors: asArray<Anchor>(c.anchors),
           finding: typeof c.finding === "number" ? remap.get(c.finding) : undefined,
         })),

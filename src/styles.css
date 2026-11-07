@@ -221,6 +221,11 @@ code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--
 .attn { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 6px 10px; border-radius: 6px; }
 .attn:hover { background: var(--hover); }
 .section-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.fold > summary { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; list-style: none; font-size: 13px; font-weight: 600; color: var(--muted); cursor: default; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold[open] > summary .fold-chev { transform: rotate(90deg); }
+.md ul { padding-left: 18px; }
+.md li::marker { color: var(--muted); }
 
 /* chat */
 .bubble { align-self: flex-end; max-width: 70%; padding: 6px 12px; border-radius: 10px 10px 3px 10px; background: var(--accent-bg); white-space: pre-wrap; }

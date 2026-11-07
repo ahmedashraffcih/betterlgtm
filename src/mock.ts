@@ -99,15 +99,15 @@ const bodyHtml = `<h2 dir="auto">Summary</h2>
 <div class="highlight highlight-source-shell"><pre class="notranslate">npm <span class="pl-c1">test</span> -- charges.idempotency</pre></div>`;
 
 const analysis = {
-  summary: "Adds an `Idempotency-Key` header to `POST /v1/charges` so clients can retry safely. The first response is cached in Redis for 24 hours and returned for repeats.",
-  recommendation: { decision: "request_changes", reason: "Two concurrent retries can still create two charges, which is the main thing this PR promises to prevent." },
+  summary: ["Adds `Idempotency-Key` support to `POST /v1/charges`", "Caches the first response in Redis for 24 h", "Repeats with the same key get the cached response"],
+  recommendation: { decision: "request_changes", reason: "Concurrent retries can still double-charge." },
   claims: [
     { text: "Accepts an Idempotency-Key header on charge requests.", verdict: "implemented", anchors: [{ path: "src/http/charges.ts", startLine: 39, endLine: 43 }] },
     { text: "Keys are stored in Redis for 24 hours.", verdict: "partial", note: "The TTL is 24 hours, but keys are shared across merchants.", finding: 1, anchors: [{ path: "src/idempotency/store.ts", startLine: 23, endLine: 24 }] },
     { text: "Safe to retry, even when requests arrive concurrently.", verdict: "contradicted", note: "Two concurrent requests with the same key can both create a charge.", finding: 0, anchors: [] },
   ],
   findings: [
-    { severity: "critical", category: "Correctness", title: "Check-then-set race can double-charge on concurrent retries", body: "save() reads the key and writes it in two separate calls. Two requests with the same key that arrive together both miss, and both create a charge.", fix: "Reserve the key with SET NX before creating the charge.", confidence: "high", anchors: [{ path: "src/idempotency/store.ts", startLine: 21, endLine: 24 }, { path: "src/http/charges.ts", startLine: 41, endLine: 42 }] },
+    { severity: "critical", category: "Correctness", title: "Concurrent retries can double-charge", body: ["`save()` reads and writes the key in two calls", "Two requests arriving together both miss the cache", "Both create a charge"], fix: "Reserve the key with `SET NX` before charging.", confidence: "high", anchors: [{ path: "src/idempotency/store.ts", startLine: 21, endLine: 24 }, { path: "src/http/charges.ts", startLine: 41, endLine: 42 }] },
     { severity: "high", category: "Security", title: "Idempotency keys aren't scoped to the merchant", body: "Another merchant who sends the same key gets the first merchant's cached charge back.", fix: "Prefix the key with the merchant ID.", confidence: "high", anchors: [{ path: "src/idempotency/store.ts", startLine: 19, endLine: 21 }] },
     { severity: "low", category: "Data handling", title: "Cached response keeps the full charge body for 24 h", body: "The cached body includes card brand and last4.", confidence: "medium", anchors: [{ path: "src/http/charges.ts", startLine: 45, endLine: 45 }] },
   ],
