@@ -61,4 +61,4 @@ spctl --assess --type execute --verbose /Applications/BetterLGTM.app
 
 ## Renewing
 
-Developer ID certificates last five years. Repeat steps 1 and 3 before it expires; already-notarized releases keep working.
+Check the certificate's expiry with `openssl x509 -inform DER -in developerID_application.cer -noout -enddate`, and repeat steps 1 and 3 before then. Releases that were already notarized keep working.

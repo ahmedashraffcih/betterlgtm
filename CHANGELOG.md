@@ -2,10 +2,11 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 0.1.1 — 2026-11-07
 
-- Renamed the app to BetterLGTM. From the next release, installers are named `BetterLGTM_<version>_…`.
-- Open-sourced under the MIT License.
+- macOS builds are signed with a Developer ID certificate and notarized by Apple.
+- Renamed the app to BetterLGTM; installers are now named `BetterLGTM_<version>_…`.
+- Open-sourced under the MIT License, with a website and project docs.
 
 ## 0.1.0 — 2026-11-07
 
@@ -20,4 +21,5 @@ The first release.
 - Menu bar, command palette, keyboard shortcuts, light and dark themes, and a Settings page.
 - Installers for macOS (Apple silicon and Intel), Windows and Linux.
 
+[0.1.1]: https://github.com/drmas/betterlgtm/releases/tag/v0.1.1
 [0.1.0]: https://github.com/drmas/betterlgtm/releases/tag/v0.1.0

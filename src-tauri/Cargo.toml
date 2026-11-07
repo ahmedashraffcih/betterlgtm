@@ -1,6 +1,6 @@
 [package]
 name = "betterlgtm"
-version = "0.1.0"
+version = "0.1.1"
 description = "Review GitHub pull requests with Claude Code, from your desktop"
 authors = ["Mohamed Shaban"]
 license = "MIT"
