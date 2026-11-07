@@ -446,7 +446,7 @@ export default function App() {
     { id: "clear-chat", menu: "Review", label: "Clear conversation", enabled: !!session?.chat.length, run: () => key && update(key, (s) => ({ ...s, chat: [] })) },
 
     { id: "shortcuts", menu: "Help", label: "Keyboard shortcuts", keys: { key: "/", ctrl: true }, run: () => setInfoDialog("shortcuts") },
-    { id: "about", menu: "Help", label: "About betterlgtm", run: () => setInfoDialog("about") },
+    { id: "about", menu: "Help", label: "About BetterLGTM", run: () => setInfoDialog("about") },
   ];
   commandsRef.current = commands;
 

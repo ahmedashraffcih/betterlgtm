@@ -147,7 +147,7 @@ function Tools(p: Props) {
   return (
     <>
       <h1>Tools & storage</h1>
-      <p className="lead">betterlgtm runs the GitHub CLI and Claude Code installed on this computer. Set full paths if the app can't find them, for example when it's started from a launcher instead of a terminal.</p>
+      <p className="lead">BetterLGTM runs the GitHub CLI and Claude Code installed on this computer. Set full paths if the app can't find them, for example when it's started from a launcher instead of a terminal.</p>
       <div className="set-group">
         <div className="set-title" style={{ display: "flex", alignItems: "center" }}>
           <span style={{ flex: 1 }}>Commands</span>

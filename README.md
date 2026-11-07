@@ -1,4 +1,4 @@
-# betterlgtm
+# BetterLGTM
 
 A desktop app for reviewing GitHub pull requests with Claude Code. It lists the PRs where your review is requested (through the `gh` CLI), checks each PR out in its own git worktree, and has Claude Code compare the description with the code and point out what to look at. See [FEATURES.md](FEATURES.md) for the full feature list.
 

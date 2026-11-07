@@ -33,7 +33,7 @@ jobs:
           notes="release-notes/$TAG.md"
           [ -f "$notes" ] || { echo "::error::Missing $notes"; exit 1; }
           id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
-            -f tag_name="$TAG" -f name="betterlgtm ${TAG#v}" -F body=@"$notes" -F draft=true --jq .id)
+            -f tag_name="$TAG" -f name="BetterLGTM ${TAG#v}" -F body=@"$notes" -F draft=true --jq .id)
           [ -n "$id" ] || { echo "::error::Could not create the release"; exit 1; }
           echo "id=$id" >> "$GITHUB_OUTPUT"
 

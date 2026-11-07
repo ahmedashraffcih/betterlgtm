@@ -1,4 +1,4 @@
-# betterlgtm — Feature List
+# BetterLGTM — Feature List
 
 A local desktop app for reviewing GitHub pull requests with Claude Code. It uses the machine's `gh` CLI for GitHub access and the `claude` CLI for analysis. Every review runs in its own git worktree checked out on the PR branch.
 
