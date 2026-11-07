@@ -34,6 +34,14 @@ export interface ReadingStep {
   why: string;
 }
 
+/** One step of the guided review: related changes across files, read together. */
+export interface WalkStep {
+  title: string;
+  /** Markdown bullets: what changed and why. */
+  why: string;
+  changes: Anchor[];
+}
+
 export type Decision = "approve" | "comment" | "request_changes";
 
 export interface Analysis {
@@ -43,6 +51,26 @@ export interface Analysis {
   claims: Claim[];
   findings: Finding[];
   readingOrder: ReadingStep[];
+  /** Guided review steps. Missing in analyses from older versions; can be generated separately. */
+  walkthrough?: WalkStep[];
+}
+
+const WALKTHROUGH_RULES = `Group the changes into review steps for a guided review:
+- Each step collects related changes across files that should be read together
+  (for example: a new type, the function that fills it, and the UI that shows it).
+- Order the steps so each one builds on the previous: foundations first, then usage, then tests.
+- 3–10 steps. Every changed hunk belongs to exactly one step. Put trivial changes (renames,
+  formatting, lockfiles, docs) together in one late step.
+- Title up to 8 words. "why" is 1–3 short bullets: what changed and why it matters.
+- "changes" lists line ranges in the new version of each file. For deleted files use startLine 0 and endLine 0.`;
+
+const WALKTHROUGH_SHAPE = `"walkthrough": [{ "title": "...", "why": ["..."], "changes": [{ "path": "src/x.ts", "startLine": 10, "endLine": 40 }] }]`;
+
+export function buildWalkthroughPrompt(): string {
+  return `${WALKTHROUGH_RULES}
+
+Use the PR you analyzed earlier in this session (git diff against the base branch).
+Reply with only one JSON block: \`\`\`json { ${WALKTHROUGH_SHAPE} } \`\`\``;
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -65,6 +93,7 @@ Do this, using only read-only commands:
    Rank them by severity: critical, high, medium, low. Skip style nits.
 3. Suggest an order for reading the changed files.
 4. Summarize what the PR does and recommend a decision: approve, comment, or request_changes.
+5. ${WALKTHROUGH_RULES.replace(/\n/g, "\n   ")}
 
 The reviewer skims. Be brief and concrete:
 - Use bullet points, not paragraphs. Every bullet is one short line, at most about 12 words.
@@ -84,7 +113,8 @@ When you are done, reply with only one JSON block in this shape:
   "findings": [{ "severity": "critical|high|medium|low", "category": "Correctness|Security|Behavior change|Tests|Data handling|Performance|Maintainability",
                  "title": "...", "body": ["...", "..."], "fix": "...", "confidence": "high|medium|low", "notInDescription": false,
                  "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
-  "readingOrder": [{ "path": "src/x.ts", "why": "..." }]
+  "readingOrder": [{ "path": "src/x.ts", "why": "..." }],
+  ${WALKTHROUGH_SHAPE}
 }
 \`\`\`
 "text" on a claim is the claim as the description states it, shortened to one line.
@@ -101,11 +131,34 @@ function asText(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
+function parseSteps(v: unknown): WalkStep[] | undefined {
+  const steps = asArray<WalkStep>(v)
+    .filter((s) => s && typeof s.title === "string")
+    .map((s) => ({ title: s.title, why: asText(s.why), changes: asArray<Anchor>(s.changes) }));
+  return steps.length ? steps : undefined;
+}
+
+/** JSON blocks in Claude's answer, last first; the answer itself if it has none. */
+function jsonCandidates(text: string): string[] {
+  const blocks = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map((m) => m[1]);
+  return blocks.length ? blocks.reverse() : [text];
+}
+
+export function parseWalkthrough(text: string): WalkStep[] | null {
+  for (const raw of jsonCandidates(text)) {
+    try {
+      const steps = parseSteps(JSON.parse(raw.trim()).walkthrough);
+      if (steps) return steps;
+    } catch {
+      // try the next block
+    }
+  }
+  return null;
+}
+
 /** Pulls the last JSON block out of Claude's final answer. Returns null when there is none. */
 export function parseAnalysis(text: string): Analysis | null {
-  const blocks = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map((m) => m[1]);
-  const candidates = blocks.length ? blocks.reverse() : [text];
-  for (const raw of candidates) {
+  for (const raw of jsonCandidates(text)) {
     try {
       const data = JSON.parse(raw.trim());
       const findings = asArray<Finding>(data.findings).map((f) => ({
@@ -129,6 +182,7 @@ export function parseAnalysis(text: string): Analysis | null {
           finding: typeof c.finding === "number" ? remap.get(c.finding) : undefined,
         })),
         readingOrder: asArray<ReadingStep>(data.readingOrder),
+        walkthrough: parseSteps(data.walkthrough),
       };
     } catch {
       // try the next block

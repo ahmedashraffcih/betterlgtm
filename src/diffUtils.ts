@@ -1,4 +1,4 @@
-import { computeNewLineNumber, computeOldLineNumber, getChangeKey, type ChangeData, type FileData } from "react-diff-view";
+import { computeNewLineNumber, computeOldLineNumber, getChangeKey, type ChangeData, type FileData, type HunkData } from "react-diff-view";
 import type { Anchor } from "./analysis";
 
 export const filePath = (f: FileData) => (f.type === "delete" ? f.oldPath : f.newPath);
@@ -34,7 +34,17 @@ export function changesInRange(file: FileData, a: Anchor, pad = 0): ChangeData[]
   return out;
 }
 
-export const changeKeys = (changes: ChangeData[]) => changes.map(getChangeKey);
+/** Hunks of `file` that overlap any of the ranges. A range starting at 0 means the whole file. */
+export function hunksForRanges(file: FileData, ranges: Anchor[]): HunkData[] {
+  if (file.type === "delete" || ranges.some((r) => r.startLine <= 0)) return file.hunks;
+  return file.hunks.filter((h) => {
+    const start = h.newStart;
+    const end = h.newStart + Math.max(h.newLines, 1) - 1;
+    return ranges.some((r) => r.startLine <= end && r.endLine >= start);
+  });
+}
+
+export const changeKeys =(changes: ChangeData[]) => changes.map(getChangeKey);
 
 export function lineNumbers(c: ChangeData) {
   const o = computeOldLineNumber(c);

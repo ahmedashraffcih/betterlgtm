@@ -117,6 +117,11 @@ const analysis = {
   ],
 };
 
+const walkthrough = [
+  { title: "Idempotency store in Redis", why: ["New `lookup()` and `save()` keep responses for 24 h", "Replaces the empty `remember()` stub"], changes: [{ path: "src/idempotency/store.ts", startLine: 10, endLine: 28 }] },
+  { title: "Charge route uses the store", why: ["Reads `Idempotency-Key` and returns cached responses", "Saves the first response after charging"], changes: [{ path: "src/http/charges.ts", startLine: 38, endLine: 48 }] },
+];
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}, onEvent?: (e: ClaudeEvent) => void): Promise<unknown> {
@@ -138,9 +143,16 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
         await wait(300);
         onEvent?.({ type: "assistant", message: { content: [{ type: "tool_use", name, input: { file_path: "src/idempotency/store.ts", pattern: "redis", command: "git diff origin/main...HEAD" } }] } });
       }
-      const isAnalysis = String(args.prompt ?? "").includes("reply with only one JSON block");
-      onEvent?.({ type: "assistant", message: { content: [{ type: "text", text: isAnalysis ? "Done." : "This is a sample answer from the browser preview." }] } });
-      onEvent?.({ type: "result", session_id: "mock-session", result: isAnalysis ? "```json\n" + JSON.stringify(analysis) + "\n```" : "ok", usage: { input_tokens: 12000, output_tokens: 900 } });
+      const prompt = String(args.prompt ?? "");
+      const isAnalysis = prompt.includes("reply with only one JSON block");
+      const isGuide = !isAnalysis && prompt.includes("guided review");
+      const result = isAnalysis
+        ? "```json\n" + JSON.stringify({ ...analysis, walkthrough }) + "\n```"
+        : isGuide
+          ? "```json\n" + JSON.stringify({ walkthrough }) + "\n```"
+          : "ok";
+      onEvent?.({ type: "assistant", message: { content: [{ type: "text", text: isAnalysis || isGuide ? "Done." : "This is a sample answer from the browser preview." }] } });
+      onEvent?.({ type: "result", session_id: "mock-session", result, usage: { input_tokens: 12000, output_tokens: 900 } });
       return null;
     }
     default:

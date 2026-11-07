@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, type ClaudeEvent, type PrDetails, type ReviewRequest } from "./api";
-import { anchorLabel, buildAnalysisPrompt, parseAnalysis, type Anchor } from "./analysis";
+import { anchorLabel, buildAnalysisPrompt, buildWalkthroughPrompt, parseAnalysis, parseWalkthrough, type Anchor } from "./analysis";
 import { AnalysisView, type OutlineKey, type RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
-import { DiffView } from "./components/DiffView";
+import { DiffView, type DiffMode } from "./components/DiffView";
+import { GuidedReview } from "./components/GuidedReview";
 import { Inbox, InboxRail, prKey } from "./components/Inbox";
 import { TitleBar } from "./components/TitleBar";
 import { useElementWidth } from "./hooks";
@@ -33,6 +34,9 @@ export default function App() {
   const [inboxOpen, setInboxOpen] = useStoredState("better-lgtm.inboxOpen", true);
   const [chatOpen, setChatOpen] = useStoredState("better-lgtm.chatOpen", true);
   const [split, setSplit] = useStoredState("better-lgtm.split", false);
+  const [diffMode, setDiffMode] = useStoredState<DiffMode>("better-lgtm.diffMode", "guided");
+  const [guideStep, setGuideStep] = useState(0);
+  const [guideRuns, setGuideRuns] = useState<Record<string, { running: boolean; error?: string }>>({});
   // Below this width the inbox sits collapsed as a strip unless the user expands it.
   const [appRef, appWidth] = useElementWidth<HTMLDivElement>();
   const compact = appWidth > 0 && appWidth < 1100;
@@ -143,10 +147,12 @@ export default function App() {
         analysis: parsed ?? s.analysis,
         analysisRaw: parsed ? undefined : finalText,
         analyzedAt: parsed ? Date.now() : s.analyzedAt,
+        reviewedSteps: parsed ? [] : s.reviewedSteps,
         tokens: (s.tokens ?? 0) + tokensOf(usage),
         costUsd: (s.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
       if (parsed) {
+        setGuideStep(0);
         setOutlineKey("s0");
         setFocusPane("outline");
       }
@@ -198,11 +204,47 @@ export default function App() {
     setTab("analysis");
     setDiffTarget({ path: null, range: null, finding: null });
     setOutlineKey("s0");
+    setGuideStep(0);
   };
 
   const openAnchor = (a: Anchor, finding: number | null) => {
     setDiffTarget({ path: a.path, range: a, finding });
+    setDiffMode("files");
     setTab("diff");
+  };
+
+  /** Asks the analysis session to group the changes into steps, for analyses made before the guided review existed. */
+  const generateWalkthrough = async () => {
+    const s = key ? sessions[key] : undefined;
+    if (!key || !s?.worktree || !s.sessionId) return;
+    const k = key;
+    setGuideRuns((g) => ({ ...g, [k]: { running: true } }));
+    try {
+      let text = "";
+      let sessionId = s.sessionId;
+      let usage: ClaudeUsage = {};
+      await api.claudeRun(`guide-${k}-${Date.now()}`, s.worktree, buildWalkthroughPrompt(), s.sessionId, (e) => {
+        if (e.type === "result") {
+          text = e.result ?? "";
+          sessionId = e.session_id ?? sessionId;
+          usage = e;
+        }
+      });
+      const steps = parseWalkthrough(text);
+      if (!steps) throw new Error("Claude's answer didn't contain review steps. Try again.");
+      update(k, (x) => ({
+        ...x,
+        sessionId,
+        analysis: x.analysis ? { ...x.analysis, walkthrough: steps } : x.analysis,
+        reviewedSteps: [],
+        tokens: (x.tokens ?? 0) + tokensOf(usage),
+        costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
+      }));
+      setGuideStep(0);
+      setGuideRuns((g) => ({ ...g, [k]: { running: false } }));
+    } catch (e) {
+      setGuideRuns((g) => ({ ...g, [k]: { running: false, error: errorText(e) } }));
+    }
   };
 
   const stepFinding = (delta: number) => {
@@ -257,7 +299,15 @@ export default function App() {
         };
       }
     }
-    if (tab === "diff" && diffTarget.path) {
+    const step = tab === "diff" && diffMode === "guided" ? analysis?.walkthrough?.[guideStep] : undefined;
+    if (step) {
+      return {
+        label: `Step ${guideStep + 1}: ${step.title}`,
+        prompt: `The question is about step ${guideStep + 1} of the guided review, "${step.title}", which covers ${step.changes.map(anchorLabel).join(", ")}.`,
+        suggestions: ["Explain this step", "What could go wrong here?", "Is this covered by tests?"],
+      };
+    }
+    if (tab === "diff" && diffMode === "files" && diffTarget.path) {
       const r = diffTarget.range;
       const where = r && r.startLine > 0 ? anchorLabel(r) : diffTarget.path.split("/").pop() ?? diffTarget.path;
       return {
@@ -345,8 +395,31 @@ export default function App() {
             onAsk={() => { setChatOpen(true); setChatFocus((n) => n + 1); }}
           />
         )}
-        {details && tab === "diff" && (
+        {details && tab === "diff" && diffMode === "guided" && (
+          <GuidedReview
+            files={files}
+            steps={analysis?.walkthrough}
+            findings={analysis?.findings ?? []}
+            current={guideStep}
+            reviewed={session?.reviewedSteps ?? []}
+            split={split}
+            generating={key ? guideRuns[key] : undefined}
+            canGenerate={!!(session?.sessionId && session.worktree)}
+            onSplit={setSplit}
+            onMode={setDiffMode}
+            onStep={setGuideStep}
+            onReviewed={(i, done) =>
+              key && update(key, (s) => {
+                const cur = s.reviewedSteps ?? [];
+                return { ...s, reviewedSteps: done ? [...new Set([...cur, i])] : cur.filter((x) => x !== i) };
+              })
+            }
+            onGenerate={generateWalkthrough}
+          />
+        )}
+        {details && tab === "diff" && diffMode === "files" && (
           <DiffView
+            onMode={setDiffMode}
             files={files}
             current={diffTarget.path}
             range={diffTarget.range}

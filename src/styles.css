@@ -227,6 +227,17 @@ code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--
 .md ul { padding-left: 18px; }
 .md li::marker { color: var(--muted); }
 
+/* guided review */
+.step-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 7px 8px; border-radius: 6px; }
+.step-row:hover { background: var(--hover); }
+.step-row.cur { background: var(--sel); color: var(--on-sel); }
+.step-row.cur .step-meta { color: var(--on-sel); opacity: 0.85; }
+.step-num { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-top: 1px; border-radius: 10px; font-size: 11px; font-weight: 700; background: var(--line); color: var(--muted); flex-shrink: 0; }
+.step-row.cur .step-num { background: rgba(255, 255, 255, 0.25); color: var(--on-sel); }
+.step-num.done, .step-row.cur .step-num.done { background: var(--ok); color: var(--bg); }
+.step-title { font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.step-meta { font-size: 11px; color: var(--muted); }
+
 /* chat */
 .chat { height: 100%; display: flex; flex-direction: column; background: var(--panel); }
 .chat-compact { height: auto; border-top: 1px solid var(--line); padding: 6px 0 0; }

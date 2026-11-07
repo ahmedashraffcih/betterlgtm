@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown, ChevronUp, Columns2, FileDiff, Flag, Rows3 } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Columns2, Files, Flag, ListOrdered, Rows3 } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { Decoration, Diff, Hunk, getChangeKey, type FileData, type RenderGutter } from "react-diff-view";
 import type { Anchor, Finding } from "../analysis";
@@ -6,7 +6,24 @@ import { SEVERITY, fileIcon } from "../icons";
 import { changeKeys, changesInRange, filePath, fileStats, findFile } from "../diffUtils";
 import { useElementWidth } from "../hooks";
 
+export type DiffMode = "guided" | "files";
+
+/** Switch between the guided review (changes grouped into steps) and the plain file list. */
+export function DiffModeSwitch({ mode, onMode, compact }: { mode: DiffMode; onMode: (m: DiffMode) => void; compact?: boolean }) {
+  return (
+    <div className="seg" role="group" aria-label="Diff mode">
+      <button type="button" className={mode === "guided" ? "on" : ""} aria-pressed={mode === "guided"} title="Guided review" onClick={() => onMode("guided")}>
+        <ListOrdered size={13} />{!compact && "Guided"}
+      </button>
+      <button type="button" className={mode === "files" ? "on" : ""} aria-pressed={mode === "files"} title="All files" onClick={() => onMode("files")}>
+        <Files size={13} />{!compact && "Files"}
+      </button>
+    </div>
+  );
+}
+
 interface Props {
+  onMode: (m: DiffMode) => void;
   files: FileData[];
   current: string | null;
   range: Anchor | null;
@@ -99,7 +116,7 @@ export function DiffView(p: Props) {
       )}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 8px 0 12px", borderBottom: "1px solid var(--line)", background: "var(--side)", flexShrink: 0 }}>
-          <FileDiff size={14} className="tone-muted" />
+          <DiffModeSwitch mode="files" onMode={p.onMode} compact={narrow} />
           {narrow ? (
             <select
               aria-label="Changed file"

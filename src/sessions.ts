@@ -20,6 +20,8 @@ export interface PrSession {
   tokens?: number;
   costUsd?: number;
   inReview: number[];
+  /** Guided-review steps the user marked as reviewed. */
+  reviewedSteps?: number[];
 }
 
 const KEY = "better-lgtm.sessions";
