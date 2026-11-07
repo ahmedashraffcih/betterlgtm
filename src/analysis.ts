@@ -34,7 +34,12 @@ export interface ReadingStep {
   why: string;
 }
 
+export type Decision = "approve" | "comment" | "request_changes";
+
 export interface Analysis {
+  /** Two or three plain sentences on what the PR does. Missing in analyses from older versions. */
+  summary?: string;
+  recommendation?: { decision: Decision; reason: string };
   claims: Claim[];
   findings: Finding[];
   readingOrder: ReadingStep[];
@@ -59,12 +64,19 @@ Do this, using only read-only commands:
    missing tests, risky data handling. Also report changes the description doesn't mention (set notInDescription).
    Rank them by severity: critical, high, medium, low. Skip style nits.
 3. Suggest an order for reading the changed files.
+4. Summarize what the PR does in two or three plain sentences, and recommend a decision:
+   approve, comment, or request_changes, with a one-sentence reason.
 
+Write for a busy reviewer: short sentences, everyday words, no filler. Explain why something matters,
+not just what it is. You may use Markdown in "summary", "note", "body" and "fix" (for example
+\`inline code\` for identifiers and short lists), but no headings.
 Line numbers refer to the new version of the file. Paths are relative to the repository root.
-Keep every text short and plain. When you are done, reply with only one JSON block in this shape:
+When you are done, reply with only one JSON block in this shape:
 
 \`\`\`json
 {
+  "summary": "...",
+  "recommendation": { "decision": "approve|comment|request_changes", "reason": "..." },
   "claims": [{ "text": "...", "verdict": "implemented|partial|contradicted|missing", "note": "...", "finding": 0,
                "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
   "findings": [{ "severity": "critical|high|medium|low", "category": "Correctness|Security|Behavior change|Tests|Data handling|Performance|Maintainability",
@@ -90,7 +102,11 @@ export function parseAnalysis(text: string): Analysis | null {
       const findings = asArray<Finding>(data.findings).map((f) => ({ ...f, anchors: asArray<Anchor>(f.anchors) }));
       const order = findings.map((_, i) => i).sort((a, b) => SEVERITY_RANK[findings[a].severity] - SEVERITY_RANK[findings[b].severity]);
       const remap = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+      const rec = data.recommendation;
       return {
+        summary: typeof data.summary === "string" ? data.summary : undefined,
+        recommendation:
+          rec && ["approve", "comment", "request_changes"].includes(rec.decision) ? { decision: rec.decision, reason: String(rec.reason ?? "") } : undefined,
         findings: order.map((i) => findings[i]),
         claims: asArray<Claim>(data.claims).map((c) => ({
           ...c,

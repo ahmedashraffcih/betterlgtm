@@ -1,6 +1,7 @@
 import { ArrowUp, ChevronDown, FlaskConical, Loader, MessageSquare, Square, Terminal, TriangleExclamationPoint } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { ChatItem } from "../sessions";
+import { Markdown } from "./Markdown";
 
 interface Props {
   chat: ChatItem[];
@@ -47,7 +48,7 @@ export function ClaudePanel(p: Props) {
           ) : m.role === "error" ? (
             <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--crit)" }}><TriangleExclamationPoint size={14} />{m.text}</span>
           ) : (
-            <div key={i} className="answer">{m.text}</div>
+            <div key={i} className="answer"><Markdown text={m.text} /></div>
           ),
         )}
         {p.running && <span className="muted" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Loader size={13} className="spin" />Working…</span>}

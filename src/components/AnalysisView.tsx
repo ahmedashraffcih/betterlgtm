@@ -1,16 +1,20 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
-  ArrowLeft, ChevronDown, ChevronRight, ChevronUp, CircleCheck, FileDiff, FileText, FileX, Flag, Funnel, Loader, MessageSquare,
-  MessageSquarePlus, Play, RefreshCw, Wrench,
+  ArrowLeft, ChevronDown, ChevronRight, ChevronUp, CircleCheck, ExternalLink, FileDiff, FileText, FileX, Flag, Funnel,
+  LayoutDashboard, Loader, MessageSquare, MessageSquarePlus, OctagonExclamationPoint, Play, RefreshCw, Wrench,
+  type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
 import type { FileData } from "react-diff-view";
-import { anchorLabel, type Analysis, type Anchor } from "../analysis";
+import { anchorLabel, type Analysis, type Anchor, type Decision } from "../analysis";
 import type { PrDetails } from "../api";
 import { categoryIcon, fileIcon, SEVERITY, VERDICT } from "../icons";
 import { changesInRange, findFile, lineNumbers } from "../diffUtils";
 import { useElementWidth } from "../hooks";
+import { GithubHtml, Markdown } from "./Markdown";
 
-export type OutlineKey = `f${number}` | `c${number}` | `o${number}`;
+/** s0 = overview, d0 = PR description, c = claim, f = finding, o = reading-order step. */
+export type OutlineKey = `s${number}` | `d${number}` | `f${number}` | `c${number}` | `o${number}`;
 
 export interface RunState {
   running: boolean;
@@ -21,6 +25,7 @@ export interface RunState {
 
 interface Props {
   pr: PrDetails;
+  bodyHtml?: string;
   analysis?: Analysis;
   analysisRaw?: string;
   analyzedAt?: number;
@@ -39,7 +44,7 @@ interface Props {
 function ago(ts?: number) {
   if (!ts) return "";
   const m = Math.round((Date.now() - ts) / 60000);
-  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
 }
 
 export function AnalysisView(p: Props) {
@@ -49,7 +54,7 @@ export function AnalysisView(p: Props) {
   const [rootRef, width] = useElementWidth<HTMLDivElement>();
   const [showDetail, setShowDetail] = useState(false);
   const single = width > 0 && width < 700;
-  const outlineWidth = width < 980 ? 260 : 320;
+  const outlineWidth = width < 980 ? 260 : 300;
   const a = p.analysis;
   const select = (k: OutlineKey) => {
     p.onSelect(k);
@@ -67,11 +72,11 @@ export function AnalysisView(p: Props) {
   const crit = a.findings.filter((f) => f.severity === "critical").length;
   const high = a.findings.filter((f) => f.severity === "high").length;
 
-  const Row = ({ k, sub, Icon, tone, text, meta }: { k: OutlineKey; sub?: boolean; Icon: typeof Flag; tone: string; text: string; meta: string }) => (
+  const Row = ({ k, sub, Icon, tone, text, meta }: { k: OutlineKey; sub?: boolean; Icon: LucideIcon; tone: string; text: string; meta?: string }) => (
     <button type="button" className={["row", sub && "sub", p.selected === k && "sel"].filter(Boolean).join(" ")} onClick={() => select(k)} title={text}>
       <Icon size={14} className={tone} />
       <span className="ellipsis" style={{ flex: 1 }}>{text}</span>
-      <span className="rm">{meta}</span>
+      {meta && <span className="rm">{meta}</span>}
     </button>
   );
   const Toggle = ({ open, text, onClick }: { open: boolean; text: string; onClick: () => void }) => (
@@ -80,51 +85,58 @@ export function AnalysisView(p: Props) {
       <span className="muted">{text}</span>
     </button>
   );
-  const Group = ({ title, meta }: { title: string; meta: string }) => (
+  const Group = ({ title, meta }: { title: string; meta?: string }) => (
     <div className="gh" style={{ marginTop: 8 }}>
       <span style={{ flex: 1 }}>{title}</span>
-      <span style={{ fontWeight: 400 }}>{meta}</span>
+      {meta && <span style={{ fontWeight: 400 }}>{meta}</span>}
     </div>
   );
 
   const outline = (
-      <div className="side" style={{ width: single ? "100%" : outlineWidth, flexShrink: 0, borderRight: single ? 0 : "1px solid var(--line)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4, height: 34, padding: "0 6px 0 12px", borderBottom: "1px solid var(--line)" }}>
-          {p.run?.running ? <Loader size={14} className="spin tone-accent" /> : <CircleCheck size={14} className="tone-ok" />}
-          <span className="ellipsis muted" style={{ flex: 1, fontSize: 12 }}>
-            {p.run?.running ? p.run.step : `Analyzed ${ago(p.analyzedAt)}`}
-          </span>
-          <button type="button" className="tb" aria-label="Filter the list" title="Filter the list"><Funnel size={14} /></button>
-          <button type="button" className="tb" aria-label="Re-run analysis" title="Re-run analysis" onClick={p.onStart} disabled={p.run?.running}>
-            <RefreshCw size={14} />
-          </button>
-        </div>
-        <nav aria-label="Analysis outline" className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
-          <Group title="Description check" meta={`${verified.length} of ${a.claims.length} verified`} />
-          {problems.map(({ c, i }) => (
-            <Row key={i} k={`c${i}`} Icon={VERDICT[c.verdict].icon} tone={VERDICT[c.verdict].tone} text={c.text} meta={String(i + 1)} />
-          ))}
-          {verified.length > 0 && <Toggle open={showVerified} text={`${verified.length} verified claims`} onClick={() => setShowVerified(!showVerified)} />}
-          {showVerified && verified.map(({ c, i }) => <Row key={i} k={`c${i}`} sub Icon={VERDICT.implemented.icon} tone="tone-ok" text={c.text} meta={String(i + 1)} />)}
-
-          <Group title="Findings" meta={crit || high ? `${crit} critical · ${high} high` : `${a.findings.length}`} />
-          {major.map(({ f, i }) => (
-            <Row key={i} k={`f${i}`} Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} />
-          ))}
-          {minor.length > 0 && <Toggle open={showMinor} text={`${minor.length} medium and low findings`} onClick={() => setShowMinor(!showMinor)} />}
-          {showMinor && minor.map(({ f, i }) => <Row key={i} k={`f${i}`} sub Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} />)}
-
-          {a.readingOrder.length > 0 && <Group title="Reading order" meta="" />}
-          {a.readingOrder.map((r, i) => (
-            <Row key={i} k={`o${i}`} Icon={fileIcon(r.path)} tone="tone-muted" text={r.path.split("/").pop() ?? r.path} meta={String(i + 1)} />
-          ))}
-        </nav>
+    <div className="side" style={{ width: single ? "100%" : outlineWidth, flexShrink: 0, borderRight: single ? 0 : "1px solid var(--line)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, height: 34, padding: "0 6px 0 12px", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
+        {p.run?.running ? <Loader size={14} className="spin tone-accent" /> : <CircleCheck size={14} className="tone-ok" />}
+        <span className="ellipsis muted" style={{ flex: 1, fontSize: 12 }}>{p.run?.running ? p.run.step : `Analyzed ${ago(p.analyzedAt)}`}</span>
+        <button type="button" className="tb" aria-label="Filter the list" title="Filter the list"><Funnel size={14} /></button>
+        <button type="button" className="tb" aria-label="Re-run analysis" title="Re-run analysis" onClick={p.onStart} disabled={p.run?.running}>
+          <RefreshCw size={14} />
+        </button>
       </div>
+      <nav aria-label="Analysis outline" className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
+        <div style={{ height: 6 }} />
+        <Row k="s0" Icon={LayoutDashboard} tone="tone-muted" text="Overview" />
+        <Row k="d0" Icon={FileText} tone="tone-muted" text="PR description" />
+
+        <Group title="Description check" meta={`${verified.length} of ${a.claims.length} match`} />
+        {problems.map(({ c, i }) => (
+          <Row key={i} k={`c${i}`} Icon={VERDICT[c.verdict]?.icon ?? Flag} tone={VERDICT[c.verdict]?.tone ?? ""} text={c.text} meta={String(i + 1)} />
+        ))}
+        {verified.length > 0 && (
+          <Toggle open={showVerified} text={verified.length === 1 ? "1 claim matches the code" : `${verified.length} claims match the code`} onClick={() => setShowVerified(!showVerified)} />
+        )}
+        {showVerified && verified.map(({ c, i }) => <Row key={i} k={`c${i}`} sub Icon={VERDICT.implemented.icon} tone="tone-ok" text={c.text} meta={String(i + 1)} />)}
+
+        <Group title="Findings" meta={crit || high ? [crit && `${crit} critical`, high && `${high} high`].filter(Boolean).join(" · ") : `${a.findings.length}`} />
+        {major.map(({ f, i }) => (
+          <Row key={i} k={`f${i}`} Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} />
+        ))}
+        {minor.length > 0 && (
+          <Toggle open={showMinor} text={minor.length === 1 ? "1 medium or low finding" : `${minor.length} medium and low findings`} onClick={() => setShowMinor(!showMinor)} />
+        )}
+        {showMinor && minor.map(({ f, i }) => <Row key={i} k={`f${i}`} sub Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} />)}
+        {a.findings.length === 0 && <p className="muted" style={{ margin: "2px 10px", fontSize: 12 }}>No findings.</p>}
+
+        {a.readingOrder.length > 0 && <Group title="Reading order" />}
+        {a.readingOrder.map((r, i) => (
+          <Row key={i} k={`o${i}`} Icon={fileIcon(r.path)} tone="tone-muted" text={r.path.split("/").pop() ?? r.path} meta={String(i + 1)} />
+        ))}
+      </nav>
+    </div>
   );
   const detail = (
-    <article className="scroll selectable" style={{ padding: single ? "14px 16px 24px" : "18px 24px 28px" }} aria-label="Details">
-      <div style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 14 }}>
-        <Detail {...p} analysis={a} />
+    <article className="scroll selectable" style={{ padding: single ? "14px 16px 24px" : "20px 28px 32px" }} aria-label="Details">
+      <div style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 16 }}>
+        <Detail {...p} analysis={a} onSelect={select} />
       </div>
     </article>
   );
@@ -156,7 +168,7 @@ function Excerpt({ files, anchor, onOpen }: { files: FileData[]; anchor: Anchor;
         <span className="mono ellipsis" style={{ flex: 1 }} title={anchor.path}>{anchorLabel(anchor)}</span>
         <button type="button" className="btn sm" onClick={onOpen}><FileDiff size={13} />Open in Diff</button>
       </div>
-      <div style={{ padding: "4px 0", background: "var(--bg)" }}>
+      <div style={{ padding: "4px 0", background: "var(--bg)", overflowX: "auto" }}>
         {changes.length === 0 && <div className="muted" style={{ padding: "6px 12px", fontSize: 12 }}>These lines aren't part of the diff.</div>}
         {changes.map((c, i) => {
           const n = lineNumbers(c);
@@ -176,10 +188,108 @@ function Excerpt({ files, anchor, onOpen }: { files: FileData[]; anchor: Anchor;
   );
 }
 
+const DECISION: Record<Decision, { label: string; cls: string; icon: LucideIcon; tone: string }> = {
+  request_changes: { label: "Request changes", cls: "verdict changes", icon: OctagonExclamationPoint, tone: "tone-crit" },
+  comment: { label: "Comment, but no blockers", cls: "verdict", icon: MessageSquare, tone: "tone-accent" },
+  approve: { label: "Looks ready to approve", cls: "verdict ok", icon: CircleCheck, tone: "tone-ok" },
+};
+
+function Overview(p: Props & { analysis: Analysis }) {
+  const a = p.analysis;
+  const problems = a.claims.map((c, i) => ({ c, i })).filter(({ c }) => c.verdict !== "implemented");
+  const major = a.findings.map((f, i) => ({ f, i })).filter(({ f }) => f.severity === "critical" || f.severity === "high");
+  const count = (s: string) => a.findings.filter((f) => f.severity === s).length;
+  const derived: Decision = major.length || problems.some(({ c }) => c.verdict !== "partial") ? "request_changes" : a.findings.length || problems.length ? "comment" : "approve";
+  const decision = DECISION[a.recommendation?.decision ?? derived];
+  const matching = a.claims.length - problems.length;
+
+  return (
+    <>
+      <div className={decision.cls}>
+        <decision.icon size={20} className={decision.tone} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>{decision.label}</span>
+          {a.recommendation?.reason && <span style={{ fontSize: 13 }}>{a.recommendation.reason}</span>}
+        </div>
+      </div>
+
+      <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <h2 className="section-title">What this PR does</h2>
+        {a.summary ? <Markdown text={a.summary} /> : <p className="muted" style={{ margin: 0 }}>Re-run the analysis to get a plain-language summary.</p>}
+      </section>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <span className="stat"><CircleCheck size={13} className={matching === a.claims.length ? "tone-ok" : "tone-high"} />{matching} of {a.claims.length} claims match the code</span>
+        {(["critical", "high", "medium", "low"] as const).map((s) => {
+          const n = count(s);
+          if (!n) return null;
+          const sev = SEVERITY[s];
+          return <span key={s} className="stat"><sev.icon size={13} className={sev.tone} />{n} {s}</span>;
+        })}
+        {a.findings.length === 0 && <span className="stat"><CircleCheck size={13} className="tone-ok" />No findings</span>}
+      </div>
+
+      <section style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <h2 className="section-title">Needs your attention</h2>
+        {problems.length === 0 && major.length === 0 && (
+          <p style={{ margin: 0 }}>Nothing above medium severity, and the description matches the code.</p>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", margin: "0 -10px" }}>
+          {major.map(({ f, i }) => {
+            const sev = SEVERITY[f.severity];
+            return (
+              <button key={`f${i}`} type="button" className="attn" onClick={() => p.onSelect(`f${i}`)}>
+                <sev.icon size={16} className={sev.tone} />
+                <span style={{ flex: 1, minWidth: 0 }}>{f.title}</span>
+                <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>Finding {i + 1}</span>
+                <ChevronRight size={14} className="tone-muted" />
+              </button>
+            );
+          })}
+          {problems.map(({ c, i }) => {
+            const v = VERDICT[c.verdict] ?? VERDICT.partial;
+            return (
+              <button key={`c${i}`} type="button" className="attn" onClick={() => p.onSelect(`c${i}`)}>
+                <v.icon size={16} className={v.tone} />
+                <span style={{ flex: 1, minWidth: 0 }}><span className={v.tone} style={{ fontWeight: 600 }}>{v.label}:</span> {c.text}</span>
+                <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>Claim {i + 1}</span>
+                <ChevronRight size={14} className="tone-muted" />
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <h2 className="section-title" style={{ flex: 1 }}>PR description by {p.pr.author.login}</h2>
+          <button type="button" className="btn sm" onClick={() => openUrl(p.pr.url)}><ExternalLink size={13} />GitHub</button>
+        </div>
+        <div className="excerpt" style={{ padding: "12px 16px" }}>
+          <GithubHtml html={p.bodyHtml} fallback={p.pr.body} />
+        </div>
+      </section>
+    </>
+  );
+}
+
 function Detail(p: Props & { analysis: Analysis }) {
   const a = p.analysis;
   const kind = p.selected[0];
   const idx = Number(p.selected.slice(1));
+
+  if (kind === "d") {
+    return (
+      <>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <h2 style={{ margin: 0, flex: 1, fontSize: 17, fontWeight: 600 }}>PR description</h2>
+          <span className="muted" style={{ fontSize: 12 }}>by {p.pr.author.login}</span>
+          <button type="button" className="btn sm" onClick={() => openUrl(p.pr.url)}><ExternalLink size={13} />GitHub</button>
+        </div>
+        <GithubHtml html={p.bodyHtml} fallback={p.pr.body} />
+      </>
+    );
+  }
 
   if (kind === "f" && a.findings[idx]) {
     const f = a.findings[idx];
@@ -200,11 +310,17 @@ function Detail(p: Props & { analysis: Analysis }) {
           <button type="button" className="tb" aria-label="Previous finding (K)" onClick={() => go(-1)}><ChevronUp size={16} /></button>
           <button type="button" className="tb" aria-label="Next finding (J)" onClick={() => go(1)}><ChevronDown size={16} /></button>
         </div>
-        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, lineHeight: 1.35 }}>{f.title}</h2>
-        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>{f.body}</p>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, lineHeight: 1.35 }}>{f.title}</h2>
+        <Markdown text={f.body} />
         {f.anchors[0] && <Excerpt files={p.files} anchor={f.anchors[0]} onOpen={() => p.onOpenAnchor(f.anchors[0], idx)} />}
         {f.fix && (
-          <div className="fix"><Wrench size={16} className="tone-ok" style={{ marginTop: 1, flexShrink: 0 }} /><span><b>Suggested fix: </b>{f.fix}</span></div>
+          <div className="fix">
+            <Wrench size={16} className="tone-ok" style={{ marginTop: 3, flexShrink: 0 }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+              <b>Suggested fix</b>
+              <Markdown text={f.fix} />
+            </div>
+          </div>
         )}
         {f.anchors.length > 1 && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12 }} className="muted">
@@ -214,7 +330,7 @@ function Detail(p: Props & { analysis: Analysis }) {
             ))}
           </div>
         )}
-        <div style={{ display: "flex", gap: 8, paddingTop: 6, borderTop: "1px solid var(--line2)" }}>
+        <div style={{ display: "flex", gap: 8, paddingTop: 8, borderTop: "1px solid var(--line2)" }}>
           <button type="button" className={inReview ? "btn in-review" : "btn"} aria-pressed={inReview} onClick={() => p.onToggleReview(idx)}>
             {inReview ? <CircleCheck size={14} /> : <MessageSquarePlus size={14} />}{inReview ? "In review" : "Add to review"}
           </button>
@@ -235,19 +351,25 @@ function Detail(p: Props & { analysis: Analysis }) {
           <span style={{ flex: 1 }} />
           <span className="muted" style={{ fontSize: 12 }}>Claim {idx + 1} of {a.claims.length}</span>
         </div>
-        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, lineHeight: 1.35 }}>“{c.text}”</h2>
-        {c.note && <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>{c.note}</p>}
+        <div>
+          <span className="section-title">The description says</span>
+          <blockquote style={{ margin: "6px 0 0", padding: "6px 12px", borderLeft: "3px solid var(--line)", fontSize: 16, lineHeight: 1.5 }}>{c.text}</blockquote>
+        </div>
+        {c.note && (
+          <div>
+            <span className="section-title">What the code does</span>
+            <div style={{ marginTop: 6 }}><Markdown text={c.note} /></div>
+          </div>
+        )}
+        {c.anchors[0] && <Excerpt files={p.files} anchor={c.anchors[0]} onOpen={() => p.onOpenAnchor(c.anchors[0], null)} />}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          {c.anchors.map((an, j) => (
+          {c.anchors.slice(1).map((an, j) => (
             <button key={j} type="button" className="flink" title={an.path} onClick={() => p.onOpenAnchor(an, null)}>{anchorLabel(an)}</button>
           ))}
           {fi !== undefined && a.findings[fi] && (
-            <button type="button" className="btn sm" onClick={() => p.onSelect(`f${fi}`)}><Flag size={13} />Finding {fi + 1}</button>
+            <button type="button" className="btn sm" onClick={() => p.onSelect(`f${fi}`)}><Flag size={13} />See finding {fi + 1}</button>
           )}
-        </div>
-        <div className="excerpt">
-          <div className="exh"><FileText size={14} className="tone-muted" /><span style={{ flex: 1 }}>PR description by {p.pr.author.login}</span></div>
-          <div style={{ padding: "10px 14px 12px", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{p.pr.body?.trim() || "No description."}</div>
+          <button type="button" className="btn sm" onClick={() => p.onSelect("d0")}><FileText size={13} />Read the full description</button>
         </div>
       </>
     );
@@ -255,11 +377,24 @@ function Detail(p: Props & { analysis: Analysis }) {
 
   if (kind === "o" && a.readingOrder[idx]) {
     const r = a.readingOrder[idx];
+    const related = a.findings.map((f, i) => ({ f, i })).filter(({ f }) => f.anchors.some((an) => an.path === r.path));
     return (
       <>
         <span className="muted" style={{ fontSize: 12 }}>Reading order · step {idx + 1} of {a.readingOrder.length}</span>
-        <h2 className="mono" style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{r.path}</h2>
-        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>{r.why}</p>
+        <h2 className="mono" style={{ margin: 0, fontSize: 15, fontWeight: 600, overflowWrap: "anywhere" }}>{r.path}</h2>
+        <Markdown text={r.why} />
+        {related.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", margin: "0 -10px" }}>
+            {related.map(({ f, i }) => {
+              const sev = SEVERITY[f.severity];
+              return (
+                <button key={i} type="button" className="attn" onClick={() => p.onSelect(`f${i}`)}>
+                  <sev.icon size={16} className={sev.tone} /><span style={{ flex: 1 }}>{f.title}</span><ChevronRight size={14} className="tone-muted" />
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div>
           <button type="button" className="btn" onClick={() => p.onOpenAnchor({ path: r.path, startLine: 0, endLine: -1 }, null)}><FileDiff size={14} />Open in Diff</button>
         </div>
@@ -267,29 +402,29 @@ function Detail(p: Props & { analysis: Analysis }) {
     );
   }
 
-  return <p className="muted">Select an item in the list.</p>;
+  return <Overview {...p} />;
 }
 
 function StartPanel(p: Props) {
   const run = p.run;
   return (
-    <div className="scroll selectable" style={{ padding: "24px 28px" }}>
-      <div style={{ maxWidth: 640, display: "flex", flexDirection: "column", gap: 14 }}>
-        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{run?.running ? "Reviewing with Claude" : "Start the review"}</h2>
-        <p className="muted" style={{ margin: 0 }}>
-          This checks out the PR in its own worktree, then Claude Code compares the description with the code and lists what to look at.
-          Claude can only read files and run read-only git commands.
-        </p>
-        {!run?.running && (
-          <div><button type="button" className="btn primary" onClick={p.onStart}><Play size={14} />Start review</button></div>
-        )}
-        {run?.running && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Loader size={14} className="spin tone-accent" />
-            <span style={{ flex: 1 }}>{run.step}</span>
-            <button type="button" className="btn sm" onClick={p.onCancel}>Cancel</button>
+    <div className="scroll selectable" style={{ padding: "24px 28px", height: "100%" }}>
+      <div style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div className="verdict" style={{ alignItems: "center" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>{run?.running ? "Reviewing with Claude…" : "Start the review"}</span>
+            <span className="muted" style={{ fontSize: 13 }}>
+              {run?.running
+                ? run.step
+                : "Checks out the PR in its own worktree, then Claude compares the description with the code and lists what to look at. Claude can only read."}
+            </span>
           </div>
-        )}
+          {run?.running ? (
+            <button type="button" className="btn" onClick={p.onCancel}>Cancel</button>
+          ) : (
+            <button type="button" className="btn primary" onClick={p.onStart}><Play size={14} />Start review</button>
+          )}
+        </div>
         {run?.error && <p style={{ margin: 0, color: "var(--crit)" }}>{run.error}</p>}
         {p.analysisRaw && !run?.running && (
           <details>
@@ -298,10 +433,22 @@ function StartPanel(p: Props) {
           </details>
         )}
         {run && run.log.length > 0 && (
-          <div className="mono" style={{ padding: "8px 10px", borderRadius: 6, background: "var(--sunken)", fontSize: 11, lineHeight: 1.8, color: "var(--muted)", maxHeight: 320, overflow: "auto" }}>
-            {run.log.map((l, i) => <div key={i} className="ellipsis">{l}</div>)}
-          </div>
+          <details open={run.running}>
+            <summary className="muted" style={{ fontSize: 12 }}>What Claude has done ({run.log.length})</summary>
+            <div className="mono" style={{ marginTop: 6, padding: "8px 10px", borderRadius: 6, background: "var(--sunken)", fontSize: 11, lineHeight: 1.8, color: "var(--muted)", maxHeight: 240, overflow: "auto" }}>
+              {run.log.map((l, i) => <div key={i} className="ellipsis">{l}</div>)}
+            </div>
+          </details>
         )}
+        <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h2 className="section-title" style={{ flex: 1 }}>PR description by {p.pr.author.login}</h2>
+            <button type="button" className="btn sm" onClick={() => openUrl(p.pr.url)}><ExternalLink size={13} />GitHub</button>
+          </div>
+          <div className="excerpt" style={{ padding: "12px 16px" }}>
+            <GithubHtml html={p.bodyHtml} fallback={p.pr.body} />
+          </div>
+        </section>
       </div>
     </div>
   );

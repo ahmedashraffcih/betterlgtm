@@ -54,6 +54,7 @@ export const api = {
   listReviewRequests: () => invoke<ReviewRequest[]>("list_review_requests"),
   prDetails: (repo: string, number: number) => invoke<PrDetails>("pr_details", { repo, number }),
   prDiff: (repo: string, number: number) => invoke<string>("pr_diff", { repo, number }),
+  prBodyHtml: (repo: string, number: number) => invoke<string>("pr_body_html", { repo, number }),
   prepareWorktree: (repo: string, number: number, baseRef: string) =>
     invoke<string>("prepare_worktree", { repo, number, baseRef }),
   claudeRun: (

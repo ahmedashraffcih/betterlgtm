@@ -16,6 +16,7 @@ import { emptySession, useSessions, useStoredState, type ChatItem } from "./sess
 interface Loaded {
   key: string;
   details: PrDetails;
+  bodyHtml: string;
   files: FileData[];
 }
 
@@ -44,7 +45,7 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<"analysis" | "diff">("analysis");
   const [focusPane, setFocusPane] = useState<"inbox" | "outline">("inbox");
-  const [outlineKey, setOutlineKey] = useState<OutlineKey>("f0");
+  const [outlineKey, setOutlineKey] = useState<OutlineKey>("s0");
   const [diffTarget, setDiffTarget] = useState<{ path: string | null; range: Anchor | null; finding: number | null }>({ path: null, range: null, finding: null });
 
   const { sessions, update } = useSessions();
@@ -82,8 +83,13 @@ export default function App() {
     let stale = false;
     setLoadError(null);
     const repo = selected.repository.nameWithOwner;
-    Promise.all([api.prDetails(repo, selected.number), api.prDiff(repo, selected.number)])
-      .then(([details, diff]) => !stale && setLoaded({ key, details, files: parseDiff(diff, { nearbySequences: "zip" }) }))
+    Promise.all([
+      api.prDetails(repo, selected.number),
+      api.prDiff(repo, selected.number),
+      // The rendered description is a nicety; fall back to the raw Markdown if it fails.
+      api.prBodyHtml(repo, selected.number).catch(() => ""),
+    ])
+      .then(([details, diff, bodyHtml]) => !stale && setLoaded({ key, details, bodyHtml, files: parseDiff(diff, { nearbySequences: "zip" }) }))
       .catch((e) => !stale && setLoadError(errorText(e)));
     return () => {
       stale = true;
@@ -141,7 +147,7 @@ export default function App() {
         costUsd: (s.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
       if (parsed) {
-        setOutlineKey(parsed.findings.length ? "f0" : "c0");
+        setOutlineKey("s0");
         setFocusPane("outline");
       }
       setRun(k, (r) => ({ ...r, running: false, step: "", error: parsed ? undefined : "Claude finished, but its answer didn't contain a readable result." }));
@@ -190,7 +196,7 @@ export default function App() {
     setFocusPane("inbox");
     setTab("analysis");
     setDiffTarget({ path: null, range: null, finding: null });
-    setOutlineKey("f0");
+    setOutlineKey("s0");
   };
 
   const openAnchor = (a: Anchor, finding: number | null) => {
@@ -277,6 +283,7 @@ export default function App() {
         {details && tab === "analysis" && (
           <AnalysisView
             pr={details}
+            bodyHtml={loaded?.bodyHtml}
             analysis={analysis}
             analysisRaw={session?.analysisRaw}
             analyzedAt={session?.analyzedAt}

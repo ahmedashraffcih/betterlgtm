@@ -83,7 +83,24 @@ index 3333333..4444444 100644
  });
 `;
 
+const bodyHtml = `<h2 dir="auto">Summary</h2>
+<p dir="auto">Adds idempotency support to <code class="notranslate">POST /v1/charges</code>. Closes <a class="issue-link" href="https://github.com/acme/payments-api/issues/471">#471</a>. cc <a class="user-mention" href="https://github.com/tchen">@tchen</a></p>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" checked disabled> Accepts an <code>Idempotency-Key</code> header on charge requests.</li>
+<li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" checked disabled> Keys are stored in Redis for 24 hours.</li>
+<li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled> Safe to retry, even when requests arrive concurrently.</li>
+</ul>
+<div class="markdown-alert markdown-alert-warning"><p class="markdown-alert-title">Warning</p><p>Needs <code>REDIS_URL</code> in every environment before deploy.</p></div>
+<details><summary>Load test results</summary>
+<table><thead><tr><th>Scenario</th><th>p50</th><th>p99</th></tr></thead>
+<tbody><tr><td>No key</td><td>42 ms</td><td>110 ms</td></tr><tr><td>Cached hit</td><td>8 ms</td><td>21 ms</td></tr></tbody></table>
+</details>
+<h3>Testing</h3>
+<div class="highlight highlight-source-shell"><pre class="notranslate">npm <span class="pl-c1">test</span> -- charges.idempotency</pre></div>`;
+
 const analysis = {
+  summary: "Adds an `Idempotency-Key` header to `POST /v1/charges` so clients can retry safely. The first response is cached in Redis for 24 hours and returned for repeats.",
+  recommendation: { decision: "request_changes", reason: "Two concurrent retries can still create two charges, which is the main thing this PR promises to prevent." },
   claims: [
     { text: "Accepts an Idempotency-Key header on charge requests.", verdict: "implemented", anchors: [{ path: "src/http/charges.ts", startLine: 39, endLine: 43 }] },
     { text: "Keys are stored in Redis for 24 hours.", verdict: "partial", note: "The TTL is 24 hours, but keys are shared across merchants.", finding: 1, anchors: [{ path: "src/idempotency/store.ts", startLine: 23, endLine: 24 }] },
@@ -111,6 +128,8 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
       return details;
     case "pr_diff":
       return diff;
+    case "pr_body_html":
+      return bodyHtml;
     case "prepare_worktree":
       return "/home/you/.better-lgtm/worktrees/acme/payments-api/pr-482";
     case "claude_run": {

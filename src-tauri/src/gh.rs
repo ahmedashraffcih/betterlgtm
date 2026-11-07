@@ -47,6 +47,20 @@ pub async fn pr_details(repo: String, number: u64) -> Result<Value, String> {
     parse(&out)
 }
 
+/// The PR description as GitHub renders it (mentions, issue links, alerts, task lists, `<details>`).
+/// The frontend sanitizes it before display.
+#[tauri::command]
+pub async fn pr_body_html(repo: String, number: u64) -> Result<String, String> {
+    let path = format!("repos/{repo}/pulls/{number}");
+    let out = run(
+        "gh",
+        &["api", &path, "-H", "Accept: application/vnd.github.html+json", "--jq", ".body_html // \"\""],
+        None,
+    )
+    .await?;
+    Ok(out.trim_end().to_string())
+}
+
 #[tauri::command]
 pub async fn pr_diff(repo: String, number: u64) -> Result<String, String> {
     let n = number.to_string();

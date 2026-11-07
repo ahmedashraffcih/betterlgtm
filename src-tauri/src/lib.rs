@@ -12,6 +12,7 @@ pub fn run() {
             gh::list_review_requests,
             gh::pr_details,
             gh::pr_diff,
+            gh::pr_body_html,
             worktree::prepare_worktree,
             claude::claude_run,
             claude::claude_cancel,
