@@ -1,0 +1,130 @@
+// Sample data so the UI can be previewed in a plain browser (`npm run dev`) without Tauri.
+// Only used in development when the Tauri runtime isn't present.
+import type { ClaudeEvent, PrDetails, ReviewRequest } from "./api";
+
+export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+const requests: ReviewRequest[] = [
+  {
+    number: 482,
+    title: "Add idempotency keys to charge endpoint",
+    url: "https://github.com/acme/payments-api/pull/482",
+    isDraft: false,
+    updatedAt: new Date(Date.now() - 2 * 3600e3).toISOString(),
+    author: { login: "lkowal" },
+    repository: { name: "payments-api", nameWithOwner: "acme/payments-api" },
+  },
+  {
+    number: 77,
+    title: "Bump terraform AWS provider to 5.80",
+    url: "https://github.com/acme/infra/pull/77",
+    isDraft: true,
+    updatedAt: new Date(Date.now() - 26 * 3600e3).toISOString(),
+    author: { login: "renovate" },
+    repository: { name: "infra", nameWithOwner: "acme/infra" },
+  },
+];
+
+const details: PrDetails = {
+  number: 482,
+  title: "Add idempotency keys to charge endpoint",
+  body: "Adds idempotency support to POST /v1/charges.\n\n- Accepts an Idempotency-Key header on charge requests.\n- Keys are stored in Redis for 24 hours.\n- Safe to retry, even when requests arrive concurrently.\n\nTesting: added integration tests for the retry path.",
+  url: "https://github.com/acme/payments-api/pull/482",
+  author: { login: "lkowal" },
+  isDraft: false,
+  headRefName: "feat/idempotency-keys",
+  baseRefName: "main",
+  headRefOid: "4e1b07c9a1b2c3d4",
+  additions: 21,
+  deletions: 2,
+  changedFiles: 2,
+  statusCheckRollup: [{ conclusion: "SUCCESS", status: "COMPLETED" }],
+};
+
+const diff = `diff --git a/src/idempotency/store.ts b/src/idempotency/store.ts
+index 1111111..2222222 100644
+--- a/src/idempotency/store.ts
++++ b/src/idempotency/store.ts
+@@ -10,7 +10,19 @@ import { redis } from "../infra/redis";
+ import type { CachedResponse } from "./types";
+
+ const TTL_SECONDS = 60 * 60 * 24;
+
+-export async function remember() {}
++export async function lookup(key: string) {
++  const raw = await redis.get(\`idem:\${key}\`);
++  return raw ? JSON.parse(raw) : null;
++}
++
++// key comes straight from the request header
++export async function save(key: string, res: CachedResponse) {
++  const existing = await redis.get(\`idem:\${key}\`);
++  if (existing) return JSON.parse(existing);
++  await redis.set(\`idem:\${key}\`, JSON.stringify(res),
++    "EX", TTL_SECONDS);
++  return res;
++}
+
+ export { TTL_SECONDS };
+diff --git a/src/http/charges.ts b/src/http/charges.ts
+index 3333333..4444444 100644
+--- a/src/http/charges.ts
++++ b/src/http/charges.ts
+@@ -38,4 +38,11 @@ export const router = Router();
+ router.post("/v1/charges", auth, async (req, res) => {
++  const key = req.header("Idempotency-Key");
++  if (key) {
++    const hit = await lookup(key);
++    if (hit) return res.status(hit.status).json(hit.body);
++  }
+   const charge = await createCharge(req.merchant, req.body);
+-  res.status(201).json(serialize(charge));
++  res.status(201).json(serialize(charge));
+ });
+`;
+
+const analysis = {
+  claims: [
+    { text: "Accepts an Idempotency-Key header on charge requests.", verdict: "implemented", anchors: [{ path: "src/http/charges.ts", startLine: 39, endLine: 43 }] },
+    { text: "Keys are stored in Redis for 24 hours.", verdict: "partial", note: "The TTL is 24 hours, but keys are shared across merchants.", finding: 1, anchors: [{ path: "src/idempotency/store.ts", startLine: 23, endLine: 24 }] },
+    { text: "Safe to retry, even when requests arrive concurrently.", verdict: "contradicted", note: "Two concurrent requests with the same key can both create a charge.", finding: 0, anchors: [] },
+  ],
+  findings: [
+    { severity: "critical", category: "Correctness", title: "Check-then-set race can double-charge on concurrent retries", body: "save() reads the key and writes it in two separate calls. Two requests with the same key that arrive together both miss, and both create a charge.", fix: "Reserve the key with SET NX before creating the charge.", confidence: "high", anchors: [{ path: "src/idempotency/store.ts", startLine: 21, endLine: 24 }, { path: "src/http/charges.ts", startLine: 41, endLine: 42 }] },
+    { severity: "high", category: "Security", title: "Idempotency keys aren't scoped to the merchant", body: "Another merchant who sends the same key gets the first merchant's cached charge back.", fix: "Prefix the key with the merchant ID.", confidence: "high", anchors: [{ path: "src/idempotency/store.ts", startLine: 19, endLine: 21 }] },
+    { severity: "low", category: "Data handling", title: "Cached response keeps the full charge body for 24 h", body: "The cached body includes card brand and last4.", confidence: "medium", anchors: [{ path: "src/http/charges.ts", startLine: 45, endLine: 45 }] },
+  ],
+  readingOrder: [
+    { path: "src/idempotency/store.ts", why: "The core of the change." },
+    { path: "src/http/charges.ts", why: "How the route calls the store." },
+  ],
+};
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}, onEvent?: (e: ClaudeEvent) => void): Promise<unknown> {
+  await wait(150);
+  switch (cmd) {
+    case "list_review_requests":
+      return requests;
+    case "pr_details":
+      return details;
+    case "pr_diff":
+      return diff;
+    case "prepare_worktree":
+      return "/home/you/.better-lgtm/worktrees/acme/payments-api/pr-482";
+    case "claude_run": {
+      onEvent?.({ type: "system", subtype: "init", session_id: "mock-session" });
+      for (const name of ["Read", "Grep", "Bash"]) {
+        await wait(300);
+        onEvent?.({ type: "assistant", message: { content: [{ type: "tool_use", name, input: { file_path: "src/idempotency/store.ts", pattern: "redis", command: "git diff origin/main...HEAD" } }] } });
+      }
+      const isAnalysis = String(args.prompt ?? "").includes("reply with only one JSON block");
+      onEvent?.({ type: "assistant", message: { content: [{ type: "text", text: isAnalysis ? "Done." : "This is a sample answer from the browser preview." }] } });
+      onEvent?.({ type: "result", session_id: "mock-session", result: isAnalysis ? "```json\n" + JSON.stringify(analysis) + "\n```" : "ok", usage: { input_tokens: 12000, output_tokens: 900 } });
+      return null;
+    }
+    default:
+      return null;
+  }
+}
