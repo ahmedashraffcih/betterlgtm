@@ -20,8 +20,8 @@ export interface PrSession {
   tokens?: number;
   costUsd?: number;
   inReview: number[];
-  /** Guided-review steps the user marked as reviewed. */
-  reviewedSteps?: number[];
+  /** Hunks the user marked as reviewed (see `hunkKey`); drives step and file progress. */
+  reviewedHunks?: string[];
 }
 
 const KEY = "better-lgtm.sessions";

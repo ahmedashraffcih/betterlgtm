@@ -1,9 +1,9 @@
-import { ArrowLeft, ChevronDown, ChevronUp, Columns2, Files, Flag, ListOrdered, Rows3 } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronUp, Columns2, Files, Flag, ListOrdered, Rows3 } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { Decoration, Diff, Hunk, getChangeKey, type FileData, type RenderGutter } from "react-diff-view";
 import type { Anchor, Finding } from "../analysis";
 import { SEVERITY, fileIcon } from "../icons";
-import { changeKeys, changesInRange, filePath, fileStats, findFile } from "../diffUtils";
+import { allReviewed, changeKeys, changesInRange, filePath, fileStats, findFile, hunkKey } from "../diffUtils";
 import { useElementWidth } from "../hooks";
 
 export type DiffMode = "guided" | "files";
@@ -24,6 +24,8 @@ export function DiffModeSwitch({ mode, onMode, compact }: { mode: DiffMode; onMo
 
 interface Props {
   onMode: (m: DiffMode) => void;
+  reviewed: Set<string>;
+  onReviewed: (hunkKeys: string[], reviewed: boolean) => void;
   files: FileData[];
   current: string | null;
   range: Anchor | null;
@@ -88,6 +90,9 @@ export function DiffView(p: Props) {
     return c;
   }, [p.findings, p.files]);
 
+  const isReviewed = (f: FileData) => allReviewed(f.hunks.map((h) => hunkKey(f, h)), p.reviewed);
+  const reviewedFiles = p.files.filter(isReviewed).length;
+
   const banner = p.activeFinding !== null ? p.findings[p.activeFinding] : undefined;
   const bannerOnFile = banner && file && banner.anchors.some((a) => findFile([file], a.path) === file);
 
@@ -95,16 +100,17 @@ export function DiffView(p: Props) {
     <div ref={rootRef} style={{ display: "flex", height: "100%", minHeight: 0 }}>
       {!narrow && (
       <nav aria-label="Changed files" className="side" style={{ width: width < 1000 ? 220 : 260, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
-        <div className="ph"><span style={{ flex: 1 }}>Changed files</span><span style={{ fontWeight: 400 }}>{p.files.length}</span></div>
+        <div className="ph"><span style={{ flex: 1 }}>Changed files</span><span style={{ fontWeight: 400 }}>{reviewedFiles} of {p.files.length} reviewed</span></div>
         <div className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
           {p.files.map((f) => {
             const path = filePath(f);
             const s = fileStats(f);
             const Icon = fileIcon(path);
             const n = counts.get(path);
+            const done = isReviewed(f);
             return (
-              <button key={path} type="button" className={file === f ? "file cur" : "file"} title={path} onClick={() => p.onPickFile(path)}>
-                <Icon size={14} />
+              <button key={path} type="button" className={file === f ? "file cur" : "file"} title={done ? `${path} (reviewed)` : path} onClick={() => p.onPickFile(path)}>
+                {done ? <Check size={14} className={file === f ? undefined : "tone-ok"} strokeWidth={2.5} /> : <Icon size={14} />}
                 <span className="mono ellipsis" style={{ flex: 1 }}>{path}</span>
                 {n ? <span className="rm" style={{ display: "inline-flex", alignItems: "center", gap: 2 }}><Flag size={11} />{n}</span> : null}
                 <span className="mono rm">+{s.add} −{s.del}</span>
@@ -133,6 +139,12 @@ export function DiffView(p: Props) {
             </select>
           ) : (
             <span className="mono ellipsis" style={{ flex: 1, fontSize: 12 }}>{file ? filePath(file) : "No changes"}</span>
+          )}
+          {file && (
+            <label className={isReviewed(file) ? "review-check on" : "review-check"} title="Mark this file as reviewed">
+              <input type="checkbox" checked={isReviewed(file)} onChange={(e) => p.onReviewed(file.hunks.map((h) => hunkKey(file, h)), e.target.checked)} />
+              {!narrow && "Reviewed"}
+            </label>
           )}
           <div className="seg" role="group" aria-label="Diff layout">
             <button type="button" className={split ? "" : "on"} aria-pressed={!split} title="Unified" onClick={() => p.onSplit(false)}><Rows3 size={13} />{!narrow && "Unified"}</button>

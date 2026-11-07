@@ -1,8 +1,8 @@
-import { ArrowLeft, Check, ChevronRight, Columns2, Files, Loader, Rows3, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Columns2, Files, Loader, Rows3, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Decoration, Diff, Hunk, getChangeKey, type FileData, type HunkData, type RenderGutter } from "react-diff-view";
 import type { Anchor, Finding, WalkStep } from "../analysis";
-import { changesInRange, filePath, fileStats, findFile, hunksForRanges } from "../diffUtils";
+import { allReviewed, changesInRange, filePath, fileStats, findFile, hunkKey, hunksForRanges } from "../diffUtils";
 import { useElementWidth } from "../hooks";
 import { fileIcon } from "../icons";
 import { DiffModeSwitch, type DiffMode } from "./DiffView";
@@ -13,60 +13,64 @@ interface Props {
   steps?: WalkStep[];
   findings: Finding[];
   current: number;
-  reviewed: number[];
+  reviewed: Set<string>;
   split: boolean;
   generating?: { running: boolean; error?: string };
   canGenerate: boolean;
   onSplit: (split: boolean) => void;
   onMode: (m: DiffMode) => void;
   onStep: (i: number) => void;
-  onReviewed: (i: number, reviewed: boolean) => void;
+  onReviewed: (hunkKeys: string[], reviewed: boolean) => void;
   onGenerate: () => void;
 }
 
 interface FilePart {
   file: FileData;
   hunks: HunkData[];
-  ranges: Anchor[];
+  keys: string[];
 }
 
 interface Step extends WalkStep {
   parts: FilePart[];
-  synthetic?: boolean;
+  keys: string[];
 }
 
 /** Resolves each step's line ranges to diff hunks, and adds a final step for anything left over. */
 function resolveSteps(steps: WalkStep[], files: FileData[]): Step[] {
   const used = new Set<HunkData>();
-  const out: Step[] = steps.map((s) => {
+  const part = (file: FileData, hunks: HunkData[]): FilePart => ({ file, hunks, keys: hunks.map((h) => hunkKey(file, h)) });
+  const build = (s: WalkStep, parts: FilePart[]): Step => ({ ...s, parts, keys: parts.flatMap((x) => x.keys) });
+
+  const out = steps.map((s) => {
     const byFile = new Map<FileData, Anchor[]>();
     for (const r of s.changes) {
       const f = findFile(files, r.path);
       if (f) byFile.set(f, [...(byFile.get(f) ?? []), r]);
     }
     const parts = [...byFile.entries()]
-      .map(([file, ranges]) => ({ file, ranges, hunks: hunksForRanges(file, ranges).filter((h) => !used.has(h)) }))
-      .filter((part) => part.hunks.length > 0);
-    parts.forEach((part) => part.hunks.forEach((h) => used.add(h)));
-    return { ...s, parts };
+      .map(([file, ranges]) => part(file, hunksForRanges(file, ranges).filter((h) => !used.has(h))))
+      .filter((x) => x.hunks.length > 0);
+    parts.forEach((x) => x.hunks.forEach((h) => used.add(h)));
+    return build(s, parts);
   });
-  const rest = files
-    .map((file) => ({ file, ranges: [], hunks: file.hunks.filter((h) => !used.has(h)) }))
-    .filter((part) => part.hunks.length > 0);
-  if (rest.length) {
-    out.push({ title: "Other changes", why: "- Changes that weren't grouped into a step", changes: [], parts: rest, synthetic: true });
-  }
+  const rest = files.map((file) => part(file, file.hunks.filter((h) => !used.has(h)))).filter((x) => x.hunks.length > 0);
+  if (rest.length) out.push(build({ title: "Other changes", why: "- Changes that weren't grouped into a step", changes: [] }, rest));
   return out.filter((s) => s.parts.length > 0);
 }
 
-function StepFile({ part, findings, split }: { part: FilePart; findings: Finding[]; split: boolean }) {
+function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; reviewed: boolean; onToggle: (v: boolean) => void }) {
+  const { part } = p;
   const path = filePath(part.file);
   const Icon = fileIcon(path);
   const s = fileStats(part.file);
+  // Reviewed files fold away, like GitHub's "Viewed", so the remaining work stays in view.
+  const [open, setOpen] = useState(!p.reviewed);
+  useEffect(() => setOpen(!p.reviewed), [p.reviewed]);
+
   // Everything shown already belongs to the step, so lines aren't highlighted; only finding markers stand out.
   const markers = useMemo(() => {
     const m = new Map<string, number>();
-    findings.forEach((f, i) =>
+    p.findings.forEach((f, i) =>
       f.anchors.forEach((a) => {
         if (findFile([part.file], a.path) !== part.file) return;
         const first = changesInRange(part.file, a)[0];
@@ -74,33 +78,43 @@ function StepFile({ part, findings, split }: { part: FilePart; findings: Finding
       }),
     );
     return m;
-  }, [part, findings]);
+  }, [part, p.findings]);
   const renderGutter: RenderGutter = ({ change, side, renderDefault }) => {
     const n = markers.get(getChangeKey(change));
     return (
       <>
-        {n !== undefined && side === (split ? "new" : "old") && <span className="mk" title={`Finding ${n}`}>{n}</span>}
+        {n !== undefined && side === (p.split ? "new" : "old") && <span className="mk" title={`Finding ${n}`}>{n}</span>}
         {renderDefault()}
       </>
     );
   };
+
   return (
-    <div className="excerpt">
+    <div className={p.reviewed ? "excerpt part-done" : "excerpt"}>
       <div className="exh">
+        <button type="button" className="tb" style={{ width: 22, height: 22 }} aria-expanded={open} aria-label={open ? "Fold file" : "Show file"} onClick={() => setOpen(!open)}>
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
         <Icon size={14} className="tone-muted" />
         <span className="mono ellipsis" style={{ flex: 1 }} title={path}>{path}</span>
         <span className="mono muted" style={{ fontSize: 11 }}>+{s.add} −{s.del}</span>
+        <label className={p.reviewed ? "review-check on" : "review-check"}>
+          <input type="checkbox" checked={p.reviewed} onChange={(e) => p.onToggle(e.target.checked)} />
+          Reviewed
+        </label>
       </div>
-      <div style={{ overflowX: "auto" }}>
-        <Diff viewType={split ? "split" : "unified"} diffType={part.file.type} hunks={part.hunks} renderGutter={renderGutter}>
-          {(hunks) =>
-            hunks.flatMap((h) => [
-              <Decoration key={`d-${h.content}`}><span>{h.content}</span></Decoration>,
-              <Hunk key={`h-${h.content}`} hunk={h} />,
-            ])
-          }
-        </Diff>
-      </div>
+      {open && (
+        <div style={{ overflowX: "auto" }}>
+          <Diff viewType={p.split ? "split" : "unified"} diffType={part.file.type} hunks={part.hunks} renderGutter={renderGutter}>
+            {(hunks) =>
+              hunks.flatMap((h) => [
+                <Decoration key={`d-${h.content}`}><span>{h.content}</span></Decoration>,
+                <Hunk key={`h-${h.content}`} hunk={h} />,
+              ])
+            }
+          </Diff>
+        </div>
+      )}
     </div>
   );
 }
@@ -114,8 +128,12 @@ export function GuidedReview(p: Props) {
   const steps = useMemo(() => (p.steps ? resolveSteps(p.steps, p.files) : []), [p.steps, p.files]);
   const cur = Math.min(p.current, Math.max(steps.length - 1, 0));
   const step = steps[cur];
-  const done = (i: number) => p.reviewed.includes(i);
-  const doneCount = steps.filter((_, i) => done(i)).length;
+
+  const stepDone = (s: Step) => allReviewed(s.keys, p.reviewed);
+  const partsDone = (s: Step) => s.parts.filter((x) => allReviewed(x.keys, p.reviewed)).length;
+  const doneSteps = steps.filter(stepDone).length;
+  const allKeys = steps.flatMap((s) => s.keys);
+  const pct = allKeys.length ? Math.round((allKeys.filter((k) => p.reviewed.has(k)).length / allKeys.length) * 100) : 0;
 
   useEffect(() => {
     // Braces matter: newer engines return a Promise from scrollTo, and an effect must not return it.
@@ -132,7 +150,7 @@ export function GuidedReview(p: Props) {
           onChange={(e) => p.onStep(Number(e.target.value))}
           style={{ flex: 1, minWidth: 0, height: 24, fontSize: 12, background: "var(--bg)", color: "var(--text)", border: "1px solid var(--line)", borderRadius: 5 }}
         >
-          {steps.map((s, i) => <option key={i} value={i}>{done(i) ? "✓ " : ""}{i + 1}. {s.title}</option>)}
+          {steps.map((s, i) => <option key={i} value={i}>{stepDone(s) ? "✓ " : ""}{i + 1}. {s.title}</option>)}
         </select>
       ) : (
         <span style={{ flex: 1 }} />
@@ -168,62 +186,85 @@ export function GuidedReview(p: Props) {
     );
   }
 
+  const done = stepDone(step);
+  const filesDone = partsDone(step);
+  const next = () => p.onStep(Math.min(cur + 1, steps.length - 1));
+
   return (
     <div ref={rootRef} style={{ display: "flex", height: "100%", minHeight: 0 }}>
       {!narrow && (
         <nav aria-label="Review steps" className="side" style={{ width: width < 1000 ? 240 : 280, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
           <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6, borderBottom: "1px solid var(--line)" }}>
             <div style={{ display: "flex", fontSize: 12, fontWeight: 600 }} className="muted">
-              <span style={{ flex: 1 }}>Guided review</span>
-              <span style={{ fontWeight: 400 }}>{doneCount} of {steps.length} reviewed</span>
+              <span style={{ flex: 1 }}>{doneSteps} of {steps.length} steps reviewed</span>
+              <span style={{ fontWeight: 400 }}>{pct}%</span>
             </div>
-            <div role="progressbar" aria-label="Review progress" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={steps.length} style={{ height: 3, borderRadius: 2, background: "var(--line)", overflow: "hidden" }}>
-              <div style={{ width: `${(doneCount / steps.length) * 100}%`, height: 3, background: "var(--ok)" }} />
+            <div role="progressbar" aria-label="Review progress" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} style={{ height: 3, borderRadius: 2, background: "var(--line)", overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: 3, background: "var(--ok)" }} />
             </div>
           </div>
           <div className="scroll" style={{ padding: 6, display: "flex", flexDirection: "column", gap: 2 }}>
-            {steps.map((s, i) => (
-              <button key={i} type="button" className={i === cur ? "step-row cur" : "step-row"} onClick={() => p.onStep(i)}>
-                <span className={done(i) ? "step-num done" : "step-num"}>{done(i) ? <Check size={11} strokeWidth={3} /> : i + 1}</span>
-                <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-                  <span className="step-title">{s.title}</span>
-                  <span className="step-meta">{s.parts.length} {s.parts.length === 1 ? "file" : "files"}</span>
-                </span>
-              </button>
-            ))}
+            {steps.map((s, i) => {
+              const d = stepDone(s);
+              const pd = partsDone(s);
+              return (
+                <button key={i} type="button" className={i === cur ? "step-row cur" : "step-row"} onClick={() => p.onStep(i)}>
+                  <span className={d ? "step-num done" : pd > 0 ? "step-num partial" : "step-num"}>{d ? <Check size={11} strokeWidth={3} /> : i + 1}</span>
+                  <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                    <span className="step-title">{s.title}</span>
+                    <span className="step-meta">
+                      {d ? "Reviewed" : pd > 0 ? `${pd} of ${s.parts.length} files reviewed` : `${s.parts.length} ${s.parts.length === 1 ? "file" : "files"}`}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </nav>
       )}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {toolbar}
         <div ref={scroller} className="scroll" style={{ padding: narrow ? "14px 12px 20px" : "18px 20px 24px" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="selectable" style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 760 }}>
-              <span className="muted" style={{ fontSize: 12 }}>Step {cur + 1} of {steps.length}</span>
+              <span className="muted" style={{ fontSize: 12 }}>
+                Step {cur + 1} of {steps.length} · {done ? "reviewed" : `${filesDone} of ${step.parts.length} files reviewed`}
+              </span>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, lineHeight: 1.3 }}>{step.title}</h2>
               <Markdown text={step.why} />
             </div>
-            {step.parts.map((part, i) => <StepFile key={`${cur}-${i}`} part={part} findings={p.findings} split={split} />)}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4 }}>
+            {step.parts.map((part, i) => (
+              <StepFile
+                key={`${cur}-${i}`}
+                part={part}
+                findings={p.findings}
+                split={split}
+                reviewed={allReviewed(part.keys, p.reviewed)}
+                onToggle={(v) => p.onReviewed(part.keys, v)}
+              />
+            ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4, flexWrap: "wrap" }}>
               <button type="button" className="btn" disabled={cur === 0} onClick={() => p.onStep(cur - 1)}><ArrowLeft size={14} />Previous</button>
               <span style={{ flex: 1 }} />
-              {done(cur) ? (
-                <button type="button" className="btn in-review" onClick={() => p.onReviewed(cur, false)}><Check size={14} />Reviewed</button>
-              ) : null}
-              {cur < steps.length - 1 ? (
+              {done ? (
+                <button type="button" className="btn in-review" title="Click to mark as not reviewed" onClick={() => p.onReviewed(step.keys, false)}>
+                  <Check size={14} />Step reviewed
+                </button>
+              ) : (
+                <button type="button" className="btn" onClick={() => p.onReviewed(step.keys, true)}><Check size={14} />Mark step reviewed</button>
+              )}
+              {cur < steps.length - 1 && (
                 <button
                   type="button"
                   className="btn primary"
                   onClick={() => {
-                    p.onReviewed(cur, true);
-                    p.onStep(cur + 1);
+                    if (!done) p.onReviewed(step.keys, true);
+                    next();
                   }}
                 >
-                  {done(cur) ? "Next step" : "Mark reviewed, next"}<ChevronRight size={14} />
+                  {done ? "Next step" : "Reviewed, next"}<ChevronRight size={14} />
                 </button>
-              ) : !done(cur) ? (
-                <button type="button" className="btn primary" onClick={() => p.onReviewed(cur, true)}><Check size={14} />Mark reviewed</button>
-              ) : null}
+              )}
             </div>
           </div>
         </div>

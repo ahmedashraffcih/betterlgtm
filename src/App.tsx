@@ -147,7 +147,6 @@ export default function App() {
         analysis: parsed ?? s.analysis,
         analysisRaw: parsed ? undefined : finalText,
         analyzedAt: parsed ? Date.now() : s.analyzedAt,
-        reviewedSteps: parsed ? [] : s.reviewedSteps,
         tokens: (s.tokens ?? 0) + tokensOf(usage),
         costUsd: (s.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
@@ -236,7 +235,6 @@ export default function App() {
         ...x,
         sessionId,
         analysis: x.analysis ? { ...x.analysis, walkthrough: steps } : x.analysis,
-        reviewedSteps: [],
         tokens: (x.tokens ?? 0) + tokensOf(usage),
         costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
@@ -276,6 +274,16 @@ export default function App() {
   const ci = details?.statusCheckRollup ?? [];
   const ciFailing = ci.some((c) => ["FAILURE", "ERROR", "TIMED_OUT"].includes((c.conclusion ?? c.state ?? "").toUpperCase()));
   const ciPending = ci.some((c) => ["IN_PROGRESS", "QUEUED", "PENDING"].includes((c.status ?? c.state ?? "").toUpperCase()));
+
+  // Review progress, shared by the guided steps and the file list.
+  const reviewedHunks = useMemo(() => new Set(session?.reviewedHunks ?? []), [session?.reviewedHunks]);
+  const setReviewed = (hunkKeys: string[], value: boolean) =>
+    key &&
+    update(key, (s) => {
+      const set = new Set(s.reviewedHunks ?? []);
+      hunkKeys.forEach((h) => (value ? set.add(h) : set.delete(h)));
+      return { ...s, reviewedHunks: [...set] };
+    });
 
   // What the chat question is about: the finding, claim or file the user is looking at.
   const chatContext = ((): ChatContext | null => {
@@ -401,25 +409,22 @@ export default function App() {
             steps={analysis?.walkthrough}
             findings={analysis?.findings ?? []}
             current={guideStep}
-            reviewed={session?.reviewedSteps ?? []}
+            reviewed={reviewedHunks}
             split={split}
             generating={key ? guideRuns[key] : undefined}
             canGenerate={!!(session?.sessionId && session.worktree)}
             onSplit={setSplit}
             onMode={setDiffMode}
             onStep={setGuideStep}
-            onReviewed={(i, done) =>
-              key && update(key, (s) => {
-                const cur = s.reviewedSteps ?? [];
-                return { ...s, reviewedSteps: done ? [...new Set([...cur, i])] : cur.filter((x) => x !== i) };
-              })
-            }
+            onReviewed={setReviewed}
             onGenerate={generateWalkthrough}
           />
         )}
         {details && tab === "diff" && diffMode === "files" && (
           <DiffView
             onMode={setDiffMode}
+            reviewed={reviewedHunks}
+            onReviewed={setReviewed}
             files={files}
             current={diffTarget.path}
             range={diffTarget.range}

@@ -44,7 +44,16 @@ export function hunksForRanges(file: FileData, ranges: Anchor[]): HunkData[] {
   });
 }
 
-export const changeKeys =(changes: ChangeData[]) => changes.map(getChangeKey);
+/**
+ * Review progress is tracked per hunk, so marking a file in Files mode and marking it inside a
+ * guided-review step stay in sync, even when a file's hunks are spread over several steps.
+ * The hunk header changes when new commits move the code, which resets that part only.
+ */
+export const hunkKey = (file: FileData, hunk: HunkData) => `${filePath(file)}\u0000${hunk.content}`;
+
+export const allReviewed = (keys: string[], reviewed: Set<string>) => keys.length > 0 && keys.every((k) => reviewed.has(k));
+
+export const changeKeys = (changes: ChangeData[]) => changes.map(getChangeKey);
 
 export function lineNumbers(c: ChangeData) {
   const o = computeOldLineNumber(c);
