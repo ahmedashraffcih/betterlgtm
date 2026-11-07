@@ -1,0 +1,46 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead. Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a pull request
+        2. Choose Start review
+        3. …
+  - type: input
+    id: version
+    attributes:
+      label: BetterLGTM version
+      description: Help › About
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS (Apple silicon), macOS (Intel), Windows, Linux]
+    validations:
+      required: true
+  - type: textarea
+    id: tools
+    attributes:
+      label: Tool versions
+      description: Output of `gh --version` and `claude --version`
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Errors or logs
+      description: Any error shown in the app. Remove private code or repository names first.
+      render: text

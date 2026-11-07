@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::path::Path;
 
 use tauri::{AppHandle, State};
 
 use crate::config::{ConfigState, data_dir};
 use crate::process::run;
 
-fn path_str(p: &PathBuf) -> Result<&str, String> {
+fn path_str(p: &Path) -> Result<&str, String> {
     p.to_str().ok_or_else(|| format!("Path is not valid UTF-8: {}", p.display()))
 }
 

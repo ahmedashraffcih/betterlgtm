@@ -1,8 +1,10 @@
 [package]
 name = "betterlgtm"
 version = "0.1.0"
-description = "Local PR review with the GitHub CLI and Claude Code"
-authors = ["mo"]
+description = "Review GitHub pull requests with Claude Code, from your desktop"
+authors = ["Mohamed Shaban"]
+license = "MIT"
+repository = "https://github.com/drmas/betterlgtm"
 edition = "2024"
 
 [lib]

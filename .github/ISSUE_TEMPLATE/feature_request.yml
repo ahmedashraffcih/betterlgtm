@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest an idea or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The review task that's hard or slow today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you'd like BetterLGTM to handle it.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you've tried instead?

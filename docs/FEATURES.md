@@ -1,5 +1,7 @@
 # BetterLGTM — Feature List
 
+> This is the planning list the app was designed from. Not everything here is built yet; see the [changelog](../CHANGELOG.md) for what has shipped.
+
 A local desktop app for reviewing GitHub pull requests with Claude Code. It uses the machine's `gh` CLI for GitHub access and the `claude` CLI for analysis. Every review runs in its own git worktree checked out on the PR branch.
 
 Priority: **P0** = MVP, **P1** = soon after, **P2** = later.
