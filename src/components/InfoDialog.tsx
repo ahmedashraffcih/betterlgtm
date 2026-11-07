@@ -1,8 +1,9 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { GitPullRequestArrow, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { shortcutLabel, type Command } from "../commands";
+import { Logo } from "./Logo";
 
 /** Keys handled outside the command list. */
 const OTHER_KEYS: [string, string][] = [
@@ -26,7 +27,7 @@ export function InfoDialog({ kind, commands, onClose }: { kind: "shortcuts" | "a
   const keyed = commands.filter((c) => c.keys);
   return (
     <div className="palette-backdrop" onMouseDown={onClose}>
-      <div className="dialog" role="dialog" aria-label={kind === "about" ? "About better-lgtm" : "Keyboard shortcuts"} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="dialog" role="dialog" aria-label={kind === "about" ? "About betterlgtm" : "Keyboard shortcuts"} onMouseDown={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 8px 10px 16px", borderBottom: "1px solid var(--line)" }}>
           <span style={{ flex: 1, fontWeight: 600 }}>{kind === "about" ? "About" : "Keyboard shortcuts"}</span>
           <button type="button" className="tb" aria-label="Close" onClick={onClose}><X size={15} /></button>
@@ -42,8 +43,8 @@ export function InfoDialog({ kind, commands, onClose }: { kind: "shortcuts" | "a
           </div>
         ) : (
           <div style={{ padding: "20px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
-            <GitPullRequestArrow size={32} className="tone-accent" />
-            <span style={{ fontSize: 15, fontWeight: 600 }}>better-lgtm</span>
+            <Logo size={44} />
+            <span style={{ fontSize: 15, fontWeight: 600 }}>betterlgtm</span>
             <span className="muted">Version {version}</span>
             <span className="muted" style={{ maxWidth: 320 }}>Reviews GitHub pull requests with the GitHub CLI and Claude Code, in a worktree per PR.</span>
             <button type="button" className="btn sm" onClick={() => openUrl("https://cli.github.com/manual/")}>GitHub CLI manual</button>

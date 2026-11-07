@@ -143,7 +143,7 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
     case "list_orgs":
       return { login: "you", orgs: ["acme", "globex-labs", "oss-collective"] };
     case "tool_status":
-      return { gh: "gh version 2.103.3 (2026-10-26)", login: "you", claude: "2.1.318 (Claude Code)", dataDir: "/home/you/.better-lgtm" };
+      return { gh: "gh version 2.103.3 (2026-10-26)", login: "you", claude: "2.1.318 (Claude Code)", dataDir: "/home/you/.betterlgtm" };
     case "pr_details":
       return details;
     case "pr_diff":
@@ -151,7 +151,7 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
     case "pr_body_html":
       return bodyHtml;
     case "prepare_worktree":
-      return "/home/you/.better-lgtm/worktrees/acme/payments-api/pr-482";
+      return "/home/you/.betterlgtm/worktrees/acme/payments-api/pr-482";
     case "claude_run": {
       onEvent?.({ type: "system", subtype: "init", session_id: "mock-session" });
       for (const name of ["Read", "Grep", "Bash"]) {

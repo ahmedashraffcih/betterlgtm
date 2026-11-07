@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "better-lgtm",
+  "productName": "betterlgtm",
   "version": "0.1.0",
   "identifier": "io.weekone.betterlgtm",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "better-lgtm",
+        "title": "betterlgtm",
         "width": 1440,
         "height": 900,
         "minWidth": 480,

@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    better_lgtm_lib::run()
+    betterlgtm_lib::run()
 }

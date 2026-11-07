@@ -11,7 +11,7 @@ fn path_str(p: &PathBuf) -> Result<&str, String> {
 
 /// Makes sure there is a worktree checked out at the PR head and returns its path.
 ///
-/// Layout under the data folder (default `~/.better-lgtm`): a blobless clone per repo in
+/// Layout under the data folder (default `~/.betterlgtm`): a blobless clone per repo in
 /// `clones/<owner>/<repo>`, and one detached worktree per PR in `worktrees/<owner>/<repo>/pr-<n>`.
 /// Fork PRs work because the head is fetched from `pull/<n>/head`.
 #[tauri::command]

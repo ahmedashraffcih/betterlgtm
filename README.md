@@ -1,4 +1,4 @@
-# better-lgtm
+# betterlgtm
 
 A desktop app for reviewing GitHub pull requests with Claude Code. It lists the PRs where your review is requested (through the `gh` CLI), checks each PR out in its own git worktree, and has Claude Code compare the description with the code and point out what to look at. See [FEATURES.md](FEATURES.md) for the full feature list.
 
@@ -22,6 +22,6 @@ Running `npm run dev` alone opens the UI in a browser with sample data instead o
 
 ## Where things are stored
 
-- Clones: `~/.better-lgtm/clones/<owner>/<repo>` (blobless)
-- Worktrees: `~/.better-lgtm/worktrees/<owner>/<repo>/pr-<n>`
+- Clones: `~/.betterlgtm/clones/<owner>/<repo>` (blobless)
+- Worktrees: `~/.betterlgtm/worktrees/<owner>/<repo>/pr-<n>`
 - Analyses and chat history: the app's local storage

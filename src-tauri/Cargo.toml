@@ -1,5 +1,5 @@
 [package]
-name = "better-lgtm"
+name = "betterlgtm"
 version = "0.1.0"
 description = "Local PR review with the GitHub CLI and Claude Code"
 authors = ["mo"]
@@ -7,7 +7,7 @@ edition = "2024"
 
 [lib]
 # The `_lib` suffix keeps the lib name distinct from the bin name (needed on Windows).
-name = "better_lgtm_lib"
+name = "betterlgtm_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

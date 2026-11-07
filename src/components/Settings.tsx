@@ -147,7 +147,7 @@ function Tools(p: Props) {
   return (
     <>
       <h1>Tools & storage</h1>
-      <p className="lead">better-lgtm runs the GitHub CLI and Claude Code installed on this computer. Set full paths if the app can't find them, for example when it's started from a launcher instead of a terminal.</p>
+      <p className="lead">betterlgtm runs the GitHub CLI and Claude Code installed on this computer. Set full paths if the app can't find them, for example when it's started from a launcher instead of a terminal.</p>
       <div className="set-group">
         <div className="set-title" style={{ display: "flex", alignItems: "center" }}>
           <span style={{ flex: 1 }}>Commands</span>
@@ -163,7 +163,7 @@ function Tools(p: Props) {
       <div className="set-group">
         <div className="set-title">Storage</div>
         <Row label="Data folder" hint={<>Clones and worktrees live here.{status?.dataDir ? <> Now: <code>{status.dataDir}</code></> : null}</>}>
-          <TextSetting mono value={s.dataDir} placeholder="~/.better-lgtm" onSave={(v) => p.update({ dataDir: v })} />
+          <TextSetting mono value={s.dataDir} placeholder="~/.betterlgtm" onSave={(v) => p.update({ dataDir: v })} />
         </Row>
         <Row label="Saved reviews" hint="Analyses, guided reviews, chat history and review progress stored by the app. Clones and worktrees stay on disk.">
           {confirmClear ? (

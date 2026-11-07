@@ -1,4 +1,4 @@
-# better-lgtm — Feature List
+# betterlgtm — Feature List
 
 A local desktop app for reviewing GitHub pull requests with Claude Code. It uses the machine's `gh` CLI for GitHub access and the `claude` CLI for analysis. Every review runs in its own git worktree checked out on the PR branch.
 
@@ -13,7 +13,7 @@ Priority: **P0** = MVP, **P1** = soon after, **P2** = later.
 | 1.1 | Detect `gh` (installed + `gh auth status`); onboarding screen with fix-it steps if missing or logged out | P0 |
 | 1.2 | Detect `claude` CLI and its auth; show version | P0 |
 | 1.3 | Repo → local clone mapping. Auto-discover existing clones under chosen folders; offer to clone missing repos into an app-managed cache | P0 |
-| 1.4 | Worktree root setting (default `~/.better-lgtm/worktrees/<owner>/<repo>/pr-<n>`) | P0 |
+| 1.4 | Worktree root setting (default `~/.betterlgtm/worktrees/<owner>/<repo>/pr-<n>`) | P0 |
 | 1.5 | Support multiple `gh` hosts (github.com + GHES) via `gh auth status --hostname` | P2 |
 
 ## 2. Review inbox (auto-fetched)

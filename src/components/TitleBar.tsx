@@ -1,6 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { GitPullRequestArrow, Minus, PanelBottom, PanelLeft, Search, Settings2, Square, X } from "lucide-react";
+import { Minus, PanelBottom, PanelLeft, Search, Settings2, Square, X } from "lucide-react";
 import type { Command } from "../commands";
+import { Logo } from "./Logo";
 import { MenuBar } from "./MenuBar";
 
 interface Props {
@@ -18,7 +19,7 @@ export function TitleBar({ title, commands, inboxOpen, chatOpen, onToggleInbox, 
   const win = () => getCurrentWindow();
   return (
     <header className="titlebar" data-tauri-drag-region aria-label="Title bar">
-      <GitPullRequestArrow size={16} className="logo" aria-label="better-lgtm" />
+      <Logo />
       <MenuBar commands={commands} />
       <div data-tauri-drag-region style={{ flex: 1, display: "flex", justifyContent: "center", padding: "0 16px" }}>
         <button type="button" className="cmdk" onClick={onOpenPalette} title="Go to… (Ctrl+K)">

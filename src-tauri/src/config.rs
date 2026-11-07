@@ -14,7 +14,7 @@ use crate::process::run;
 pub struct Config {
     pub gh_path: String,
     pub claude_path: String,
-    /// Where clones and worktrees live. Empty means `~/.better-lgtm`.
+    /// Where clones and worktrees live. Empty means `~/.betterlgtm`.
     pub data_dir: String,
     /// Claude model alias or full name. Empty means Claude Code's default.
     pub model: String,
@@ -41,7 +41,9 @@ pub fn data_dir(app: &AppHandle, config: &Config) -> Result<PathBuf, String> {
     let raw = config.data_dir.trim();
     if raw.is_empty() {
         let home = app.path().home_dir().map_err(|e| e.to_string())?;
-        return Ok(home.join(".better-lgtm"));
+        // Folders made before the rename keep working: worktrees link back to their clones by path.
+        let legacy = home.join(".better-lgtm");
+        return Ok(if legacy.exists() { legacy } else { home.join(".betterlgtm") });
     }
     if let Some(rest) = raw.strip_prefix("~/") {
         let home = app.path().home_dir().map_err(|e| e.to_string())?;
