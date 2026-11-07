@@ -1,5 +1,5 @@
-import { ArrowLeft, Check, ChevronDown, ChevronRight, Columns2, Files, Loader, Rows3, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronRight, Columns2, Files, Loader, Rows3, Sparkles } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Decoration, Diff, Hunk, getChangeKey, type FileData, type HunkData, type RenderGutter } from "react-diff-view";
 import type { Anchor, Finding, WalkStep } from "../analysis";
 import { allReviewed, changesInRange, filePath, fileStats, findFile, hunkKey, hunksForRanges } from "../diffUtils";
@@ -19,6 +19,7 @@ interface Props {
   canGenerate: boolean;
   onSplit: (split: boolean) => void;
   onMode: (m: DiffMode) => void;
+  /** Reports the section in view, so the chat context follows the scroll. */
   onStep: (i: number) => void;
   onReviewed: (hunkKeys: string[], reviewed: boolean) => void;
   onGenerate: () => void;
@@ -35,7 +36,7 @@ interface Step extends WalkStep {
   keys: string[];
 }
 
-/** Resolves each step's line ranges to diff hunks, and adds a final step for anything left over. */
+/** Resolves each step's line ranges to diff hunks, and adds a final section for anything left over. */
 function resolveSteps(steps: WalkStep[], files: FileData[]): Step[] {
   const used = new Set<HunkData>();
   const part = (file: FileData, hunks: HunkData[]): FilePart => ({ file, hunks, keys: hunks.map((h) => hunkKey(file, h)) });
@@ -67,7 +68,7 @@ function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; revi
   const [open, setOpen] = useState(!p.reviewed);
   useEffect(() => setOpen(!p.reviewed), [p.reviewed]);
 
-  // Everything shown already belongs to the step, so lines aren't highlighted; only finding markers stand out.
+  // Everything shown already belongs to the section, so lines aren't highlighted; only finding markers stand out.
   const markers = useMemo(() => {
     const m = new Map<string, number>();
     p.findings.forEach((f, i) =>
@@ -125,9 +126,10 @@ export function GuidedReview(p: Props) {
   const canSplit = width === 0 || width >= 900;
   const split = p.split && canSplit;
   const scroller = useRef<HTMLDivElement>(null);
+  const sections = useRef<(HTMLElement | null)[]>([]);
+  const navItems = useRef<(HTMLDivElement | null)[]>([]);
   const steps = useMemo(() => (p.steps ? resolveSteps(p.steps, p.files) : []), [p.steps, p.files]);
-  const cur = Math.min(p.current, Math.max(steps.length - 1, 0));
-  const step = steps[cur];
+  const [active, setActive] = useState(Math.min(p.current, Math.max(steps.length - 1, 0)));
 
   const stepDone = (s: Step) => allReviewed(s.keys, p.reviewed);
   const partsDone = (s: Step) => s.parts.filter((x) => allReviewed(x.keys, p.reviewed)).length;
@@ -135,19 +137,50 @@ export function GuidedReview(p: Props) {
   const allKeys = steps.flatMap((s) => s.keys);
   const pct = allKeys.length ? Math.round((allKeys.filter((k) => p.reviewed.has(k)).length / allKeys.length) * 100) : 0;
 
+  const jumpTo = (i: number) => {
+    const el = sections.current[i];
+    if (el && scroller.current) scroller.current.scrollTo({ top: el.offsetTop - 8 });
+    setActive(i);
+    p.onStep(i);
+  };
+
+  // Scroll spy: the section whose top has passed the top edge is the one being read.
+  const onScroll = () => {
+    const sc = scroller.current;
+    if (!sc) return;
+    let idx = 0;
+    sections.current.forEach((el, i) => {
+      if (el && el.offsetTop - sc.scrollTop <= 48) idx = i;
+    });
+    if (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 4) idx = steps.length - 1;
+    if (idx !== active) {
+      setActive(idx);
+      p.onStep(idx);
+    }
+  };
+
+  // Open where the user left off.
+  useLayoutEffect(() => {
+    if (p.current > 0 && steps.length) {
+      const el = sections.current[Math.min(p.current, steps.length - 1)];
+      if (el && scroller.current) scroller.current.scrollTop = el.offsetTop - 8;
+    }
+    // Only once steps exist; after that the position comes from scrolling.
+  }, [steps.length > 0]);
+
+  // Keep the active item visible in the side menu as the diff scrolls.
   useEffect(() => {
-    // Braces matter: newer engines return a Promise from scrollTo, and an effect must not return it.
-    scroller.current?.scrollTo({ top: 0 });
-  }, [cur]);
+    navItems.current[active]?.scrollIntoView({ block: "nearest" });
+  }, [active]);
 
   const toolbar = (
     <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 8px 0 12px", borderBottom: "1px solid var(--line)", background: "var(--side)", flexShrink: 0 }}>
       <DiffModeSwitch mode="guided" onMode={p.onMode} compact={narrow} />
       {narrow && steps.length > 0 ? (
         <select
-          aria-label="Review step"
-          value={cur}
-          onChange={(e) => p.onStep(Number(e.target.value))}
+          aria-label="Jump to section"
+          value={active}
+          onChange={(e) => jumpTo(Number(e.target.value))}
           style={{ flex: 1, minWidth: 0, height: 24, fontSize: 12, background: "var(--bg)", color: "var(--text)", border: "1px solid var(--line)", borderRadius: 5 }}
         >
           {steps.map((s, i) => <option key={i} value={i}>{stepDone(s) ? "✓ " : ""}{i + 1}. {s.title}</option>)}
@@ -170,7 +203,7 @@ export function GuidedReview(p: Props) {
           <div style={{ maxWidth: 380, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
             <Sparkles size={32} strokeWidth={1.4} className="tone-accent" />
             <h2 style={{ margin: 0, fontSize: 15, color: "var(--text)" }}>Guided review</h2>
-            <p style={{ margin: 0 }}>Claude groups related changes across files into steps, explains each one, and orders them so each builds on the last.</p>
+            <p style={{ margin: 0 }}>Claude groups related changes across files into sections, explains each one, and orders them so each builds on the last.</p>
             {p.generating?.running ? (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Loader size={14} className="spin" />Grouping the changes…</span>
             ) : p.canGenerate ? (
@@ -186,17 +219,13 @@ export function GuidedReview(p: Props) {
     );
   }
 
-  const done = stepDone(step);
-  const filesDone = partsDone(step);
-  const next = () => p.onStep(Math.min(cur + 1, steps.length - 1));
-
   return (
     <div ref={rootRef} style={{ display: "flex", height: "100%", minHeight: 0 }}>
       {!narrow && (
-        <nav aria-label="Review steps" className="side" style={{ width: width < 1000 ? 240 : 280, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
+        <nav aria-label="Review sections" className="side" style={{ width: width < 1000 ? 240 : 280, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
           <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6, borderBottom: "1px solid var(--line)" }}>
             <div style={{ display: "flex", fontSize: 12, fontWeight: 600 }} className="muted">
-              <span style={{ flex: 1 }}>{doneSteps} of {steps.length} steps reviewed</span>
+              <span style={{ flex: 1 }}>{doneSteps} of {steps.length} sections reviewed</span>
               <span style={{ fontWeight: 400 }}>{pct}%</span>
             </div>
             <div role="progressbar" aria-label="Review progress" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} style={{ height: 3, borderRadius: 2, background: "var(--line)", overflow: "hidden" }}>
@@ -208,15 +237,18 @@ export function GuidedReview(p: Props) {
               const d = stepDone(s);
               const pd = partsDone(s);
               return (
-                <button key={i} type="button" className={i === cur ? "step-row cur" : "step-row"} onClick={() => p.onStep(i)}>
-                  <span className={d ? "step-num done" : pd > 0 ? "step-num partial" : "step-num"}>{d ? <Check size={11} strokeWidth={3} /> : i + 1}</span>
-                  <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+                <div key={i} ref={(el) => { navItems.current[i] = el; }} className={i === active ? "step-row cur" : "step-row"}>
+                  <label className="step-check" title={d ? "Mark as not reviewed" : "Mark section reviewed"}>
+                    <input type="checkbox" checked={d} aria-label={`Section ${i + 1} reviewed`} onChange={(e) => p.onReviewed(s.keys, e.target.checked)} />
+                    <span className={d ? "step-num done" : pd > 0 ? "step-num partial" : "step-num"}>{d ? <Check size={11} strokeWidth={3} /> : i + 1}</span>
+                  </label>
+                  <button type="button" className="step-go" onClick={() => jumpTo(i)}>
                     <span className="step-title">{s.title}</span>
                     <span className="step-meta">
                       {d ? "Reviewed" : pd > 0 ? `${pd} of ${s.parts.length} files reviewed` : `${s.parts.length} ${s.parts.length === 1 ? "file" : "files"}`}
                     </span>
-                  </span>
-                </button>
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -224,49 +256,39 @@ export function GuidedReview(p: Props) {
       )}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {toolbar}
-        <div ref={scroller} className="scroll" style={{ padding: narrow ? "14px 12px 20px" : "18px 20px 24px" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="selectable" style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 760 }}>
-              <span className="muted" style={{ fontSize: 12 }}>
-                Step {cur + 1} of {steps.length} · {done ? "reviewed" : `${filesDone} of ${step.parts.length} files reviewed`}
-              </span>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, lineHeight: 1.3 }}>{step.title}</h2>
-              <Markdown text={step.why} />
-            </div>
-            {step.parts.map((part, i) => (
-              <StepFile
-                key={`${cur}-${i}`}
-                part={part}
-                findings={p.findings}
-                split={split}
-                reviewed={allReviewed(part.keys, p.reviewed)}
-                onToggle={(v) => p.onReviewed(part.keys, v)}
-              />
-            ))}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4, flexWrap: "wrap" }}>
-              <button type="button" className="btn" disabled={cur === 0} onClick={() => p.onStep(cur - 1)}><ArrowLeft size={14} />Previous</button>
-              <span style={{ flex: 1 }} />
-              {done ? (
-                <button type="button" className="btn in-review" title="Click to mark as not reviewed" onClick={() => p.onReviewed(step.keys, false)}>
-                  <Check size={14} />Step reviewed
-                </button>
-              ) : (
-                <button type="button" className="btn" onClick={() => p.onReviewed(step.keys, true)}><Check size={14} />Mark step reviewed</button>
-              )}
-              {cur < steps.length - 1 && (
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={() => {
-                    if (!done) p.onReviewed(step.keys, true);
-                    next();
-                  }}
-                >
-                  {done ? "Next step" : "Reviewed, next"}<ChevronRight size={14} />
-                </button>
-              )}
-            </div>
-          </div>
+        <div ref={scroller} className={narrow ? "scroll g-scroll g-narrow" : "scroll g-scroll"} onScroll={onScroll}>
+          {steps.map((step, si) => {
+            const done = stepDone(step);
+            const filesDone = partsDone(step);
+            return (
+              <section key={si} ref={(el) => { sections.current[si] = el; }} aria-label={`Section ${si + 1}: ${step.title}`} className="g-section">
+                <div className="g-head">
+                  <span className={done ? "step-num done" : filesDone > 0 ? "step-num partial" : "step-num"}>{done ? <Check size={11} strokeWidth={3} /> : si + 1}</span>
+                  <h2 className="ellipsis" title={step.title}>{step.title}</h2>
+                  <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{done ? "Reviewed" : `${filesDone}/${step.parts.length} files`}</span>
+                  <label className={done ? "review-check on" : "review-check"}>
+                    <input type="checkbox" checked={done} onChange={(e) => p.onReviewed(step.keys, e.target.checked)} />
+                    {!narrow && "Section reviewed"}
+                  </label>
+                </div>
+                <div className="selectable" style={{ maxWidth: 760, padding: "2px 0 10px" }}>
+                  <Markdown text={step.why} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {step.parts.map((part, i) => (
+                    <StepFile
+                      key={i}
+                      part={part}
+                      findings={p.findings}
+                      split={split}
+                      reviewed={allReviewed(part.keys, p.reviewed)}
+                      onToggle={(v) => p.onReviewed(part.keys, v)}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </div>
     </div>

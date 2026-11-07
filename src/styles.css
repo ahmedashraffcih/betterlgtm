@@ -228,7 +228,18 @@ code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--
 .md li::marker { color: var(--muted); }
 
 /* guided review */
-.step-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 7px 8px; border-radius: 6px; }
+.step-row { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 6px; }
+.step-check { display: inline-flex; position: relative; padding: 1px; border-radius: 11px; }
+.step-check input { position: absolute; inset: 0; opacity: 0; margin: 0; }
+.step-check:hover .step-num { box-shadow: inset 0 0 0 2px var(--ok); }
+.step-check:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.step-go { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.g-scroll { position: relative; padding: 0 20px 40vh; }
+.g-narrow { padding: 0 12px 40vh; }
+.g-narrow .g-head { margin: 0 -12px 4px; padding: 6px 12px; }
+.g-section { padding-top: 6px; margin-bottom: 18px; }
+.g-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; min-height: 40px; margin: 0 -20px 4px; padding: 6px 20px; background: var(--bg); border-bottom: 1px solid var(--line2); }
+.g-head h2 { flex: 1; min-width: 0; margin: 0; font-size: 15px; font-weight: 600; }
 .step-row:hover { background: var(--hover); }
 .step-row.cur { background: var(--sel); color: var(--on-sel); }
 .step-row.cur .step-meta { color: var(--on-sel); opacity: 0.85; }
