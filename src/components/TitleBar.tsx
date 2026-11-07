@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { GitPullRequestArrow, Menu, Minus, PanelBottom, PanelLeft, Search, Square, X } from "lucide-react";
+import { GitPullRequestArrow, Menu, Minus, PanelBottom, PanelLeft, Search, Settings2, Square, X } from "lucide-react";
 
 interface Props {
   title: string;
@@ -7,11 +7,12 @@ interface Props {
   chatOpen: boolean;
   onToggleInbox: () => void;
   onToggleChat: () => void;
+  onOpenSettings: () => void;
 }
 
 const MENUS = ["File", "Edit", "View", "Review", "Go", "Help"];
 
-export function TitleBar({ title, inboxOpen, chatOpen, onToggleInbox, onToggleChat }: Props) {
+export function TitleBar({ title, inboxOpen, chatOpen, onToggleInbox, onToggleChat, onOpenSettings }: Props) {
   const win = () => getCurrentWindow();
   return (
     <header className="titlebar" data-tauri-drag-region aria-label="Title bar">
@@ -32,6 +33,9 @@ export function TitleBar({ title, inboxOpen, chatOpen, onToggleInbox, onToggleCh
       </button>
       <button type="button" className={chatOpen ? "tb on" : "tb"} aria-label="Toggle Claude panel" aria-pressed={chatOpen} onClick={onToggleChat}>
         <PanelBottom size={16} />
+      </button>
+      <button type="button" className="tb" aria-label="Settings (Ctrl+,)" title="Settings (Ctrl+,)" onClick={onOpenSettings}>
+        <Settings2 size={16} />
       </button>
       <span style={{ width: 12 }} />
       <button type="button" className="wc" aria-label="Minimize" onClick={() => win().minimize()}><Minus size={14} /></button>

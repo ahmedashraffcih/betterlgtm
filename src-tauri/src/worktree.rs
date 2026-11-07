@@ -1,13 +1,9 @@
 use std::path::PathBuf;
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, State};
 
+use crate::config::{ConfigState, data_dir};
 use crate::process::run;
-
-fn base_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let home = app.path().home_dir().map_err(|e| e.to_string())?;
-    Ok(home.join(".better-lgtm"))
-}
 
 fn path_str(p: &PathBuf) -> Result<&str, String> {
     p.to_str().ok_or_else(|| format!("Path is not valid UTF-8: {}", p.display()))
@@ -15,12 +11,13 @@ fn path_str(p: &PathBuf) -> Result<&str, String> {
 
 /// Makes sure there is a worktree checked out at the PR head and returns its path.
 ///
-/// Layout: a blobless clone per repo in `~/.better-lgtm/clones/<owner>/<repo>`, and one
-/// detached worktree per PR in `~/.better-lgtm/worktrees/<owner>/<repo>/pr-<n>`.
+/// Layout under the data folder (default `~/.better-lgtm`): a blobless clone per repo in
+/// `clones/<owner>/<repo>`, and one detached worktree per PR in `worktrees/<owner>/<repo>/pr-<n>`.
 /// Fork PRs work because the head is fetched from `pull/<n>/head`.
 #[tauri::command]
 pub async fn prepare_worktree(
     app: AppHandle,
+    config: State<'_, ConfigState>,
     repo: String,
     number: u64,
     base_ref: String,
@@ -28,7 +25,8 @@ pub async fn prepare_worktree(
     if repo.split('/').count() != 2 || repo.contains("..") {
         return Err(format!("Unexpected repository name: {repo}"));
     }
-    let base = base_dir(&app)?;
+    let config = config.get();
+    let base = data_dir(&app, &config)?;
     let clone = base.join("clones").join(&repo);
     let worktree = base.join("worktrees").join(&repo).join(format!("pr-{number}"));
     let pr_ref = format!("refs/better-lgtm/pr-{number}");
@@ -37,7 +35,7 @@ pub async fn prepare_worktree(
         let parent = clone.parent().ok_or("Invalid clone path")?;
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         run(
-            "gh",
+            &config.gh_path,
             &["repo", "clone", &repo, path_str(&clone)?, "--", "--filter=blob:none", "--no-checkout"],
             None,
         )

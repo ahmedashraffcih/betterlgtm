@@ -1,4 +1,5 @@
 mod claude;
+mod config;
 mod gh;
 mod process;
 mod worktree;
@@ -8,8 +9,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(claude::Runs::default())
+        .manage(config::ConfigState::default())
         .invoke_handler(tauri::generate_handler![
+            config::set_config,
+            config::tool_status,
             gh::list_review_requests,
+            gh::list_orgs,
             gh::pr_details,
             gh::pr_diff,
             gh::pr_body_html,

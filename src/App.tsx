@@ -13,6 +13,8 @@ import { Inbox, InboxRail, prKey } from "./components/Inbox";
 import { TitleBar } from "./components/TitleBar";
 import { useElementWidth } from "./hooks";
 import { emptySession, useSessions, useStoredState, type ChatItem } from "./sessions";
+import { Settings, type SettingsSection } from "./components/Settings";
+import { ownerVisible, useSettings } from "./settings";
 
 interface Loaded {
   key: string;
@@ -30,11 +32,18 @@ export default function App() {
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
-  const [hiddenOrgs, setHiddenOrgs] = useStoredState<string[]>("better-lgtm.hiddenOrgs", []);
+  const [settings, updateSettings] = useSettings();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+  const [orgs, setOrgs] = useState<{ login: string; orgs: string[] } | null>(null);
+  const [orgsError, setOrgsError] = useState<string | null>(null);
+  const [configReady, setConfigReady] = useState(false);
   const [inboxOpen, setInboxOpen] = useStoredState("better-lgtm.inboxOpen", true);
   const [chatOpen, setChatOpen] = useStoredState("better-lgtm.chatOpen", true);
-  const [split, setSplit] = useStoredState("better-lgtm.split", false);
-  const [diffMode, setDiffMode] = useStoredState<DiffMode>("better-lgtm.diffMode", "guided");
+  const split = settings.diffLayout === "split";
+  const setSplit = (v: boolean) => updateSettings({ diffLayout: v ? "split" : "unified" });
+  const diffMode = settings.diffMode;
+  const setDiffMode = (m: DiffMode) => updateSettings({ diffMode: m });
   const [guideStep, setGuideStep] = useState(0);
   const [guideRuns, setGuideRuns] = useState<Record<string, { running: boolean; error?: string }>>({});
   // Below this width the inbox sits collapsed as a strip unless the user expands it.
@@ -52,7 +61,7 @@ export default function App() {
   const [outlineKey, setOutlineKey] = useState<OutlineKey>("s0");
   const [diffTarget, setDiffTarget] = useState<{ path: string | null; range: Anchor | null; finding: number | null }>({ path: null, range: null, finding: null });
 
-  const { sessions, update } = useSessions();
+  const { sessions, update, clearAll } = useSessions();
   const [runs, setRuns] = useState<Record<string, RunState>>({});
   const [chatRunning, setChatRunning] = useState<Record<string, boolean>>({});
   const [chatFocus, setChatFocus] = useState(0);
@@ -62,10 +71,31 @@ export default function App() {
   const session = key ? sessions[key] ?? emptySession() : null;
   const analysis = session?.analysis;
 
+  // The backend needs tool paths, the data folder and Claude options before it runs anything.
+  useEffect(() => {
+    api
+      .setConfig({ ghPath: settings.ghPath, claudePath: settings.claudePath, dataDir: settings.dataDir, model: settings.model, effort: settings.effort })
+      .then(() => setConfigReady(true))
+      .catch(() => setConfigReady(true));
+  }, [settings.ghPath, settings.claudePath, settings.dataDir, settings.model, settings.effort]);
+
+  useEffect(() => {
+    if (settings.theme === "system") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = settings.theme;
+  }, [settings.theme]);
+
+  const reloadOrgs = useCallback(() => {
+    setOrgsError(null);
+    api.listOrgs().then(setOrgs).catch((e) => setOrgsError(errorText(e)));
+  }, []);
+  useEffect(() => {
+    if (configReady) reloadOrgs();
+  }, [configReady, settings.ghPath, reloadOrgs]);
+
   const refresh = useCallback(async () => {
     setInboxLoading(true);
     try {
-      setRequests(await api.listReviewRequests());
+      setRequests(await api.listReviewRequests(settings.includeTeams));
       setInboxError(null);
       setSyncedAt(Date.now());
     } catch (e) {
@@ -73,13 +103,45 @@ export default function App() {
     } finally {
       setInboxLoading(false);
     }
-  }, []);
+  }, [settings.includeTeams, settings.ghPath]);
 
   useEffect(() => {
+    if (!configReady) return;
     refresh();
-    const t = setInterval(refresh, 5 * 60 * 1000);
+    const t = setInterval(refresh, settings.refreshMinutes * 60 * 1000);
     return () => clearInterval(t);
-  }, [refresh]);
+  }, [refresh, configReady, settings.refreshMinutes]);
+
+  // Ctrl+, opens settings and Escape closes them.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+        e.preventDefault();
+        setSettingsOpen(true);
+      } else if (e.key === "Escape" && settingsOpen) {
+        setSettingsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [settingsOpen]);
+
+  /** Review requests that pass the organization and draft settings. */
+  const visibleRequests = useMemo(
+    () => requests?.filter((r) => (settings.showDrafts || !r.isDraft) && ownerVisible(settings, r.repository.nameWithOwner.split("/")[0], orgs?.orgs ?? null)) ?? null,
+    [requests, settings, orgs],
+  );
+  const hiddenCount = (requests?.length ?? 0) - (visibleRequests?.length ?? 0);
+  /** The inbox's "hide" button: drops an organization, or personal repositories, from the inbox. */
+  const hideOwner = (owner: string) => {
+    if (orgs && !orgs.orgs.includes(owner)) updateSettings({ includePersonal: false });
+    else if (settings.orgMode === "all") updateSettings({ hiddenOrgs: [...new Set([...settings.hiddenOrgs, owner])] });
+    else updateSettings({ selectedOrgs: settings.selectedOrgs.filter((o) => o !== owner) });
+  };
+  const openSettings = (section: SettingsSection) => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
+  };
 
   // Load PR details and diff when the selection changes.
   useEffect(() => {
@@ -125,7 +187,7 @@ export default function App() {
       let finalText = "";
       let sessionId: string | undefined;
       let usage: ClaudeUsage = {};
-      await api.claudeRun(runId, wt, buildAnalysisPrompt(details), undefined, (e) => {
+      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, settings.reviewInstructions), undefined, (e) => {
         if (e.session_id) sessionId = e.session_id;
         if (e.type === "assistant") {
           for (const block of e.message?.content ?? []) {
@@ -257,8 +319,8 @@ export default function App() {
   // j / k move between findings when no text field has focus.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (t.closest("input, textarea") || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target;
+      if ((t instanceof Element && t.closest("input, textarea, select")) || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "j") stepFinding(1);
       if (e.key === "k") stepFinding(-1);
     };
@@ -344,7 +406,7 @@ export default function App() {
         <InboxIcon size={40} strokeWidth={1.4} style={{ opacity: 0.7 }} />
         <h1 style={{ margin: "8px 0 4px", fontSize: 15, color: "var(--text)" }}>Select a pull request</h1>
         <p style={{ margin: 0 }}>
-          {!requests ? "Loading review requests…" : requests.length === 1 ? "1 pull request is waiting for your review." : `${requests.length} pull requests are waiting for your review.`}
+          {!visibleRequests ? "Loading review requests…" : visibleRequests.length === 1 ? "1 pull request is waiting for your review." : `${visibleRequests.length} pull requests are waiting for your review.`}
         </p>
       </div>
     </div>
@@ -418,6 +480,7 @@ export default function App() {
             onStep={setGuideStep}
             onReviewed={setReviewed}
             onGenerate={generateWalkthrough}
+            hideGenerated={settings.hideGenerated}
           />
         )}
         {details && tab === "diff" && diffMode === "files" && (
@@ -425,6 +488,7 @@ export default function App() {
             onMode={setDiffMode}
             reviewed={reviewedHunks}
             onReviewed={setReviewed}
+            hideGenerated={settings.hideGenerated}
             files={files}
             current={diffTarget.path}
             range={diffTarget.range}
@@ -449,15 +513,31 @@ export default function App() {
         chatOpen={chatOpen}
         onToggleInbox={() => setInboxOpen(!inboxOpen)}
         onToggleChat={() => setChatOpen(!chatOpen)}
+        onOpenSettings={() => openSettings("general")}
       />
-      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+      {settingsOpen && (
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <Settings
+            settings={settings}
+            update={updateSettings}
+            section={settingsSection}
+            onSection={setSettingsSection}
+            orgs={orgs}
+            orgsError={orgsError}
+            requests={requests}
+            onReloadOrgs={reloadOrgs}
+            onClearData={clearAll}
+            onClose={() => setSettingsOpen(false)}
+          />
+        </div>
+      )}
+      <div style={{ flex: 1, minHeight: 0, display: settingsOpen ? "none" : "flex" }}>
         {inboxMode === "rail" && (
           <div style={{ width: 52, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
             <InboxRail
-              requests={requests}
+              requests={visibleRequests}
               selected={key}
               sessions={sessions}
-              hiddenOrgs={hiddenOrgs}
               analyzing={analyzing}
               onSelect={selectPr}
               onExpand={() => setInboxExpanded(true)}
@@ -470,17 +550,18 @@ export default function App() {
             <>
               <Panel id="inbox" defaultSize={compact ? 260 : 280} minSize={220} maxSize={420}>
                 <Inbox
-                  requests={requests}
+                  requests={visibleRequests}
+                  hiddenCount={hiddenCount}
                   error={inboxError}
                   loading={inboxLoading}
                   selected={key}
                   focused={focusPane === "inbox"}
                   sessions={sessions}
-                  hiddenOrgs={hiddenOrgs}
                   analyzing={analyzing}
                   onSelect={(pr) => { selectPr(pr); if (compact) setInboxExpanded(false); }}
                   onRefresh={refresh}
-                  onHiddenOrgsChange={setHiddenOrgs}
+                  onHideOwner={hideOwner}
+                  onManage={() => openSettings("orgs")}
                   onCollapse={compact ? () => setInboxExpanded(false) : undefined}
                 />
               </Panel>
@@ -510,7 +591,7 @@ export default function App() {
       </div>
       <footer className="statusbar" aria-label="Status bar">
         <span className="sb"><RefreshCw size={13} className={inboxLoading ? "spin" : undefined} />{syncedAt ? `Synced ${new Date(syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Syncing…"}</span>
-        <span className="sb opt"><InboxIcon size={13} />{requests?.length ?? 0} to review</span>
+        <span className="sb opt"><InboxIcon size={13} />{visibleRequests?.length ?? 0} to review</span>
         <span style={{ flex: 1 }} />
         {key && (
           <span className="sb">

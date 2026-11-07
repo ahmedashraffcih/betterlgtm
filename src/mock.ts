@@ -140,6 +140,10 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
   switch (cmd) {
     case "list_review_requests":
       return requests;
+    case "list_orgs":
+      return { login: "you", orgs: ["acme", "globex-labs", "oss-collective"] };
+    case "tool_status":
+      return { gh: "gh version 2.103.3 (2026-10-26)", login: "you", claude: "2.1.318 (Claude Code)", dataDir: "/home/you/.better-lgtm" };
     case "pr_details":
       return details;
     case "pr_diff":

@@ -26,6 +26,7 @@ interface Props {
   onMode: (m: DiffMode) => void;
   reviewed: Set<string>;
   onReviewed: (hunkKeys: string[], reviewed: boolean) => void;
+  hideGenerated: boolean;
   files: FileData[];
   current: string | null;
   range: Anchor | null;
@@ -42,7 +43,7 @@ export function DiffView(p: Props) {
   const file = (p.current && findFile(p.files, p.current)) || p.files.find((f) => !isGenerated(f)) || p.files[0];
   // Generated files show a placeholder until the user asks for the diff.
   const [shownGenerated, setShownGenerated] = useState<Set<string>>(new Set());
-  const hideDiff = !!file && isGenerated(file) && !shownGenerated.has(filePath(file));
+  const hideDiff = !!file && p.hideGenerated && isGenerated(file) && !shownGenerated.has(filePath(file));
   const scroller = useRef<HTMLDivElement>(null);
   // Narrow panes swap the file list for a dropdown; split view needs room for two columns.
   const [rootRef, width] = useElementWidth<HTMLDivElement>();

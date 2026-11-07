@@ -23,6 +23,7 @@ interface Props {
   onStep: (i: number) => void;
   onReviewed: (hunkKeys: string[], reviewed: boolean) => void;
   onGenerate: () => void;
+  hideGenerated: boolean;
 }
 
 interface FilePart {
@@ -59,14 +60,14 @@ function resolveSteps(steps: WalkStep[], files: FileData[]): Step[] {
   return out.filter((s) => s.parts.length > 0);
 }
 
-function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; reviewed: boolean; onToggle: (v: boolean) => void }) {
+function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; reviewed: boolean; hideGenerated: boolean; onToggle: (v: boolean) => void }) {
   const { part } = p;
   const path = filePath(part.file);
   const Icon = fileIcon(path);
   const s = fileStats(part.file);
   // Reviewed files fold away, like GitHub's "Viewed", so the remaining work stays in view.
   // Generated files (lockfiles, build output) start folded too.
-  const generated = useMemo(() => isGenerated(part.file), [part.file]);
+  const generated = useMemo(() => p.hideGenerated && isGenerated(part.file), [part.file, p.hideGenerated]);
   const [open, setOpen] = useState(!p.reviewed && !generated);
   useEffect(() => setOpen(!p.reviewed && !generated), [p.reviewed, generated]);
 
@@ -284,6 +285,7 @@ export function GuidedReview(p: Props) {
                       part={part}
                       findings={p.findings}
                       split={split}
+                      hideGenerated={p.hideGenerated}
                       reviewed={allReviewed(part.keys, p.reviewed)}
                       onToggle={(v) => p.onReviewed(part.keys, v)}
                     />

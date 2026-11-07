@@ -69,7 +69,12 @@ Reply with only one JSON block: \`\`\`json { ${WALKTHROUGH_SHAPE} } \`\`\``;
 
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
-export function buildAnalysisPrompt(pr: PrDetails): string {
+export function buildAnalysisPrompt(pr: PrDetails, extraInstructions = ""): string {
+  const extra = extraInstructions.trim() ? `\n\nThe reviewer's own instructions (follow them):\n${extraInstructions.trim()}` : "";
+  return baseAnalysisPrompt(pr) + extra;
+}
+
+function baseAnalysisPrompt(pr: PrDetails): string {
   return `You are helping a developer review pull request #${pr.number} "${pr.title}" by ${pr.author.login}.
 The PR head is checked out in the current directory (detached HEAD). The base branch is origin/${pr.baseRefName}.
 See the change with: git diff origin/${pr.baseRefName}...HEAD

@@ -9,6 +9,8 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::oneshot;
 
+use crate::config::ConfigState;
+
 /// Cancel handles for Claude runs that are still streaming, keyed by run id.
 #[derive(Default)]
 pub struct Runs(Mutex<HashMap<String, oneshot::Sender<()>>>);
@@ -37,13 +39,21 @@ No preamble, no recap, no headings. Use `inline code` for identifiers and file:l
 #[tauri::command]
 pub async fn claude_run(
     runs: State<'_, Runs>,
+    config: State<'_, ConfigState>,
     run_id: String,
     cwd: String,
     prompt: String,
     resume: Option<String>,
     on_event: Channel<Value>,
 ) -> Result<(), String> {
-    let mut cmd = Command::new("claude");
+    let config = config.get();
+    let mut cmd = Command::new(&config.claude_path);
+    if !config.model.trim().is_empty() {
+        cmd.args(["--model", config.model.trim()]);
+    }
+    if !config.effort.trim().is_empty() {
+        cmd.args(["--effort", config.effort.trim()]);
+    }
     cmd.arg("-p")
         .arg(&prompt)
         .args(["--output-format", "stream-json", "--verbose"])

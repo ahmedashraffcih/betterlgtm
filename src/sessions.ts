@@ -53,7 +53,16 @@ export function useSessions() {
     });
   }, []);
 
-  return { sessions, update };
+  const clearAll = useCallback(() => {
+    setSessions({});
+    try {
+      localStorage.removeItem(KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  return { sessions, update, clearAll };
 }
 
 export function useStoredState<T>(key: string, initial: T) {

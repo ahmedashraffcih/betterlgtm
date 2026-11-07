@@ -1,20 +1,23 @@
-import { ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, Funnel, Loader, OctagonExclamationPoint, PencilLine, RefreshCw } from "lucide-react";
+import { Building2, ChevronDown, ChevronLeft, ChevronRight, EyeOff, Funnel, Loader, OctagonExclamationPoint, PencilLine, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ReviewRequest } from "../api";
 import type { PrSession } from "../sessions";
 
 interface Props {
+  /** Already filtered by the organization and draft settings. */
   requests: ReviewRequest[] | null;
+  /** Requests left out by those settings. */
+  hiddenCount: number;
   error: string | null;
   loading: boolean;
   selected: string | null;
   focused: boolean;
   sessions: Record<string, PrSession>;
-  hiddenOrgs: string[];
   analyzing: Set<string>;
   onSelect: (pr: ReviewRequest) => void;
   onRefresh: () => void;
-  onHiddenOrgsChange: (orgs: string[]) => void;
+  onHideOwner: (owner: string) => void;
+  onManage: () => void;
   /** Shown in narrow windows, where the inbox normally sits collapsed as a strip. */
   onCollapse?: () => void;
 }
@@ -30,8 +33,8 @@ function age(iso: string): string {
 }
 
 /** Narrow strip of PR numbers shown instead of the full inbox when the window is small. */
-export function InboxRail(p: Pick<Props, "requests" | "selected" | "sessions" | "hiddenOrgs" | "analyzing" | "onSelect"> & { onExpand: () => void }) {
-  const prs = (p.requests ?? []).filter((pr) => !p.hiddenOrgs.includes(pr.repository.nameWithOwner.split("/")[0]));
+export function InboxRail(p: Pick<Props, "requests" | "selected" | "sessions" | "analyzing" | "onSelect"> & { onExpand: () => void }) {
+  const prs = p.requests ?? [];
   return (
     <nav aria-label="Review requests, collapsed" className="side rail-strip">
       <button type="button" className="tb" aria-label="Expand inbox" title="Expand inbox" onClick={p.onExpand}>
@@ -68,13 +71,12 @@ export function Inbox(p: Props) {
     const map = new Map<string, ReviewRequest[]>();
     for (const pr of p.requests ?? []) {
       const org = pr.repository.nameWithOwner.split("/")[0];
-      if (p.hiddenOrgs.includes(org)) continue;
       const hay = `${pr.title} ${pr.repository.nameWithOwner} ${pr.author.login}`.toLowerCase();
       if (q && !hay.includes(q)) continue;
       map.set(org, [...(map.get(org) ?? []), pr]);
     }
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [p.requests, p.hiddenOrgs, filter]);
+  }, [p.requests, filter]);
 
   const visibleCount = groups.reduce((n, [, prs]) => n + prs.length, 0);
 
@@ -118,7 +120,7 @@ export function Inbox(p: Props) {
                   <span style={{ flex: 1 }}>{org}</span>
                   <span style={{ fontWeight: 400 }}>{prs.length}</span>
                 </button>
-                <button type="button" className="tb" aria-label={`Hide ${org}`} title={`Hide ${org}`} onClick={() => p.onHiddenOrgsChange([...p.hiddenOrgs, org])}>
+                <button type="button" className="tb" aria-label={`Hide ${org}`} title={`Hide ${org}`} onClick={() => p.onHideOwner(org)}>
                   <EyeOff size={13} />
                 </button>
               </div>
@@ -153,13 +155,13 @@ export function Inbox(p: Props) {
           );
         })}
       </div>
-      {p.hiddenOrgs.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px 6px 12px", borderTop: "1px solid var(--line)", fontSize: 12 }} className="muted">
-          <EyeOff size={13} />
-          <span style={{ flex: 1 }} className="ellipsis" title={p.hiddenOrgs.join(", ")}>Hidden: {p.hiddenOrgs.join(", ")}</span>
-          <button type="button" className="btn sm" onClick={() => p.onHiddenOrgsChange([])}><Eye size={13} />Show all</button>
-        </div>
-      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px 6px 12px", borderTop: "1px solid var(--line)", fontSize: 12 }} className="muted">
+        {p.hiddenCount > 0 ? <EyeOff size={13} /> : <Building2 size={13} />}
+        <span style={{ flex: 1 }} className="ellipsis">
+          {p.hiddenCount > 0 ? `${p.hiddenCount} hidden by your organization settings` : "Showing all organizations"}
+        </span>
+        <button type="button" className="btn sm" onClick={p.onManage}>Organizations…</button>
+      </div>
     </aside>
   );
 }

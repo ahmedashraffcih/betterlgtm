@@ -51,7 +51,11 @@ export interface ClaudeEvent {
 }
 
 export const api = {
-  listReviewRequests: () => invoke<ReviewRequest[]>("list_review_requests"),
+  listReviewRequests: (includeTeams: boolean) => invoke<ReviewRequest[]>("list_review_requests", { includeTeams }),
+  listOrgs: () => invoke<{ login: string; orgs: string[] }>("list_orgs"),
+  setConfig: (config: { ghPath: string; claudePath: string; dataDir: string; model: string; effort: string }) => invoke<void>("set_config", { config }),
+  toolStatus: () =>
+    invoke<{ gh?: string; ghError?: string; login?: string; claude?: string; claudeError?: string; dataDir: string }>("tool_status"),
   prDetails: (repo: string, number: number) => invoke<PrDetails>("pr_details", { repo, number }),
   prDiff: (repo: string, number: number) => invoke<string>("pr_diff", { repo, number }),
   prBodyHtml: (repo: string, number: number) => invoke<string>("pr_body_html", { repo, number }),
