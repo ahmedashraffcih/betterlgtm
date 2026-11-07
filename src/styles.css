@@ -228,9 +228,34 @@ code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--
 .md li::marker { color: var(--muted); }
 
 /* chat */
-.bubble { align-self: flex-end; max-width: 70%; padding: 6px 12px; border-radius: 10px 10px 3px 10px; background: var(--accent-bg); white-space: pre-wrap; }
+.chat { height: 100%; display: flex; flex-direction: column; background: var(--panel); }
+.chat-compact { height: auto; border-top: 1px solid var(--line); padding: 6px 0 0; }
+.chat-head { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 12px; border-bottom: 1px solid var(--line2); flex-shrink: 0; }
+.chat-log { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.msg-user { align-self: flex-end; max-width: 80%; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.msg-ctx { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); max-width: 100%; }
+.bubble { padding: 6px 12px; border-radius: 10px 10px 3px 10px; background: var(--accent-bg); white-space: pre-wrap; overflow-wrap: anywhere; }
 .answer { max-width: 760px; }
 .answer .md { font-size: 13px; }
+.msg-error { display: flex; align-items: center; gap: 6px; color: var(--crit); }
+.thinking { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.tool-toggle { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; height: 22px; padding: 0 6px; margin-left: -6px; border-radius: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool-toggle:hover { background: var(--hover); color: var(--text); }
+.tool-list { margin: 2px 0 0 18px; padding: 0 0 0 10px; border-left: 1px solid var(--line); list-style: none; font-size: 11px; color: var(--muted); }
+.tool-list li { line-height: 1.8; }
+.chat-suggest { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 12px; }
+.chip-btn { height: 24px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 12px; color: var(--text); white-space: nowrap; }
+.chip-btn:hover { background: var(--hover); border-color: var(--accent-line); }
+.composer { margin: 6px 12px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); display: flex; flex-direction: column; flex-shrink: 0; }
+.composer:focus-within { border-color: var(--accent); }
+.composer-row { display: flex; align-items: flex-end; gap: 6px; padding: 4px 4px 4px 10px; }
+.composer textarea { flex: 1; min-width: 0; resize: none; border: 0; outline: none; background: transparent; line-height: 20px; padding: 3px 0; max-height: 112px; }
+.send { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; background: var(--accent); color: var(--on-accent); flex-shrink: 0; }
+.send:disabled { opacity: 0.4; }
+.send.stop { background: var(--sunken); color: var(--text); border: 1px solid var(--line); }
+.ctx-chip { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; max-width: calc(100% - 16px); height: 22px; margin: 6px 0 0 8px; padding: 0 4px 0 8px; border-radius: 11px; background: var(--accent-bg); color: var(--accent); font-size: 12px; }
+.ctx-chip button { display: inline-flex; padding: 2px; border-radius: 8px; color: inherit; }
+.ctx-chip button:hover { background: var(--accent-line); }
 
 /* status bar */
 .statusbar { height: 24px; flex-shrink: 0; display: flex; align-items: center; background: var(--chrome); border-top: 1px solid var(--chrome-line); container-type: inline-size; overflow: hidden; }

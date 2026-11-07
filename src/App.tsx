@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, type ClaudeEvent, type PrDetails, type ReviewRequest } from "./api";
-import { buildAnalysisPrompt, parseAnalysis, type Anchor } from "./analysis";
+import { anchorLabel, buildAnalysisPrompt, parseAnalysis, type Anchor } from "./analysis";
 import { AnalysisView, type OutlineKey, type RunState } from "./components/AnalysisView";
-import { ClaudePanel } from "./components/ClaudePanel";
+import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import { DiffView } from "./components/DiffView";
 import { Inbox, InboxRail, prKey } from "./components/Inbox";
 import { TitleBar } from "./components/TitleBar";
@@ -51,7 +51,7 @@ export default function App() {
   const { sessions, update } = useSessions();
   const [runs, setRuns] = useState<Record<string, RunState>>({});
   const [chatRunning, setChatRunning] = useState<Record<string, boolean>>({});
-  const [draft, setDraft] = useState("");
+  const [chatFocus, setChatFocus] = useState(0);
   const runIds = useRef<Record<string, string>>({});
 
   const key = selected ? prKey(selected) : null;
@@ -158,17 +158,18 @@ export default function App() {
 
   const cancelAnalysis = () => key && runIds.current[key] && api.claudeCancel(runIds.current[key]);
 
-  const sendChat = async (text: string) => {
+  const sendChat = async (text: string, context: ChatContext | null) => {
     if (!selected || !loaded || loaded.key !== key || !key) return;
     const k = key;
     const push = (item: ChatItem) => update(k, (s) => ({ ...s, chat: [...s.chat, item] }));
-    push({ role: "user", text });
+    push({ role: "user", text, context: context?.label });
+    const prompt = context ? `${context.prompt}\n\n${text}` : text;
     setChatRunning((c) => ({ ...c, [k]: true }));
     const runId = `chat-${k}-${Date.now()}`;
     runIds.current[`chat-${k}`] = runId;
     try {
       const wt = await ensureWorktree(k, selected, loaded.details);
-      await api.claudeRun(runId, wt, text, sessions[k]?.sessionId, (e) => {
+      await api.claudeRun(runId, wt, prompt, sessions[k]?.sessionId, (e) => {
         if (e.type === "assistant") {
           for (const block of e.message?.content ?? []) {
             if (block.type === "tool_use") push({ role: "tool", text: describeToolUse(block.name ?? "", block.input) });
@@ -234,6 +235,51 @@ export default function App() {
   const ciFailing = ci.some((c) => ["FAILURE", "ERROR", "TIMED_OUT"].includes((c.conclusion ?? c.state ?? "").toUpperCase()));
   const ciPending = ci.some((c) => ["IN_PROGRESS", "QUEUED", "PENDING"].includes((c.status ?? c.state ?? "").toUpperCase()));
 
+  // What the chat question is about: the finding, claim or file the user is looking at.
+  const chatContext = ((): ChatContext | null => {
+    if (tab === "analysis" && analysis) {
+      const k = outlineKey[0];
+      const i = Number(outlineKey.slice(1));
+      const f = k === "f" ? analysis.findings[i] : undefined;
+      if (f) {
+        return {
+          label: `Finding ${i + 1}: ${f.title}`,
+          prompt: `The question is about finding ${i + 1} from your analysis: "${f.title}" (${f.anchors.map(anchorLabel).join(", ")}).`,
+          suggestions: ["Is this a real problem?", "How would you fix it?", "Draft a review comment for this"],
+        };
+      }
+      const c = k === "c" ? analysis.claims[i] : undefined;
+      if (c) {
+        return {
+          label: `Claim ${i + 1}: ${c.text}`,
+          prompt: `The question is about this claim from the PR description: "${c.text}" (your verdict: ${c.verdict}).`,
+          suggestions: ["Where is this implemented?", "What is missing?", "Draft a review comment for this"],
+        };
+      }
+    }
+    if (tab === "diff" && diffTarget.path) {
+      const r = diffTarget.range;
+      const where = r && r.startLine > 0 ? anchorLabel(r) : diffTarget.path.split("/").pop() ?? diffTarget.path;
+      return {
+        label: where,
+        prompt: `The question is about ${diffTarget.path}${r && r.startLine > 0 ? ` lines ${r.startLine}-${r.endLine}` : ""} in this PR.`,
+        suggestions: ["Explain this change", "What calls this code?", "Is this covered by tests?"],
+      };
+    }
+    return null;
+  })();
+  const chatHasContent = (session?.chat.length ?? 0) > 0 || !!(key && chatRunning[key]);
+  const chatProps = {
+    chat: session?.chat ?? [],
+    running: !!(key && chatRunning[key]),
+    context: chatContext,
+    focusSignal: chatFocus,
+    onSend: sendChat,
+    onCancel: () => key && runIds.current[`chat-${key}`] && api.claudeCancel(runIds.current[`chat-${key}`]),
+    onClear: () => key && update(key, (s) => ({ ...s, chat: [] })),
+    onHide: () => setChatOpen(false),
+  };
+
   const main = !selected ? (
     <div className="empty">
       <div>
@@ -296,7 +342,7 @@ export default function App() {
             onStart={startAnalysis}
             onCancel={cancelAnalysis}
             onToggleReview={(i) => key && update(key, (s) => ({ ...s, inReview: s.inReview.includes(i) ? s.inReview.filter((x) => x !== i) : [...s.inReview, i] }))}
-            onAsk={(text) => { setChatOpen(true); setDraft(text); }}
+            onAsk={() => { setChatOpen(true); setChatFocus((n) => n + 1); }}
           />
         )}
         {details && tab === "diff" && (
@@ -363,26 +409,23 @@ export default function App() {
               <Separator className="sep-v" />
             </>
           )}
-          <Panel id="main" minSize={480}>
+          <Panel id="main" minSize={420}>
+            <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <div style={{ flex: 1, minHeight: 0 }}>
             <Group orientation="vertical">
               <Panel id="content" minSize={200}>{main}</Panel>
-              {chatOpen && selected && (
+              {chatOpen && selected && chatHasContent && (
                 <>
                   <Separator className="sep-h" />
-                  <Panel id="chat" defaultSize={220} minSize={120}>
-                    <ClaudePanel
-                      chat={session?.chat ?? []}
-                      running={!!(key && chatRunning[key])}
-                      draft={draft}
-                      onDraft={setDraft}
-                      onSend={sendChat}
-                      onCancel={() => key && runIds.current[`chat-${key}`] && api.claudeCancel(runIds.current[`chat-${key}`])}
-                      onHide={() => setChatOpen(false)}
-                    />
+                  <Panel id="chat" defaultSize={260} minSize={140}>
+                    <ClaudePanel {...chatProps} compact={false} />
                   </Panel>
                 </>
               )}
             </Group>
+            </div>
+            {chatOpen && selected && !chatHasContent && <ClaudePanel {...chatProps} compact />}
+            </div>
           </Panel>
         </Group>
         </div>

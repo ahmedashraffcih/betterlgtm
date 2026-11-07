@@ -4,6 +4,8 @@ import type { Analysis } from "./analysis";
 export interface ChatItem {
   role: "user" | "assistant" | "tool" | "error";
   text: string;
+  /** What the question was about (a finding, claim or file), shown as a small tag. */
+  context?: string;
 }
 
 /** Everything the app remembers about one PR review, persisted across restarts. */
