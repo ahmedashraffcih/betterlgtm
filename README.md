@@ -4,6 +4,18 @@ A desktop app for reviewing GitHub pull requests with Claude Code. It lists the 
 
 Built with Tauri 2 (Rust) and React + TypeScript.
 
+## Install
+
+Download the installer for your platform from [Releases](../../releases). Builds aren't code-signed yet; the release notes explain how to open them on macOS and Windows.
+
+## Release
+
+1. Bump `version` in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`.
+2. Add `release-notes/v<version>.md`.
+3. Commit, then tag and push: `git tag v<version> && git push origin v<version>`.
+
+The Release workflow builds macOS (Apple silicon and Intel), Windows and Linux installers, attaches them to the release, and publishes it once every build succeeds.
+
 ## Requirements
 
 - Rust (stable) and Node.js 22+
