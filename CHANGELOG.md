@@ -2,7 +2,7 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## [0.4.0] — 2026-11-08
 
 - **What's blocking merge** ([#17](https://github.com/drmas/betterlgtm/issues/17)): your own PRs show what stands between them and merging: draft status, conflicts or a branch behind its base, failing or running checks, requested changes, missing approvals and unresolved conversations.
 - **Self-review** ([#15](https://github.com/drmas/betterlgtm/issues/15)): run the analysis on your own PR before asking for reviews. Claude addresses you as the author, and the verdict reads "Ready to ask for reviews" or "Fix these before asking for reviews".
@@ -78,6 +78,7 @@ The first release.
 - Menu bar, command palette, keyboard shortcuts, light and dark themes, and a Settings page.
 - Installers for macOS (Apple silicon and Intel), Windows and Linux.
 
+[0.4.0]: https://github.com/drmas/betterlgtm/releases/tag/v0.4.0
 [0.3.0]: https://github.com/drmas/betterlgtm/releases/tag/v0.3.0
 [0.2.6]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.6
 [0.2.5]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.5
