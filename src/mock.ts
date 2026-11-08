@@ -217,6 +217,7 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
       const isAnalysis = prompt.includes("reply with only one JSON block");
       const isGuide = !isAnalysis && prompt.includes("guided review");
       const isRecheck = prompt.includes("Re-check each finding");
+      const isSummary = prompt.includes("overall summary for the GitHub review");
       const recheck = {
         results: [
           { index: 0, status: "fixed", note: "save() now takes a lock with SET NX before charging, so a second request waits." },
@@ -224,7 +225,9 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
           { index: 2, status: "unclear", note: "The cached body didn't change; it depends on what the client needs." },
         ],
       };
-      const result = isRecheck
+      const result = isSummary
+        ? "Thanks for adding idempotency keys. Two things need to change before this is safe: concurrent requests with the same key can still both charge the card, and keys aren't scoped to the merchant. Happy to look again once those are fixed."
+        : isRecheck
         ? "```json\n" + JSON.stringify(recheck) + "\n```"
         : isAnalysis
         ? "```json\n" + JSON.stringify({ ...analysis, walkthrough }) + "\n```"

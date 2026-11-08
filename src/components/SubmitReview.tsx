@@ -1,5 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Send, X } from "lucide-react";
+import { ExternalLink, Loader, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FileData } from "react-diff-view";
 import { anchorLabel, type Analysis, type Finding, type FindingCheck, type FindingState } from "../analysis";
@@ -22,6 +22,8 @@ interface Props {
   states?: Record<number, FindingState>;
   onClose: () => void;
   onSubmitted: (url: string, postedFindings: number[]) => void;
+  /** Asks Claude for a summary; absent until the PR has a worktree. */
+  onDraftSummary?: (event: ReviewEvent, comments: Finding[], notes: string) => Promise<string>;
 }
 
 interface Item {
@@ -74,6 +76,19 @@ export function SubmitReview(p: Props) {
   const [summary, setSummary] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const draft = async () => {
+    if (!p.onDraftSummary) return;
+    setDrafting(true);
+    setError(null);
+    try {
+      setSummary(await p.onDraftSummary(event, items.filter((i) => i.checked).map((i) => i.finding), summary));
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setDrafting(false);
+    }
+  };
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && !sending && p.onClose();
@@ -180,7 +195,14 @@ export function SubmitReview(p: Props) {
             <p className="muted" style={{ margin: 0 }}>No findings to comment on. You can still leave a summary and a decision.</p>
           )}
 
-          <div className="review-head" style={{ marginTop: 8 }}><span>Summary</span></div>
+          <div className="review-head" style={{ marginTop: 8, alignItems: "center" }}>
+            <span>Summary</span>
+            {p.onDraftSummary && (
+              <button type="button" className="btn sm" onClick={draft} disabled={drafting || sending} title="Claude writes a summary from your decision and comments; you can edit it">
+                {drafting ? <Loader size={13} className="spin" /> : <Sparkles size={13} />}{drafting ? "Drafting…" : summary.trim() ? "Redraft with Claude" : "Draft with Claude"}
+              </button>
+            )}
+          </div>
           <textarea className="set-input" rows={3} placeholder="Overall feedback (optional)" value={summary} onChange={(e) => setSummary(e.target.value)} aria-label="Review summary" />
         </div>
 

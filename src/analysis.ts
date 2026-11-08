@@ -276,3 +276,15 @@ export interface FindingState {
 
 /** Identifies a finding across analysis runs: its first file and its title. */
 export const findingId = (f: Finding) => `${f.anchors[0]?.path ?? ""}|${f.title.trim().toLowerCase()}`;
+
+/** Asks Claude to write the overall summary for the review the user is about to post. */
+export function buildSummaryPrompt(event: string, comments: Finding[], notes: string): string {
+  const decision = { APPROVE: "approve", REQUEST_CHANGES: "request changes", COMMENT: "comment without a decision" }[event] ?? "comment";
+  const list = comments.length ? comments.map((f) => `- (${f.severity}) ${f.title}`).join("\n") : "(no line comments)";
+  return `Write the overall summary for the GitHub review I'm about to post on this pull request.
+My decision: ${decision}.
+Line comments I'm posting:
+${list}
+${notes.trim() ? `\nWhat I've written so far (keep its intent):\n${notes.trim()}\n` : ""}
+Write 2–4 short sentences addressed to the author: what the PR does well if it's worth saying, what must change and why, and what happens next. Be specific and plain; no greetings, no headings, no generic praise, no repeating each comment. Reply with only the summary text.`;
+}

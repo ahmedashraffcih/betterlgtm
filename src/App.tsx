@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type PrDetails, type ReviewRequest } from "./api";
-import { anchorLabel, findingId, type FindingState, buildAnalysisPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
+import { anchorLabel, findingId, type Finding, type FindingState, buildAnalysisPrompt, buildSummaryPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
 import { AnalysisView, type OutlineKey, type RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import { DiffView, type DiffMode } from "./components/DiffView";
@@ -415,6 +415,26 @@ export default function App() {
     } catch (e) {
       setGuideRuns((g) => ({ ...g, [k]: { running: false, error: errorText(e) } }));
     }
+  };
+
+  /** Claude drafts the overall review summary, continuing the PR's session so it knows the change. */
+  const draftSummary = async (event: string, comments: Finding[], notes: string) => {
+    const s = key ? sessions[key] : undefined;
+    if (!key || !s?.worktree) throw new Error("Start the review first, so Claude has the code.");
+    const k = key;
+    let text = "";
+    let sessionId = s.sessionId;
+    let usage: ClaudeUsage = {};
+    await api.claudeRun(`summary-${k}-${Date.now()}`, s.worktree, buildSummaryPrompt(event, comments, notes), s.sessionId, (e) => {
+      if (e.type === "result") {
+        text = e.result ?? "";
+        sessionId = e.session_id ?? sessionId;
+        usage = e;
+      }
+    });
+    update(k, (x) => ({ ...x, sessionId, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
+    if (!text.trim()) throw new Error("Claude didn't return a summary. Try again.");
+    return text.trim();
   };
 
   /** After new commits, asks Claude which of the existing findings are fixed. */
@@ -1100,6 +1120,7 @@ export default function App() {
           ownPr={!!orgs?.login && details.author.login === orgs.login}
           checks={checks?.results}
           states={findingStates}
+          onDraftSummary={session?.worktree ? (event, comments, notes) => draftSummary(event, comments, notes) : undefined}
           onClose={() => setReviewOpen(false)}
           onSubmitted={(url, posted) => {
             const findings = analysis?.findings ?? [];
