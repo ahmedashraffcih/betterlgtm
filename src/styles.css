@@ -375,3 +375,13 @@ textarea.set-input { height: auto; min-height: 90px; padding: 6px 8px; width: 10
 .review-note { margin: 0; font-size: 12px; }
 .review-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .review-error { margin: 0; padding: 0 16px 12px; color: var(--crit); font-size: 12px; }
+.review-all { display: inline-flex; align-items: center; gap: 8px; color: var(--text); cursor: default; }
+.review-all input { margin: 0; accent-color: var(--accent); }
+.review-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.rs-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 11px; font-weight: 600; border: 1px solid var(--line); background: var(--sunken); color: var(--text); }
+.rs-chip.rs-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.rs-chip.rs-crit { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 40%, transparent); background: color-mix(in srgb, var(--crit) 10%, transparent); }
+.rs-chip.rs-high { color: var(--high); border-color: color-mix(in srgb, var(--high) 40%, transparent); background: color-mix(in srgb, var(--high) 10%, transparent); }
+.rs-you { color: var(--text); font-weight: 600; }
+.rs-you.rs-asked { color: var(--accent); }
+.rs-person { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }

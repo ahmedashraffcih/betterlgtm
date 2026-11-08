@@ -17,6 +17,7 @@ import { matches, shortcutLabel, type Command } from "./commands";
 import { CommandPalette, type PaletteItem } from "./components/CommandPalette";
 import { InfoDialog } from "./components/InfoDialog";
 import { SubmitReview } from "./components/SubmitReview";
+import { ReviewStatus } from "./components/ReviewStatus";
 import { filePath } from "./diffUtils";
 import { fileIcon, SEVERITY } from "./icons";
 import { emptySession, useSessions, useStoredState, type ChatItem } from "./sessions";
@@ -556,6 +557,7 @@ export default function App() {
             <span className={ciFailing ? "tone-crit" : ciPending ? "tone-high" : "tone-ok"} style={{ whiteSpace: "nowrap" }}>{ci.length === 0 ? "No CI" : ciFailing ? "CI failing" : ciPending ? "CI running" : "CI passing"}</span>
           </div>
         )}
+        {details && <ReviewStatus details={details} me={orgs?.login} />}
       </section>
       <div style={{ flex: 1, minHeight: 0 }}>
         {loadError && <p className="selectable" style={{ margin: 16, color: "var(--crit)" }}>{loadError}</p>}
@@ -737,6 +739,10 @@ export default function App() {
           onClose={() => setReviewOpen(false)}
           onSubmitted={(url) => {
             setReviewOpen(false);
+            // Show the new review state, and drop the PR from "To review" if the request is done.
+            const repo = selected.repository.nameWithOwner;
+            api.prDetails(repo, selected.number).then((d) => setLoaded((l) => (l && l.key === key ? { ...l, details: d } : l))).catch(() => {});
+            refresh();
             setPostedReviews((all) => ({ ...all, [key]: url }));
             update(key, (s) => ({ ...s, inReview: [] }));
           }}

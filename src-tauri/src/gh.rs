@@ -106,7 +106,7 @@ pub async fn pr_details(config: State<'_, ConfigState>, repo: String, number: u6
             "-R",
             &repo,
             "--json",
-            "number,title,body,url,author,isDraft,headRefName,baseRefName,headRefOid,additions,deletions,changedFiles,statusCheckRollup",
+            "number,title,body,url,author,isDraft,headRefName,baseRefName,headRefOid,additions,deletions,changedFiles,statusCheckRollup,reviewDecision,latestReviews,reviewRequests",
         ],
         None,
     )

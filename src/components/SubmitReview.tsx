@@ -1,6 +1,6 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, Send, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FileData } from "react-diff-view";
 import { anchorLabel, type Analysis, type Finding } from "../analysis";
 import { api, errorText, type PrDetails, type ReviewEvent } from "../api";
@@ -74,6 +74,12 @@ export function SubmitReview(p: Props) {
   );
   const empty = event !== "APPROVE" && !body && inline.length === 0;
 
+  const allChecked = items.length > 0 && chosen.length === items.length;
+  const selectAll = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (selectAll.current) selectAll.current.indeterminate = chosen.length > 0 && !allChecked;
+  }, [chosen.length, allChecked]);
+
   const update = (index: number, change: Partial<Item>) =>
     setItems((all) => all.map((i) => (i.index === index ? { ...i, ...change } : i)));
 
@@ -108,7 +114,15 @@ export function SubmitReview(p: Props) {
           {findings.length > 0 ? (
             <>
               <div className="review-head">
-                <span>Comments from findings</span>
+                <label className="review-all">
+                  <input
+                    ref={selectAll}
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={(e) => setItems((all) => all.map((i) => ({ ...i, checked: e.target.checked })))}
+                  />
+                  Comment on all {items.length} findings
+                </label>
                 <span className="muted">{inline.length} on lines{inBody.length ? `, ${inBody.length} in the summary` : ""}</span>
               </div>
               {items.map((i) => {

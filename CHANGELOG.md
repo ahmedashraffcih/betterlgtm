@@ -5,7 +5,8 @@ All notable changes to BetterLGTM are listed here. Versions follow [semantic ver
 ## Unreleased
 
 - **Mine:** the inbox can switch to your own open pull requests.
-- **Submit review:** post a review to GitHub from the app, with the findings you choose as comments on their diff lines. Findings outside the diff go in the review summary.
+- **Submit review:** post a review to GitHub from the app, with the findings you choose as comments on their diff lines. Findings outside the diff go in the review summary. One checkbox selects every finding.
+- **Review status:** the PR header shows GitHub's review decision, whether your review is requested, each reviewer's latest review, and who is still being waited on.
 - Update checks retry when GitHub's downloads fail, and use a copy of the update feed on the website first.
 
 ## 0.2.2 — 2026-11-08

@@ -45,6 +45,18 @@ export interface PrDetails {
   deletions: number;
   changedFiles: number;
   statusCheckRollup: CheckRun[];
+  /** Empty when the repository doesn't require reviews. */
+  reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | "";
+  /** Each reviewer's most recent review. */
+  latestReviews?: Review[];
+  /** Reviewers who were asked and haven't reviewed since: users have a login, teams a name. */
+  reviewRequests?: { login?: string; name?: string; slug?: string }[];
+}
+
+export interface Review {
+  author: { login: string };
+  state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED" | "PENDING";
+  submittedAt?: string;
 }
 
 /** One line of `claude -p --output-format stream-json`. Only the fields we read are typed. */

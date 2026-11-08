@@ -50,6 +50,12 @@ const details: PrDetails = {
   additions: 21,
   deletions: 2,
   changedFiles: 2,
+  reviewDecision: "REVIEW_REQUIRED",
+  latestReviews: [
+    { author: { login: "mchen" }, state: "APPROVED", submittedAt: new Date(Date.now() - 50 * 60e3).toISOString() },
+    { author: { login: "review-bot" }, state: "COMMENTED", submittedAt: new Date(Date.now() - 90 * 60e3).toISOString() },
+  ],
+  reviewRequests: [{ login: "you" }, { name: "payments-team", slug: "payments-team" }],
   statusCheckRollup: [{ conclusion: "SUCCESS", status: "COMPLETED" }],
 };
 
