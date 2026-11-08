@@ -2,7 +2,7 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 0.2.3 — 2026-11-08
 
 - **Mine:** the inbox can switch to your own open pull requests.
 - **Submit review:** post a review to GitHub from the app, with the findings you choose as comments on their diff lines. Findings outside the diff go in the review summary. One checkbox selects every finding.
@@ -39,6 +39,7 @@ The first release.
 - Menu bar, command palette, keyboard shortcuts, light and dark themes, and a Settings page.
 - Installers for macOS (Apple silicon and Intel), Windows and Linux.
 
+[0.2.3]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.3
 [0.2.2]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.2
 [0.2.1]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.1
 [0.1.1]: https://github.com/drmas/betterlgtm/releases/tag/v0.1.1
