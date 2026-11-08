@@ -5,6 +5,7 @@ All notable changes to BetterLGTM are listed here. Versions follow [semantic ver
 ## Unreleased
 
 - **Re-check findings** ([#3](https://github.com/drmas/betterlgtm/issues/3)): when a PR has new commits since the analysis, Claude checks each finding and marks it fixed, still open, partly fixed or unclear, with a short note. Fixed findings start unchecked in Submit review.
+- **Prioritized inbox** ([#4](https://github.com/drmas/betterlgtm/issues/4)): rows show CI status, review decision, lines changed and a risk estimate (from size, failing CI, and auth, migration, CI or dependency files, with the reasons on hover). Sort by risk, waiting time, size or last update; the filter also matches labels.
 
 ## [0.2.5] — 2026-11-08
 

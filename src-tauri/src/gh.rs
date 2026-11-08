@@ -9,20 +9,63 @@ fn parse(out: &str) -> Result<Value, String> {
     serde_json::from_str(out).map_err(|e| format!("Unexpected output from gh: {e}"))
 }
 
+/// Fields for inbox rows: enough to show CI, review state, size and risk without a call per PR.
+const SEARCH_QUERY: &str = "query($q: String!) { search(query: $q, type: ISSUE, first: 100) { nodes { ... on PullRequest {
+  number title url isDraft updatedAt createdAt
+  author { login } repository { name nameWithOwner }
+  additions deletions changedFiles reviewDecision
+  labels(first: 10) { nodes { name color } }
+  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+  files(first: 100) { nodes { path } }
+  timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 1) { nodes { ... on ReviewRequestedEvent { createdAt } } }
+} } } }";
+
+/// Open PRs matching a GitHub search, flattened for the inbox.
+async fn search_prs(gh: &str, query: &str) -> Result<Value, String> {
+    let q = format!("is:pr is:open archived:false {query}");
+    let out = run(gh, &["api", "graphql", "-f", &format!("query={SEARCH_QUERY}"), "-f", &format!("q={q}")], None).await?;
+    let data = parse(&out)?;
+    let nodes = data["data"]["search"]["nodes"].as_array().cloned().unwrap_or_default();
+    let prs: Vec<Value> = nodes
+        .into_iter()
+        .filter(|n| n["number"].is_number())
+        .map(|n| {
+            serde_json::json!({
+                "number": n["number"],
+                "title": n["title"],
+                "url": n["url"],
+                "isDraft": n["isDraft"],
+                "updatedAt": n["updatedAt"],
+                "createdAt": n["createdAt"],
+                "author": { "login": n["author"]["login"].as_str().unwrap_or("ghost") },
+                "repository": n["repository"],
+                "additions": n["additions"],
+                "deletions": n["deletions"],
+                "changedFiles": n["changedFiles"],
+                "reviewDecision": n["reviewDecision"],
+                "labels": n["labels"]["nodes"],
+                "ci": n["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"],
+                "files": n["files"]["nodes"].as_array().map(|f| f.iter().map(|x| x["path"].clone()).collect::<Vec<_>>()),
+                "requestedAt": n["timelineItems"]["nodes"][0]["createdAt"],
+            })
+        })
+        .collect();
+    Ok(Value::Array(prs))
+}
+
 /// Open PRs where a review is requested from the user. With `include_teams`, requests made to
 /// one of the user's teams count too; otherwise only direct requests.
 #[tauri::command]
 pub async fn list_review_requests(config: State<'_, ConfigState>, include_teams: bool) -> Result<Value, String> {
-    let gh = config.get().gh_path;
     // `review-requested` includes team requests; `user-review-requested` is direct requests only.
     let query = if include_teams { "review-requested:@me" } else { "user-review-requested:@me" };
-    let out = run(
-        &gh,
-        &["search", "prs", query, "--state=open", "--limit", "100", "--json", "number,title,repository,author,updatedAt,url,isDraft"],
-        None,
-    )
-    .await?;
-    parse(&out)
+    search_prs(&config.get().gh_path, query).await
+}
+
+/// The user's own open PRs.
+#[tauri::command]
+pub async fn list_my_prs(config: State<'_, ConfigState>) -> Result<Value, String> {
+    search_prs(&config.get().gh_path, "author:@me").await
 }
 
 /// The commit and time of `login`'s most recent submitted review on the PR, if any.
@@ -41,18 +84,6 @@ pub async fn last_review(config: State<'_, ConfigState>, repo: String, number: u
         .filter(|r| r["login"] == login.as_str() && r["state"] != "PENDING" && r["commitId"].is_string())
         .max_by(|a, b| a["submittedAt"].as_str().cmp(&b["submittedAt"].as_str()));
     Ok(latest.unwrap_or(Value::Null))
-}
-
-/// The user's own open PRs.
-#[tauri::command]
-pub async fn list_my_prs(config: State<'_, ConfigState>) -> Result<Value, String> {
-    let out = run(
-        &config.get().gh_path,
-        &["search", "prs", "--author=@me", "--state=open", "--limit", "100", "--json", "number,title,repository,author,updatedAt,url,isDraft"],
-        None,
-    )
-    .await?;
-    parse(&out)
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]

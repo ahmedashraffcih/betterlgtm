@@ -13,6 +13,18 @@ export interface ReviewRequest {
   updatedAt: string;
   author: { login: string };
   repository: { name: string; nameWithOwner: string };
+  createdAt?: string;
+  additions?: number;
+  deletions?: number;
+  changedFiles?: number;
+  reviewDecision?: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
+  labels?: { name: string; color: string }[];
+  /** Combined state of the head commit's checks; null when there are none. */
+  ci?: "SUCCESS" | "FAILURE" | "ERROR" | "PENDING" | "EXPECTED" | null;
+  /** Up to the first 100 changed paths, for the risk estimate. */
+  files?: string[];
+  /** When your review was last requested. */
+  requestedAt?: string | null;
 }
 
 /** Your most recent submitted review on a PR, and the commit it was made on. */

@@ -1,9 +1,58 @@
-import { Building2, ChevronDown, ChevronLeft, ChevronRight, EyeOff, Funnel, Loader, OctagonExclamationPoint, PencilLine, RefreshCw } from "lucide-react";
+import { ArrowDownUp, Building2, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, CircleX, EyeOff, Funnel, Loader, OctagonExclamationPoint, PencilLine, RefreshCw, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ReviewRequest } from "../api";
-import type { PrSession } from "../sessions";
+import { prRisk, RISK_RANK, waitingSince } from "../risk";
+import { useStoredState, type PrSession } from "../sessions";
 
 export type InboxView = "review" | "mine";
+type SortKey = "risk" | "waiting" | "size" | "updated";
+
+const SORTS: [SortKey, string][] = [
+  ["risk", "Riskiest first"],
+  ["waiting", "Waiting longest"],
+  ["size", "Largest first"],
+  ["updated", "Recently updated"],
+];
+
+const time = (iso?: string | null) => (iso ? new Date(iso).getTime() : 0);
+const lines = (pr: ReviewRequest) => (pr.additions ?? 0) + (pr.deletions ?? 0);
+
+const COMPARE: Record<SortKey, (a: ReviewRequest, b: ReviewRequest) => number> = {
+  risk: (a, b) => RISK_RANK[prRisk(a).level] - RISK_RANK[prRisk(b).level] || time(waitingSince(a)) - time(waitingSince(b)),
+  waiting: (a, b) => time(waitingSince(a)) - time(waitingSince(b)),
+  size: (a, b) => lines(b) - lines(a),
+  updated: (a, b) => time(b.updatedAt) - time(a.updatedAt),
+};
+
+/** CI state, review decision, size and risk under a PR's title. */
+function RowFacts({ pr }: { pr: ReviewRequest }) {
+  const risk = prRisk(pr);
+  const ci =
+    pr.ci === "SUCCESS" ? { Icon: Check, tone: "tone-ok", label: "CI passing" }
+    : pr.ci === "FAILURE" || pr.ci === "ERROR" ? { Icon: X, tone: "tone-crit", label: "CI failing" }
+    : pr.ci === "PENDING" || pr.ci === "EXPECTED" ? { Icon: CircleDashed, tone: "tone-high", label: "CI running" }
+    : null;
+  const review =
+    pr.reviewDecision === "APPROVED" ? { Icon: CircleCheck, tone: "tone-ok", label: "Approved" }
+    : pr.reviewDecision === "CHANGES_REQUESTED" ? { Icon: CircleX, tone: "tone-crit", label: "Changes requested" }
+    : null;
+  if (pr.additions === undefined && !ci) return null;
+  return (
+    <span className="t3">
+      {ci && <span className="fact" title={ci.label}><ci.Icon size={12} className={ci.tone} aria-label={ci.label} /></span>}
+      {review && <span className="fact" title={review.label}><review.Icon size={12} className={review.tone} aria-label={review.label} /></span>}
+      {pr.additions !== undefined && (
+        <span className="fact" title={`${pr.changedFiles ?? 0} files`}>
+          <span className="tone-ok">+{pr.additions.toLocaleString()}</span> <span className="tone-crit">−{(pr.deletions ?? 0).toLocaleString()}</span>
+        </span>
+      )}
+      <span style={{ flex: 1 }} />
+      {risk.level !== "low" && (
+        <span className={`risk risk-${risk.level}`} title={risk.reasons.join(", ")}>{risk.level === "high" ? "High risk" : "Medium risk"}</span>
+      )}
+    </span>
+  );
+}
 
 interface Props {
   view: InboxView;
@@ -70,18 +119,20 @@ export function InboxRail(p: Pick<Props, "requests" | "selected" | "sessions" | 
 export function Inbox(p: Props) {
   const [filter, setFilter] = useState("");
   const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [sort, setSort] = useStoredState<SortKey>("better-lgtm.inboxSort", "risk");
 
   const groups = useMemo(() => {
     const q = filter.trim().toLowerCase();
     const map = new Map<string, ReviewRequest[]>();
     for (const pr of p.requests ?? []) {
       const org = pr.repository.nameWithOwner.split("/")[0];
-      const hay = `${pr.title} ${pr.repository.nameWithOwner} ${pr.author.login}`.toLowerCase();
+      const hay = `${pr.title} ${pr.repository.nameWithOwner} ${pr.author.login} ${pr.labels?.map((l) => l.name).join(" ") ?? ""}`.toLowerCase();
       if (q && !hay.includes(q)) continue;
       map.set(org, [...(map.get(org) ?? []), pr]);
     }
+    for (const prs of map.values()) prs.sort(COMPARE[sort]);
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [p.requests, filter]);
+  }, [p.requests, filter, sort]);
 
   const visibleCount = groups.reduce((n, [, prs]) => n + prs.length, 0);
 
@@ -105,10 +156,16 @@ export function Inbox(p: Props) {
           </button>
         )}
       </div>
-      <div style={{ padding: "0 8px 8px" }}>
-        <label className="field">
+      <div style={{ padding: "0 8px 8px", display: "flex", gap: 6 }}>
+        <label className="field" style={{ flex: 1, minWidth: 0 }}>
           <Funnel size={14} />
           <input placeholder="Filter" aria-label="Filter pull requests" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        </label>
+        <label className="sort-select" title="Sort">
+          <ArrowDownUp size={13} />
+          <select aria-label="Sort pull requests" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+            {SORTS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
         </label>
       </div>
       <div className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
@@ -147,7 +204,7 @@ export function Inbox(p: Props) {
                       <span className="t1 ellipsis" style={{ width: "100%" }}>{pr.title}</span>
                       <span className="t2">
                         <span className="ellipsis" style={{ flex: 1 }}>
-                          {pr.repository.name} #{pr.number} · {p.view === "mine" ? "" : `${pr.author.login} · `}{age(pr.updatedAt)}
+                          {pr.repository.name} #{pr.number} · {p.view === "mine" ? `updated ${age(pr.updatedAt)}` : `${pr.author.login} · waiting ${age(waitingSince(pr))}`}
                         </span>
                         {p.analyzing.has(key) ? (
                           <span className="st" title="Analysis running"><Loader size={12} className="spin" />Analyzing</span>
@@ -159,6 +216,7 @@ export function Inbox(p: Props) {
                           <span className="st" title="Draft pull request"><PencilLine size={12} />Draft</span>
                         ) : null}
                       </span>
+                      <RowFacts pr={pr} />
                     </button>
                   );
                 })}
