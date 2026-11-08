@@ -194,14 +194,18 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
   switch (cmd) {
     case "list_review_requests":
       return requests;
+    case "reply_to_thread":
+    case "resolve_thread":
+    case "update_pr_body":
+      return null;
     case "review_threads":
       return [
-        { isResolved: false, isOutdated: false, path: "src/http/charges.ts", line: 42, startLine: null, comments: [
-          { author: "mchen", body: "Should this return 409 when the same key comes with a different body?", createdAt: new Date(Date.now() - 3 * 3600e3).toISOString(), url: "https://github.com/acme/payments-api/pull/482#discussion_r1" },
-          { author: "lkowal", body: "Good point, I'll add that check.", createdAt: new Date(Date.now() - 2 * 3600e3).toISOString(), url: "https://github.com/acme/payments-api/pull/482#discussion_r2" },
+        { id: "T1", isResolved: false, isOutdated: false, path: "src/http/charges.ts", line: 42, startLine: null, comments: [
+          { id: 1, author: "mchen", body: "Should this return 409 when the same key comes with a different body?", createdAt: new Date(Date.now() - 3 * 3600e3).toISOString(), url: "https://github.com/acme/payments-api/pull/482#discussion_r1" },
+          { id: 2, author: "lkowal", body: "Good point, I'll add that check.", createdAt: new Date(Date.now() - 2 * 3600e3).toISOString(), url: "https://github.com/acme/payments-api/pull/482#discussion_r2" },
         ] },
-        { isResolved: true, isOutdated: true, path: "src/idempotency/store.ts", line: 12, startLine: null, comments: [
-          { author: "review-bot", body: "Consider a shorter TTL for test environments.", createdAt: new Date(Date.now() - 6 * 3600e3).toISOString(), url: "https://github.com/acme/payments-api/pull/482#discussion_r3" },
+        { id: "T2", isResolved: true, isOutdated: true, path: "src/idempotency/store.ts", line: 12, startLine: null, comments: [
+          { id: 3, author: "review-bot", body: "Consider a shorter TTL for test environments.", createdAt: new Date(Date.now() - 6 * 3600e3).toISOString(), url: "https://github.com/acme/payments-api/pull/482#discussion_r3" },
         ] },
       ];
     case "linked_issues":
@@ -219,7 +223,22 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
     case "tool_status":
       return { gh: "gh version 2.103.3 (2026-10-26)", login: "you", claude: "2.1.318 (Claude Code)", dataDir: "/home/you/.betterlgtm" };
     case "pr_details":
-      return details;
+      return args.number === 1290
+        ? {
+            ...details,
+            number: 1290,
+            title: mine[0].title,
+            url: mine[0].url,
+            author: { login: "you" },
+            headRefName: "invoices-queue",
+            reviewDecision: "CHANGES_REQUESTED",
+            latestReviews: [{ author: { login: "mchen" }, state: "CHANGES_REQUESTED", submittedAt: new Date(Date.now() - 3 * 3600e3).toISOString() }],
+            reviewRequests: [],
+            statusCheckRollup: [{ name: "test", conclusion: "FAILURE" }, { name: "lint", conclusion: "SUCCESS" }],
+            mergeable: "MERGEABLE",
+            mergeStateStatus: "BLOCKED",
+          }
+        : details;
     case "pr_diff":
       return diff;
     case "pr_body_html":
@@ -237,6 +256,8 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
       const isGuide = !isAnalysis && prompt.includes("guided review");
       const isRecheck = prompt.includes("Re-check each finding");
       const isSummary = prompt.includes("overall summary for the GitHub review");
+      const isDescription = prompt.includes("Write the description for my pull request");
+      const isReply = prompt.includes("Write my reply to this conversation");
       const recheck = {
         results: [
           { index: 0, status: "fixed", note: "save() now takes a lock with SET NX before charging, so a second request waits." },
@@ -244,7 +265,11 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
           { index: 2, status: "unclear", note: "The cached body didn't change; it depends on what the client needs." },
         ],
       };
-      const result = isSummary
+      const result = isReply
+        ? "Good catch. I'll return 409 when the same key comes with a different body, and add a test for it."
+        : isDescription
+        ? "## What\n\n- Moves invoice delivery from the cron job to the new `invoices` queue\n- Retries failed deliveries with backoff\n\n## Why\n\nThe cron job dropped invoices when the mail provider timed out.\n\n## How to test\n\n- `npm test -- invoices`\n- Send a test invoice in staging and check the queue dashboard\n\n## Watch for\n\n- The old cron entry is removed in the same deploy"
+        : isSummary
         ? "Thanks for adding idempotency keys. Two things need to change before this is safe: concurrent requests with the same key can still both charge the card, and keys aren't scoped to the merchant. Happy to look again once those are fixed."
         : isRecheck
         ? "```json\n" + JSON.stringify(recheck) + "\n```"

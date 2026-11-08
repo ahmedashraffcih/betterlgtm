@@ -1,16 +1,17 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ArrowLeft, ChevronDown, ChevronRight, ChevronUp, CircleCheck, ExternalLink, FileDiff, FileText, FileX, Flag, Funnel,
-  BadgeCheck, CircleDashed, CircleSlash, CircleX, ShieldAlert, LayoutDashboard, Loader, MessageSquare, MessageSquarePlus, OctagonExclamationPoint, Play, RefreshCw, RotateCcw, Wrench,
+  BadgeCheck, CircleDashed, Sparkles, CircleSlash, CircleX, ShieldAlert, LayoutDashboard, Loader, MessageSquare, MessageSquarePlus, OctagonExclamationPoint, Play, RefreshCw, RotateCcw, Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
 import type { FileData } from "react-diff-view";
 import { anchorLabel, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck, type FindingState } from "../analysis";
-import type { PrDetails, ReviewThread } from "../api";
+import { errorText, type PrDetails, type ReviewThread } from "../api";
 import { categoryIcon, SEVERITY, VERDICT } from "../icons";
 import { changesInRange, findFile, lineNumbers, testCodeLines } from "../diffUtils";
 import { prRisk } from "../risk";
+import { MergeStatus } from "./MergeStatus";
 import { useElementWidth } from "../hooks";
 import { GithubHtml, Markdown } from "./Markdown";
 
@@ -41,6 +42,12 @@ interface Props {
   onState: (finding: number, state: FindingState | null) => void;
   /** Review threads already on the PR. */
   threads?: ReviewThread[];
+  /** The PR is yours: self-review wording and what's blocking merge. */
+  ownPr?: boolean;
+  onEditDescription?: () => void;
+  onThreadDraft?: (t: ReviewThread) => Promise<string>;
+  onThreadReply?: (t: ReviewThread, body: string) => Promise<void>;
+  onThreadResolve?: (t: ReviewThread, resolve: boolean) => Promise<void>;
   onSelect: (k: OutlineKey) => void;
   onOpenAnchor: (a: Anchor, finding: number | null) => void;
   onStart: () => void;
@@ -108,6 +115,51 @@ function FindingActions({ state, onState }: { state?: FindingState; onState: (s:
       <button type="button" className="btn" data-key="resolve" onClick={() => onState({ state: "resolved", at: Date.now() })}><BadgeCheck size={14} />Resolve</button>
       <button type="button" className="btn" data-key="dismiss" onClick={() => setChoosing(true)}><CircleSlash size={14} />Dismiss…</button>
     </>
+  );
+}
+
+/** Reply to a review conversation (optionally drafted by Claude), and resolve or reopen it. */
+function ThreadReply(p: {
+  thread: ReviewThread;
+  onDraft?: (t: ReviewThread) => Promise<string>;
+  onReply: (t: ReviewThread, body: string) => Promise<void>;
+  onResolve?: (t: ReviewThread, resolve: boolean) => Promise<void>;
+}) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState<"draft" | "reply" | "resolve" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const act = async (kind: "draft" | "reply" | "resolve", f: () => Promise<void>) => {
+    setBusy(kind);
+    setError(null);
+    try {
+      await f();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="thread-reply">
+      <textarea className="set-input" rows={3} placeholder="Reply…" aria-label="Reply" value={text} onChange={(e) => setText(e.target.value)} disabled={!!busy} />
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {p.onDraft && (
+          <button type="button" className="btn sm" disabled={!!busy} onClick={() => act("draft", async () => setText(await p.onDraft!(p.thread)))}>
+            {busy === "draft" ? <Loader size={13} className="spin" /> : <Sparkles size={13} />}{busy === "draft" ? "Drafting…" : "Draft reply with Claude"}
+          </button>
+        )}
+        <span style={{ flex: 1 }} />
+        {p.onResolve && (
+          <button type="button" className="btn sm" disabled={!!busy} onClick={() => act("resolve", () => p.onResolve!(p.thread, !p.thread.isResolved))}>
+            {p.thread.isResolved ? <RotateCcw size={13} /> : <BadgeCheck size={13} />}{p.thread.isResolved ? "Reopen conversation" : "Resolve conversation"}
+          </button>
+        )}
+        <button type="button" className="btn sm primary" disabled={!!busy || !text.trim()} onClick={() => act("reply", async () => { await p.onReply(p.thread, text.trim()); setText(""); })}>
+          {busy === "reply" ? "Posting…" : "Reply"}
+        </button>
+      </div>
+      {error && <p className="selectable" style={{ margin: 0, color: "var(--crit)", fontSize: 12 }}>{error}</p>}
+    </div>
   );
 }
 
@@ -286,6 +338,13 @@ const DECISION: Record<Decision, { label: string; cls: string; icon: LucideIcon;
   approve: { label: "Looks ready to approve", cls: "verdict ok", icon: CircleCheck, tone: "tone-ok" },
 };
 
+/** The same decisions, worded for the author checking their own PR. */
+const SELF_DECISION: Record<Decision, string> = {
+  request_changes: "Fix these before asking for reviews",
+  comment: "Worth another look before asking for reviews",
+  approve: "Ready to ask for reviews",
+};
+
 const COVERED = {
   yes: { label: "Tested", tone: "tone-ok", Icon: CircleCheck },
   partly: { label: "Partly tested", tone: "tone-high", Icon: CircleDashed },
@@ -376,10 +435,11 @@ function Overview(p: Props & { analysis: Analysis }) {
 
   return (
     <>
+      {p.ownPr && <MergeStatus pr={p.pr} threads={p.threads ?? []} />}
       <div className={decision.cls}>
         <decision.icon size={20} className={decision.tone} style={{ flexShrink: 0, marginTop: 1 }} />
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span style={{ fontSize: 15, fontWeight: 600 }}>{decision.label}</span>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>{p.ownPr ? SELF_DECISION[a.recommendation?.decision ?? derived] : decision.label}</span>
           {a.recommendation?.reason && <span style={{ fontSize: 13 }}>{a.recommendation.reason}</span>}
         </div>
       </div>
@@ -477,6 +537,7 @@ function Detail(p: Props & { analysis: Analysis }) {
             </div>
           ))}
         </div>
+        {p.onThreadReply && <ThreadReply key={t.id} thread={t} onDraft={p.onThreadDraft} onReply={p.onThreadReply} onResolve={p.onThreadResolve} />}
       </>
     );
   }
@@ -487,6 +548,7 @@ function Detail(p: Props & { analysis: Analysis }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <h2 style={{ margin: 0, flex: 1, fontSize: 17, fontWeight: 600 }}>PR description</h2>
           <span className="muted" style={{ fontSize: 12 }}>by {p.pr.author.login}</span>
+          {p.ownPr && p.onEditDescription && <button type="button" className="btn sm" onClick={p.onEditDescription}><Sparkles size={13} />Edit with Claude</button>}
           <button type="button" className="btn sm" onClick={() => openUrl(p.pr.url)}><ExternalLink size={13} />GitHub</button>
         </div>
         <GithubHtml html={p.bodyHtml} fallback={p.pr.body} />
@@ -597,19 +659,22 @@ function StartPanel(p: Props) {
   return (
     <div className="scroll selectable" style={{ padding: "24px 28px", height: "100%" }}>
       <div style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 16 }}>
+        {p.ownPr && <MergeStatus pr={p.pr} threads={p.threads ?? []} />}
         <div className="verdict" style={{ alignItems: "center" }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>{run?.running ? "Reviewing with Claude…" : "Start the review"}</span>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>{run?.running ? "Reviewing with Claude…" : p.ownPr ? "Review your own pull request" : "Start the review"}</span>
             <span className="muted" style={{ fontSize: 13 }}>
               {run?.running
                 ? run.step
-                : "Checks out the PR in its own worktree, then Claude compares the description with the code and lists what to look at. Claude can only read."}
+                : p.ownPr
+                  ? "Catch problems before reviewers do: Claude checks your description against the code and lists what to fix first. Claude can only read."
+                  : "Checks out the PR in its own worktree, then Claude compares the description with the code and lists what to look at. Claude can only read."}
             </span>
           </div>
           {run?.running ? (
             <button type="button" className="btn" onClick={p.onCancel}>Cancel</button>
           ) : (
-            <button type="button" className="btn primary" onClick={p.onStart}><Play size={14} />Start review</button>
+            <button type="button" className="btn primary" onClick={p.onStart}><Play size={14} />{p.ownPr ? "Self-review" : "Start review"}</button>
           )}
         </div>
         {run?.error && <p style={{ margin: 0, color: "var(--crit)" }}>{run.error}</p>}
@@ -630,6 +695,7 @@ function StartPanel(p: Props) {
         <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h2 className="section-title" style={{ flex: 1 }}>PR description by {p.pr.author.login}</h2>
+            {p.ownPr && p.onEditDescription && <button type="button" className="btn sm" onClick={p.onEditDescription}><Sparkles size={13} />Edit with Claude</button>}
             <button type="button" className="btn sm" onClick={() => openUrl(p.pr.url)}><ExternalLink size={13} />GitHub</button>
           </div>
           <div className="excerpt" style={{ padding: "12px 16px" }}>

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
-import { anchorLabel, findingId, type Finding, type FindingState, buildAnalysisPrompt, buildSummaryPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
+import { anchorLabel, findingId, type Finding, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
 import { AnalysisView, type OutlineKey, type RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import { DiffView, type DiffMode } from "./components/DiffView";
@@ -18,6 +18,7 @@ import { CommandPalette, type PaletteItem } from "./components/CommandPalette";
 import { InfoDialog } from "./components/InfoDialog";
 import { SubmitReview } from "./components/SubmitReview";
 import { FilterDialog, type OwnerRow, type RepoRow } from "./components/FilterDialog";
+import { DescriptionDialog } from "./components/DescriptionDialog";
 import { FILTER_GROUPS, NO_FILTERS, type Filters, type SortKey } from "./inboxFilters";
 import { ReviewStatus } from "./components/ReviewStatus";
 import { filePath } from "./diffUtils";
@@ -83,6 +84,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [infoDialog, setInfoDialog] = useState<"shortcuts" | "about" | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [descOpen, setDescOpen] = useState(false);
   const [recheckRuns, setRecheckRuns] = useState<Record<string, { running: boolean; error?: string }>>({});
   const [sinceReviews, setSinceReviews] = useState<Record<string, SinceReview>>({});
   /** Diff tab: the whole PR, or only what changed since your last review. */
@@ -294,7 +296,7 @@ export default function App() {
       let finalText = "";
       let sessionId: string | undefined;
       let usage: ClaudeUsage = {};
-      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"), opts.since, issues, threads), undefined, (e) => {
+      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"), opts.since, issues, threads, !!orgs?.login && details.author.login === orgs.login), undefined, (e) => {
         if (e.session_id) sessionId = e.session_id;
         if (e.type === "assistant") {
           for (const block of e.message?.content ?? []) {
@@ -443,6 +445,65 @@ export default function App() {
     update(k, (x) => ({ ...x, sessionId, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
     if (!text.trim()) throw new Error("Claude didn't return a summary. Try again.");
     return text.trim();
+  };
+
+  /** Claude drafts the description of your own PR in its worktree. */
+  const draftDescription = async () => {
+    if (!key || !selected || !loaded || loaded.key !== key) throw new Error("Open the pull request first.");
+    const k = key;
+    const wt = await ensureWorktree(k, selected, loaded.details);
+    let text = "";
+    let usage: ClaudeUsage = {};
+    await api.claudeRun(`describe-${k}-${Date.now()}`, wt, buildDescriptionPrompt(loaded.details), sessions[k]?.sessionId, (e) => {
+      if (e.type === "result") {
+        text = e.result ?? "";
+        usage = e;
+      }
+    });
+    update(k, (x) => ({ ...x, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
+    if (!text.trim()) throw new Error("Claude didn't return a description. Try again.");
+    return text.trim();
+  };
+  const saveDescription = async (body: string) => {
+    if (!key || !selected) return;
+    const k = key;
+    const repo = selected.repository.nameWithOwner;
+    await api.updatePrBody(repo, selected.number, body);
+    const [details, bodyHtml] = await Promise.all([api.prDetails(repo, selected.number), api.prBodyHtml(repo, selected.number).catch(() => "")]);
+    setLoaded((l) => (l && l.key === k ? { ...l, details, bodyHtml } : l));
+  };
+
+  const reloadThreads = async () => {
+    if (!key || !selected) return;
+    const k = key;
+    const threads = await api.reviewThreads(selected.repository.nameWithOwner, selected.number);
+    setLoaded((l) => (l && l.key === k ? { ...l, threads } : l));
+  };
+  /** Claude drafts your reply to a review conversation, reading the code it's about. */
+  const draftReply = async (t: ReviewThread) => {
+    if (!key || !selected || !loaded || loaded.key !== key) throw new Error("Open the pull request first.");
+    const k = key;
+    const wt = await ensureWorktree(k, selected, loaded.details);
+    let text = "";
+    let usage: ClaudeUsage = {};
+    await api.claudeRun(`reply-${k}-${Date.now()}`, wt, buildReplyPrompt(t, orgs?.login ?? "me", loaded.details.author.login), sessions[k]?.sessionId, (e) => {
+      if (e.type === "result") {
+        text = e.result ?? "";
+        usage = e;
+      }
+    });
+    update(k, (x) => ({ ...x, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
+    if (!text.trim()) throw new Error("Claude didn't return a reply. Try again.");
+    return text.trim();
+  };
+  const replyToThread = async (t: ReviewThread, body: string) => {
+    if (!selected || !t.comments[0]) return;
+    await api.replyToThread(selected.repository.nameWithOwner, selected.number, t.comments[0].id, body);
+    await reloadThreads();
+  };
+  const resolveThread = async (t: ReviewThread, resolve: boolean) => {
+    await api.resolveThread(t.id, resolve);
+    await reloadThreads();
   };
 
   /** After new commits, asks Claude which of the existing findings are fixed. */
@@ -757,6 +818,7 @@ export default function App() {
     { id: "guide", menu: "Review", label: "Create guided review", enabled: !!(analysis && !analysis.walkthrough && session?.sessionId && !(key && guideRuns[key]?.running)), run: () => { setDiffMode("guided"); setTab("diff"); generateWalkthrough(); } },
     { id: "next", menu: "Review", label: "Next finding", hint: "J", enabled: !!analysis?.findings.length, run: () => stepFinding(1), separatorBefore: true },
     { id: "prev", menu: "Review", label: "Previous finding", hint: "K", enabled: !!analysis?.findings.length, run: () => stepFinding(-1) },
+    { id: "describe", menu: "Review", label: "Edit description…", enabled: !!details && !!orgs?.login && details.author.login === orgs.login, run: () => setDescOpen(true) },
     { id: "submit", menu: "Review", label: "Submit review…", keys: { key: "Enter", ctrl: true, shift: true }, enabled: !!details, run: () => setReviewOpen(true), separatorBefore: true },
     { id: "ask", menu: "Review", label: "Ask Claude", keys: { key: "l", ctrl: true }, enabled: !!selected, run: () => { setChatOpen(true); setChatFocus((n) => n + 1); }, separatorBefore: true },
     { id: "clear-chat", menu: "Review", label: "Clear conversation", enabled: !!session?.chat.length, run: () => key && update(key, (s) => ({ ...s, chat: [] })) },
@@ -943,6 +1005,11 @@ export default function App() {
             states={findingStates}
             onState={setFindingState}
             threads={loaded && loaded.key === key ? loaded.threads : []}
+            ownPr={!!orgs?.login && details.author.login === orgs.login}
+            onEditDescription={() => setDescOpen(true)}
+            onThreadDraft={session?.worktree || selected ? draftReply : undefined}
+            onThreadReply={replyToThread}
+            onThreadResolve={resolveThread}
             onSelect={(k) => { setOutlineKey(k); setFocusPane("outline"); }}
             onOpenAnchor={openAnchor}
             onStart={() => startAnalysis()}
@@ -1105,6 +1172,9 @@ export default function App() {
         <span className="sb opt"><Lock size={13} />Read-only</span>
       </footer>
       {paletteOpen && <CommandPalette items={paletteItems} extra={openPrItem} onClose={() => setPaletteOpen(false)} />}
+      {descOpen && details && (
+        <DescriptionDialog current={details.body ?? ""} onDraft={draftDescription} onSave={saveDescription} onClose={() => setDescOpen(false)} />
+      )}
       {filtersOpen && (
         <FilterDialog
           sort={inboxSort}

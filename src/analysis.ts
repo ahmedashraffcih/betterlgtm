@@ -93,7 +93,14 @@ Reply with only one JSON block: \`\`\`json { ${WALKTHROUGH_SHAPE} } \`\`\``;
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 /** With `since`, a re-review: focus on what changed after the commit the reviewer last reviewed. */
-export function buildAnalysisPrompt(pr: PrDetails, extraInstructions = "", since?: string, issues: LinkedIssue[] = [], threads: ReviewThread[] = []): string {
+export function buildAnalysisPrompt(
+  pr: PrDetails,
+  extraInstructions = "",
+  since?: string,
+  issues: LinkedIssue[] = [],
+  threads: ReviewThread[] = [],
+  selfReview = false,
+): string {
   const extra = extraInstructions.trim() ? `\n\nThe reviewer's own instructions (follow them):\n${extraInstructions.trim()}` : "";
   const focus = since
     ? `\n\nThis is a re-review. The reviewer last reviewed commit ${since}. Focus on what changed since then: git diff ${since} HEAD (and git log ${since}..HEAD). Use the full PR diff only for context. Report findings only for code changed since ${since}, and check description claims only where the new commits affect them. Mention in the summary that this covers the changes since the last review.`
@@ -107,7 +114,10 @@ export function buildAnalysisPrompt(pr: PrDetails, extraInstructions = "", since
     ? `\n\nReviewers have already raised these points on the PR. Don't report them again as findings; only add what they missed:\n` +
       open.map((t) => `- ${t.path}${t.line ? `:${t.line}` : ""} (${t.comments[0].author}): ${t.comments[0].body.replace(/\s+/g, " ").slice(0, 300)}`).join("\n")
     : "";
-  return baseAnalysisPrompt(pr) + linked + discussed + focus + extra;
+  const self = selfReview
+    ? `\n\nThis is the reviewer's own pull request: they wrote it and want to check it before asking others to review. Address them as the author ("you"). In "recommendation", approve means it's ready to ask for reviews, comment means it's worth another look first, and request_changes means fix these before asking anyone.`
+    : "";
+  return baseAnalysisPrompt(pr) + linked + discussed + self + focus + extra;
 }
 
 function baseAnalysisPrompt(pr: PrDetails): string {
@@ -334,4 +344,28 @@ Line comments I'm posting:
 ${list}
 ${notes.trim() ? `\nWhat I've written so far (keep its intent):\n${notes.trim()}\n` : ""}
 Write 2–4 short sentences addressed to the author: what the PR does well if it's worth saying, what must change and why, and what happens next. Be specific and plain; no greetings, no headings, no generic praise, no repeating each comment. Reply with only the summary text.`;
+}
+
+/** Asks Claude to write the description for the author's own PR, following the repo's template. */
+export function buildDescriptionPrompt(pr: PrDetails): string {
+  return `Write the description for my pull request #${pr.number} "${pr.title}". The PR head is checked out here; see the change with: git diff origin/${pr.baseRefName}...HEAD
+
+If the repository has a pull request template (.github/pull_request_template.md, .github/PULL_REQUEST_TEMPLATE.md, docs/pull_request_template.md or a file in .github/PULL_REQUEST_TEMPLATE/), follow its sections.
+Current description (keep what's accurate):
+<description>
+${pr.body?.trim() || "(empty)"}
+</description>
+
+Cover what changes and why, how to test it, and anything reviewers should watch for. Use Markdown, short and concrete: bullets over paragraphs, no filler, no marketing words. Don't invent issue numbers or results you can't see. Reply with only the description.`;
+}
+
+/** Asks Claude to draft the user's reply to a review conversation. */
+export function buildReplyPrompt(thread: ReviewThread, me: string, author: string): string {
+  const role = me === author ? "the author of this pull request" : "a reviewer of this pull request";
+  return `Write my reply to this conversation on the pull request. I'm ${me}, ${role}.
+It's on ${thread.path}${thread.line ? ` line ${thread.line}` : ""}; read the code there first.
+
+${thread.comments.map((c) => `${c.author}: ${c.body}`).join("\n\n")}
+
+Reply in 1–3 plain sentences: agree and say what will change, answer the question, or explain briefly why not. Be specific to the code; no greetings or thanks filler. Reply with only the text.`;
 }

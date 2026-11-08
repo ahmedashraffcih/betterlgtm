@@ -152,8 +152,8 @@ pub async fn linked_issues(config: State<'_, ConfigState>, repo: String, number:
 pub async fn review_threads(config: State<'_, ConfigState>, repo: String, number: u64) -> Result<Value, String> {
     let (owner, name) = repo.split_once('/').ok_or_else(|| format!("Unexpected repository name: {repo}"))?;
     let query = "query($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { pullRequest(number: $num) {
-      reviewThreads(first: 100) { nodes { isResolved isOutdated path line startLine originalLine
-        comments(first: 30) { nodes { author { login } body createdAt url } } } } } } }";
+      reviewThreads(first: 100) { nodes { id isResolved isOutdated path line startLine originalLine
+        comments(first: 30) { nodes { databaseId author { login } body createdAt url } } } } } } }";
     let out = run(
         &config.get().gh_path,
         &["api", "graphql", "-f", &format!("query={query}"), "-f", &format!("o={owner}"), "-f", &format!("n={name}"), "-F", &format!("num={number}")],
@@ -168,12 +168,14 @@ pub async fn review_threads(config: State<'_, ConfigState>, repo: String, number
         .into_iter()
         .map(|t| {
             serde_json::json!({
+                "id": t["id"],
                 "isResolved": t["isResolved"],
                 "isOutdated": t["isOutdated"],
                 "path": t["path"],
                 "line": if t["line"].is_null() { t["originalLine"].clone() } else { t["line"].clone() },
                 "startLine": t["startLine"],
                 "comments": t["comments"]["nodes"].as_array().map(|c| c.iter().map(|x| serde_json::json!({
+                    "id": x["databaseId"],
                     "author": x["author"]["login"].as_str().unwrap_or("ghost"),
                     "body": x["body"],
                     "createdAt": x["createdAt"],
@@ -183,6 +185,33 @@ pub async fn review_threads(config: State<'_, ConfigState>, repo: String, number
         })
         .collect();
     Ok(Value::Array(threads))
+}
+
+/// Replaces the PR description. Only called when the author presses Save.
+#[tauri::command]
+pub async fn update_pr_body(config: State<'_, ConfigState>, repo: String, number: u64, body: String) -> Result<(), String> {
+    let file = std::env::temp_dir().join(format!("betterlgtm-body-{}-{number}.md", std::process::id()));
+    std::fs::write(&file, &body).map_err(|e| e.to_string())?;
+    let n = number.to_string();
+    let path = file.to_string_lossy().into_owned();
+    let out = run(&config.get().gh_path, &["pr", "edit", &n, "-R", &repo, "--body-file", &path], None).await;
+    let _ = std::fs::remove_file(&file);
+    out.map(|_| ())
+}
+
+/// Replies to a review thread, under its first comment. Only called when the user presses Reply.
+#[tauri::command]
+pub async fn reply_to_thread(config: State<'_, ConfigState>, repo: String, number: u64, comment_id: u64, body: String) -> Result<(), String> {
+    let path = format!("repos/{repo}/pulls/{number}/comments/{comment_id}/replies");
+    run(&config.get().gh_path, &["api", "-X", "POST", &path, "-f", &format!("body={body}")], None).await.map(|_| ())
+}
+
+/// Resolves or reopens a review thread.
+#[tauri::command]
+pub async fn resolve_thread(config: State<'_, ConfigState>, thread_id: String, resolve: bool) -> Result<(), String> {
+    let mutation = if resolve { "resolveReviewThread" } else { "unresolveReviewThread" };
+    let query = format!("mutation($id: ID!) {{ {mutation}(input: {{ threadId: $id }}) {{ thread {{ isResolved }} }} }}");
+    run(&config.get().gh_path, &["api", "graphql", "-f", &format!("query={query}"), "-f", &format!("id={thread_id}")], None).await.map(|_| ())
 }
 
 /// The user's login and the organizations they belong to, for the organization settings.
@@ -209,7 +238,7 @@ pub async fn pr_details(config: State<'_, ConfigState>, repo: String, number: u6
             "-R",
             &repo,
             "--json",
-            "number,title,body,url,author,isDraft,headRefName,baseRefName,headRefOid,additions,deletions,changedFiles,statusCheckRollup,reviewDecision,latestReviews,reviewRequests",
+            "number,title,body,url,author,isDraft,headRefName,baseRefName,headRefOid,additions,deletions,changedFiles,statusCheckRollup,reviewDecision,latestReviews,reviewRequests,mergeable,mergeStateStatus",
         ],
         None,
     )

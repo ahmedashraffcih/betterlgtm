@@ -2,6 +2,13 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+- **What's blocking merge** ([#17](https://github.com/drmas/betterlgtm/issues/17)): your own PRs show what stands between them and merging: draft status, conflicts or a branch behind its base, failing or running checks, requested changes, missing approvals and unresolved conversations.
+- **Self-review** ([#15](https://github.com/drmas/betterlgtm/issues/15)): run the analysis on your own PR before asking for reviews. Claude addresses you as the author, and the verdict reads "Ready to ask for reviews" or "Fix these before asking for reviews".
+- **Write the description** ([#16](https://github.com/drmas/betterlgtm/issues/16)): **Edit with Claude** drafts your PR's description from the diff, following the repository's PR template. Edit and preview it, then save it to GitHub.
+- **Reply to feedback** ([#18](https://github.com/drmas/betterlgtm/issues/18)): reply to a review conversation from the app, with **Draft reply with Claude** reading the code first, and resolve or reopen it.
+
 ## [0.3.0] — 2026-11-08
 
 - **Auto-analyze** ([#6](https://github.com/drmas/betterlgtm/issues/6)): optionally analyze new review requests in the background, so results are ready when you open the PR. Off by default since it uses tokens; turn it on in Settings › Claude. Covers requests that arrive after you turn it on, skips drafts unless you include them, runs 1–3 at a time, shows Queued in the inbox, and notifies you when each analysis is ready.

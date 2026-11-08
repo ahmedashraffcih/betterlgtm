@@ -29,12 +29,13 @@ export interface ReviewRequest {
 
 /** A conversation already on the PR, attached to a line of a file. */
 export interface ReviewThread {
+  id: string;
   isResolved: boolean;
   isOutdated: boolean;
   path: string;
   line: number | null;
   startLine: number | null;
-  comments: { author: string; body: string; createdAt: string; url: string }[];
+  comments: { id: number; author: string; body: string; createdAt: string; url: string }[];
 }
 
 /** An issue the PR closes. */
@@ -67,6 +68,9 @@ export interface CheckRun {
   conclusion?: string;
   status?: string;
   state?: string;
+  /** Check runs have a name; commit statuses have a context. */
+  name?: string;
+  context?: string;
 }
 
 export interface PrDetails {
@@ -89,6 +93,8 @@ export interface PrDetails {
   latestReviews?: Review[];
   /** Reviewers who were asked and haven't reviewed since: users have a login, teams a name. */
   reviewRequests?: { login?: string; name?: string; slug?: string }[];
+  mergeable?: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+  mergeStateStatus?: "BEHIND" | "BLOCKED" | "CLEAN" | "DIRTY" | "DRAFT" | "HAS_HOOKS" | "UNKNOWN" | "UNSTABLE";
 }
 
 export interface Review {
@@ -118,6 +124,9 @@ export const api = {
     invoke<{ diff: string; commits: { oid: string; subject: string }[] }>("diff_since", { repo, number, baseRef, since }),
   linkedIssues: (repo: string, number: number) => invoke<LinkedIssue[]>("linked_issues", { repo, number }),
   reviewThreads: (repo: string, number: number) => invoke<ReviewThread[]>("review_threads", { repo, number }),
+  updatePrBody: (repo: string, number: number, body: string) => invoke<void>("update_pr_body", { repo, number, body }),
+  replyToThread: (repo: string, number: number, commentId: number, body: string) => invoke<void>("reply_to_thread", { repo, number, commentId, body }),
+  resolveThread: (threadId: string, resolve: boolean) => invoke<void>("resolve_thread", { threadId, resolve }),
   listOrgs: () => invoke<{ login: string; orgs: string[] }>("list_orgs"),
   setConfig: (config: { ghPath: string; claudePath: string; dataDir: string; model: string; effort: string }) => invoke<void>("set_config", { config }),
   toolStatus: () =>
