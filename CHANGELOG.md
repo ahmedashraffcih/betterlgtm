@@ -2,7 +2,7 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 0.2.0 — 2026-11-08
 
 - The app checks for new versions and installs them when you choose **Install update** in the status bar. Turn automatic checks off in Settings › General, or use Help › Check for updates.
 
@@ -25,5 +25,6 @@ The first release.
 - Menu bar, command palette, keyboard shortcuts, light and dark themes, and a Settings page.
 - Installers for macOS (Apple silicon and Intel), Windows and Linux.
 
+[0.2.0]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.0
 [0.1.1]: https://github.com/drmas/betterlgtm/releases/tag/v0.1.1
 [0.1.0]: https://github.com/drmas/betterlgtm/releases/tag/v0.1.0
