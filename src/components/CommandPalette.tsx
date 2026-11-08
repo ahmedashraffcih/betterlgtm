@@ -11,7 +11,7 @@ export interface PaletteItem {
 }
 
 /** Ctrl+K: jump to a pull request, finding, section or file, or run a command. */
-export function CommandPalette({ items, onClose }: { items: PaletteItem[]; onClose: () => void }) {
+export function CommandPalette({ items, onClose, extra }: { items: PaletteItem[]; onClose: () => void; /** An item built from the query itself, shown first. */ extra?: (query: string) => PaletteItem | null }) {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -25,8 +25,9 @@ export function CommandPalette({ items, onClose }: { items: PaletteItem[]; onClo
       const hay = `${it.label} ${it.detail ?? ""} ${it.group}`.toLowerCase();
       return words.every((w) => hay.includes(w));
     });
-    return hits.slice(0, 60);
-  }, [items, query]);
+    const fromQuery = extra?.(query.trim());
+    return [...(fromQuery ? [fromQuery] : []), ...hits].slice(0, 60);
+  }, [items, query, extra]);
 
   useEffect(() => setIndex(0), [query]);
   useEffect(() => {
@@ -63,7 +64,7 @@ export function CommandPalette({ items, onClose }: { items: PaletteItem[]; onClo
           <input
             ref={input}
             value={query}
-            placeholder="Pull requests, findings, sections, files, commands…"
+            placeholder="Pull requests, findings, files, commands, or paste a PR link…"
             aria-label="Search"
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKey}

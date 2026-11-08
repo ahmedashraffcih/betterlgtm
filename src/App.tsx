@@ -521,6 +521,29 @@ export default function App() {
   ];
   commandsRef.current = commands;
 
+  /** A palette item that opens any PR typed as a GitHub link or owner/repo#number. */
+  const openPrItem = (q: string): PaletteItem | null => {
+    const m = q.match(/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/) ?? q.match(/^([\w.-]+\/[\w.-]+)#(\d+)$/);
+    if (!m) return null;
+    const [repo, number] = [m[1], Number(m[2])];
+    return {
+      id: `open-${repo}#${number}`,
+      group: "Open",
+      label: `Open ${repo}#${number}`,
+      icon: <GitPullRequestArrow size={14} />,
+      run: () =>
+        selectPr({
+          number,
+          title: `${repo}#${number}`,
+          url: `https://github.com/${repo}/pull/${number}`,
+          isDraft: false,
+          updatedAt: new Date().toISOString(),
+          author: { login: "" },
+          repository: { name: repo.split("/")[1], nameWithOwner: repo },
+        }),
+    };
+  };
+
   // Everything the Ctrl+K palette can jump to.
   const paletteItems: PaletteItem[] = paletteOpen
     ? [
@@ -583,8 +606,8 @@ export default function App() {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <section aria-label="Pull request" className="prhead">
         <div className="prhead-row">
-          <h1 className="ellipsis" title={selected.title}>
-            {selected.title} <span className="muted" style={{ fontWeight: 400 }}>#{selected.number}</span>
+          <h1 className="ellipsis" title={details?.title ?? selected.title}>
+            {details?.title ?? selected.title} <span className="muted" style={{ fontWeight: 400 }}>#{selected.number}</span>
           </h1>
           <div className="seg" role="group" aria-label="View">
             <button type="button" className={tab === "analysis" ? "on" : ""} aria-pressed={tab === "analysis"} onClick={() => setTab("analysis")} title="Analysis">
@@ -801,7 +824,7 @@ export default function App() {
         {details && <span className="sb opt ellipsis"><GitBranch size={13} />{details.headRefName} @ {details.headRefOid.slice(0, 7)}</span>}
         <span className="sb opt"><Lock size={13} />Read-only</span>
       </footer>
-      {paletteOpen && <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
+      {paletteOpen && <CommandPalette items={paletteItems} extra={openPrItem} onClose={() => setPaletteOpen(false)} />}
       {reviewOpen && selected && details && key && (
         <SubmitReview
           repo={selected.repository.nameWithOwner}
