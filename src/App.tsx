@@ -26,7 +26,8 @@ import { emptySession, useSessions, useStoredState, type ChatItem } from "./sess
 import { Settings, type SettingsSection } from "./components/Settings";
 import { ownerVisible, useSettings } from "./settings";
 import { useUpdater } from "./updates";
-import { useReviewNotifications } from "./notify";
+import { waitingSince } from "./risk";
+import { notify, useReviewNotifications } from "./notify";
 
 interface Loaded {
   key: string;
@@ -274,11 +275,8 @@ export default function App() {
     return wt;
   };
 
-  const startAnalysis = async (opts: { since?: string } = {}) => {
-    if (!selected || !loaded || loaded.key !== key || !key) return;
-    const k = key;
-    const pr = selected;
-    const details = loaded.details;
+  /** Analyzes one PR. Background runs (auto-analyze) leave the current view alone and notify when done. */
+  const runAnalysis = async (k: string, pr: ReviewRequest, details: PrDetails, opts: { since?: string; background?: boolean } = {}) => {
     const runId = `analysis-${k}-${Date.now()}`;
     runIds.current[k] = runId;
     setRun(k, () => ({ running: true, step: "Preparing the worktree…", log: [] }));
@@ -316,15 +314,23 @@ export default function App() {
         tokens: (s.tokens ?? 0) + tokensOf(usage),
         costUsd: (s.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
-      if (parsed) {
+      if (parsed && !opts.background) {
         setGuideStep(0);
         setOutlineKey("s0");
         setFocusPane("outline");
+      }
+      if (parsed && opts.background && settings.notifications) {
+        const crit = parsed.findings.filter((f) => f.severity === "critical" || f.severity === "high").length;
+        notify(`Analysis ready: ${pr.repository.name}#${pr.number}`, `${pr.title}\n${crit ? `${crit} critical or high ${crit === 1 ? "finding" : "findings"}` : `${parsed.findings.length} findings, none critical or high`}`).catch(() => {});
       }
       setRun(k, (r) => ({ ...r, running: false, step: "", error: parsed ? undefined : "Claude finished, but its answer didn't contain a readable result." }));
     } catch (e) {
       setRun(k, (r) => ({ ...r, running: false, error: errorText(e) }));
     }
+  };
+  const startAnalysis = async (opts: { since?: string } = {}) => {
+    if (!selected || !loaded || loaded.key !== key || !key) return;
+    await runAnalysis(key, selected, loaded.details, opts);
   };
 
   const cancelAnalysis = () => key && runIds.current[key] && api.claudeCancel(runIds.current[key]);
@@ -584,6 +590,32 @@ export default function App() {
   };
   const run = key ? runs[key] : undefined;
   const analyzing = useMemo(() => new Set(Object.entries(runs).filter(([, r]) => r.running).map(([k]) => k)), [runs]);
+
+  // Auto-analyze: review requests that arrived after it was turned on, a few at a time.
+  const autoTried = useRef(new Set<string>());
+  const autoQueue = useMemo(() => {
+    if (!settings.autoAnalyze || !visibleRequests) return [];
+    const since = settings.autoAnalyzeSince ?? Date.now();
+    return visibleRequests.filter((pr) => {
+      const k = prKey(pr);
+      if (sessions[k]?.analysis || runs[k] || autoTried.current.has(k)) return false;
+      if (pr.isDraft && !settings.autoAnalyzeDrafts) return false;
+      return new Date(waitingSince(pr)).getTime() >= since;
+    });
+  }, [settings.autoAnalyze, settings.autoAnalyzeSince, settings.autoAnalyzeDrafts, visibleRequests, sessions, runs]);
+  useEffect(() => {
+    const free = settings.autoAnalyzeLimit - analyzing.size;
+    for (const pr of autoQueue.slice(0, Math.max(0, free))) {
+      const k = prKey(pr);
+      autoTried.current.add(k);
+      setRun(k, () => ({ running: true, step: "Loading the pull request…", log: [] }));
+      api
+        .prDetails(pr.repository.nameWithOwner, pr.number)
+        .then((d) => runAnalysis(k, pr, d, { background: true }))
+        .catch((e) => setRun(k, (r) => ({ ...r, running: false, error: errorText(e) })));
+    }
+  }, [autoQueue, analyzing.size, settings.autoAnalyzeLimit]);
+  const queued = useMemo(() => new Set(autoQueue.map(prKey)), [autoQueue]);
   const critHigh = analysis?.findings.filter((f) => f.severity === "critical" || f.severity === "high").length ?? 0;
   const ci = details?.statusCheckRollup ?? [];
   const ciFailing = ci.some((c) => ["FAILURE", "ERROR", "TIMED_OUT"].includes((c.conclusion ?? c.state ?? "").toUpperCase()));
@@ -970,6 +1002,7 @@ export default function App() {
                   focused={focusPane === "inbox"}
                   sessions={sessions}
                   analyzing={analyzing}
+                  queued={queued}
                   onSelect={(pr) => { selectPr(pr); if (compact) setInboxExpanded(false); }}
                   onRefresh={refresh}
                   onHideOwner={hideOwner}

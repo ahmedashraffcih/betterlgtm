@@ -16,7 +16,9 @@ function loadSeen(): Record<string, string> | null {
   }
 }
 
-async function notify(title: string, body: string) {
+/** A desktop notification, asking for permission the first time. Does nothing outside the app. */
+export async function notify(title: string, body: string) {
+  if (!inTauri) return;
   let granted = await isPermissionGranted();
   if (!granted) granted = (await requestPermission()) === "granted";
   if (granted) sendNotification({ title, body });

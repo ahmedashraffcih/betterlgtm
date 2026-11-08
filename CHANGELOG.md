@@ -2,6 +2,10 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+- **Auto-analyze** ([#6](https://github.com/drmas/betterlgtm/issues/6)): optionally analyze new review requests in the background, so results are ready when you open the PR. Off by default since it uses tokens; turn it on in Settings › Claude. Covers requests that arrive after you turn it on, skips drafts unless you include them, runs 1–3 at a time, shows Queued in the inbox, and notifies you when each analysis is ready.
+
 ## [0.2.6] — 2026-11-08
 
 - **Vim-style keys**: move between the inbox, the list and the content with h/l, through items with j/k, jump with gg/G, step through findings with n/N and files or sections with ]/[, mark reviewed with x, add a finding to the review with a, and submit with S. Esc leaves a text field. Press ? for the full list; turn them off in Settings › General. j/k now move within the focused pane; n/N step through findings.

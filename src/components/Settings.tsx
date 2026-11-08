@@ -259,6 +259,25 @@ export function Settings(p: Props) {
               </Row>
             </div>
             <div className="set-group">
+              <div className="set-title">Auto-analyze</div>
+              <Check
+                label="Analyze new review requests automatically"
+                hint="Runs in the background for requests that arrive after you turn this on, so results are ready when you open the PR. Uses Claude tokens for every request."
+                checked={s.autoAnalyze}
+                onChange={(v) => p.update({ autoAnalyze: v, ...(v ? { autoAnalyzeSince: Date.now() } : {}) })}
+              />
+              {s.autoAnalyze && (
+                <>
+                  <Check label="Include draft pull requests" checked={s.autoAnalyzeDrafts} onChange={(v) => p.update({ autoAnalyzeDrafts: v })} />
+                  <Row label="Run at once" hint="More at once finishes sooner but uses more of your Claude limits">
+                    <select className="set-input" value={s.autoAnalyzeLimit} onChange={(e) => p.update({ autoAnalyzeLimit: Number(e.target.value) })}>
+                      {[1, 2, 3].map((n) => <option key={n} value={n}>{n === 1 ? "1 analysis" : `${n} analyses`}</option>)}
+                    </select>
+                  </Row>
+                </>
+              )}
+            </div>
+            <div className="set-group">
               <div className="set-title" style={{ display: "flex", alignItems: "center", gap: 6 }}><Cpu size={13} />Extra review instructions</div>
               <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
                 <span className="muted" style={{ fontSize: 12 }}>Added to every analysis. For example: what your team cares about, or what to ignore.</span>

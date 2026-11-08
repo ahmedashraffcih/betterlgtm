@@ -1,4 +1,4 @@
-import { Building2, ListFilter, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, CircleX, EyeOff, Funnel, Loader, OctagonExclamationPoint, PencilLine, RefreshCw, X } from "lucide-react";
+import { Building2, Clock, ListFilter, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, CircleX, EyeOff, Funnel, Loader, OctagonExclamationPoint, PencilLine, RefreshCw, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ReviewRequest } from "../api";
 import { COMPARE, matchesFilters, type Filters, type SortKey } from "../inboxFilters";
@@ -56,6 +56,8 @@ interface Props {
   focused: boolean;
   sessions: Record<string, PrSession>;
   analyzing: Set<string>;
+  /** PRs waiting for auto-analyze. */
+  queued?: Set<string>;
   onSelect: (pr: ReviewRequest) => void;
   onRefresh: () => void;
   onHideOwner: (owner: string) => void;
@@ -203,6 +205,8 @@ export function Inbox(p: Props) {
                         </span>
                         {p.analyzing.has(key) ? (
                           <span className="st" title="Analysis running"><Loader size={12} className="spin" />Analyzing</span>
+                        ) : p.queued?.has(key) ? (
+                          <span className="st" title="Waiting to be analyzed automatically"><Clock size={12} />Queued</span>
                         ) : crit > 0 ? (
                           <span className="st crit" title={`${crit} critical findings`}><OctagonExclamationPoint size={12} />{crit} crit</span>
                         ) : s?.analysis ? (

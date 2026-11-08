@@ -30,6 +30,13 @@ export interface Settings {
   model: string;
   effort: string;
   reviewInstructions: string;
+  /** Analyze new review requests in the background. */
+  autoAnalyze: boolean;
+  /** When auto-analyze was turned on; only requests after this are analyzed automatically. */
+  autoAnalyzeSince?: number;
+  autoAnalyzeDrafts: boolean;
+  /** How many analyses auto-analyze runs at once. */
+  autoAnalyzeLimit: number;
   // Tools and storage
   ghPath: string;
   claudePath: string;
@@ -55,6 +62,9 @@ export const DEFAULT_SETTINGS: Settings = {
   model: "",
   effort: "",
   reviewInstructions: "",
+  autoAnalyze: false,
+  autoAnalyzeDrafts: false,
+  autoAnalyzeLimit: 1,
   ghPath: "gh",
   claudePath: "claude",
   dataDir: "",
