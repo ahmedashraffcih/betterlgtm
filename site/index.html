@@ -201,6 +201,12 @@ h2 { font-size: 42px; line-height: 1.06; letter-spacing: -0.03em; font-weight: 8
 .dl .meta { font-weight: 500; font-size: 15px; color: var(--hero-muted); }
 .download .fine { margin-top: 36px; font-size: 15px; color: var(--hero-muted); max-width: 46em; }
 .download .fine a { color: #FFFFFF; }
+.brew { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 56px; margin-top: 32px; padding: 8px 8px 8px 16px; border-radius: 10px; border: 1px dashed rgba(255, 255, 255, 0.4); }
+.brew-label { font-weight: 600; }
+.brew code { flex: 1; min-width: 0; font-size: 15px; color: #FFFFFF; }
+.brew button { flex: none; height: 40px; padding: 0 14px; border-radius: 7px; border: 0; background: rgba(255, 255, 255, 0.16); color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+.brew button:hover { background: rgba(255, 255, 255, 0.26); }
+.brew button:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
 
 footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding-top: 32px; padding-bottom: 40px; font-size: 15px; color: var(--muted); }
 footer .badge { height: 22px; padding: 0 7px; border-radius: 5px; background: var(--brand); color: #FFFFFF; font-size: 12px; }
@@ -220,6 +226,7 @@ footer .end { margin-left: auto; }
   .local, .download { padding: 80px 0; }
   .local-grid { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .platforms { grid-template-columns: minmax(0, 1fr); }
+  .brew-label { flex-basis: 100%; }
   footer .end { margin-left: 0; }
 }
 </style>
@@ -347,6 +354,7 @@ footer .end { margin-left: auto; }
         <a class="dl" data-asset="rpm" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM-0.4.1-1.x86_64.rpm"><span>Fedora</span><span class="meta">.rpm, 4.2 MB</span></a>
       </div>
     </div>
+    <div class="brew"><span class="brew-label">On a Mac with Homebrew</span><code id="brew-cmd">brew install --cask drmas/tap/betterlgtm</code><button type="button" id="brew-copy" aria-label="Copy the Homebrew command">Copy</button></div>
     <p class="fine"><span id="version">Version 0.4.1.</span> The macOS app is signed and notarized by Apple, and the app updates itself from here on. Windows builds aren't signed yet: if SmartScreen warns, choose More info › Run anyway. <a href="https://github.com/drmas/betterlgtm/releases">All releases</a></p>
   </div>
 </section>
@@ -386,6 +394,13 @@ footer .end { margin-left: auto; }
   }
 
   setHero("0.4.1");
+  document.getElementById("brew-copy").addEventListener("click", function () {
+    var button = this;
+    navigator.clipboard.writeText(document.getElementById("brew-cmd").textContent).then(function () {
+      button.textContent = "Copied";
+      setTimeout(function () { button.textContent = "Copy"; }, 1600);
+    });
+  });
   fetch("https://api.github.com/repos/drmas/betterlgtm/releases/latest")
     .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
     .then(function (release) {
