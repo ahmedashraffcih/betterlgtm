@@ -24,6 +24,8 @@ export interface Finding {
   title: string;
   body: string;
   fix?: string;
+  /** Exact replacement for the lines of the first anchor, when the fix is small and certain. */
+  suggestion?: string;
   confidence?: "high" | "medium" | "low";
   notInDescription?: boolean;
   anchors: Anchor[];
@@ -106,6 +108,9 @@ The reviewer skims. Be brief and concrete:
 - Use \`inline code\` for identifiers. No headings, no bold.
 - Limits: title up to 8 words; summary 2–4 bullets; finding body 1–3 bullets; fix one line;
   claim note one line; recommendation reason one line; reading-order "why" up to 8 words.
+When a finding's fix is a small, certain change to exactly the lines of its first anchor, add "suggestion":
+the full replacement text for those lines (startLine to endLine of the new file), with the original indentation and
+no diff markers. Leave it out when the fix touches other lines or you aren't sure.
 Line numbers refer to the new version of the file. Paths are relative to the repository root.
 When you are done, reply with only one JSON block in this shape:
 
@@ -116,7 +121,7 @@ When you are done, reply with only one JSON block in this shape:
   "claims": [{ "text": "...", "verdict": "implemented|partial|contradicted|missing", "note": "...", "finding": 0,
                "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
   "findings": [{ "severity": "critical|high|medium|low", "category": "Correctness|Security|Behavior change|Tests|Data handling|Performance|Maintainability",
-                 "title": "...", "body": ["...", "..."], "fix": "...", "confidence": "high|medium|low", "notInDescription": false,
+                 "title": "...", "body": ["...", "..."], "fix": "...", "suggestion": "replacement lines", "confidence": "high|medium|low", "notInDescription": false,
                  "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
   ${WALKTHROUGH_SHAPE}
 }
@@ -169,6 +174,7 @@ export function parseAnalysis(text: string): Analysis | null {
         ...f,
         body: asText(f.body),
         fix: f.fix ? asText(f.fix) : undefined,
+        suggestion: typeof f.suggestion === "string" && f.suggestion.trim() ? f.suggestion.replace(/\n$/, "") : undefined,
         anchors: asArray<Anchor>(f.anchors),
       }));
       const order = findings.map((_, i) => i).sort((a, b) => SEVERITY_RANK[findings[a].severity] - SEVERITY_RANK[findings[b].severity]);

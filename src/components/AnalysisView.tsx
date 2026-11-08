@@ -401,6 +401,7 @@ function Detail(p: Props & { analysis: Analysis }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
               <b>Suggested fix</b>
               <Markdown text={f.fix} />
+              {f.suggestion && <pre className="suggestion-code" aria-label="Suggested replacement">{f.suggestion}</pre>}
             </div>
           </div>
         )}

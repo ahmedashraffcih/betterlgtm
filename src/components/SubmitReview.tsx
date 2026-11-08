@@ -30,6 +30,15 @@ interface Item {
   checked: boolean;
   text: string;
   where: ReturnType<typeof commentLines>;
+  /** Post the finding's suggestion as a GitHub suggestion block. Only offered when it covers exactly the commented lines. */
+  suggest: boolean;
+  canSuggest: boolean;
+}
+
+/** A suggestion replaces exactly the commented lines, so it needs the comment on the anchor's full range. */
+function suggestable(f: Finding, where: ReturnType<typeof commentLines>): boolean {
+  const a = f.anchors[0];
+  return !!(f.suggestion && a && where && a.startLine > 0 && where.line === a.endLine && (where.start_line ?? where.line) === a.startLine);
 }
 
 const EVENTS: [ReviewEvent, string][] = [
@@ -52,7 +61,13 @@ export function SubmitReview(p: Props) {
       checked: p.checks?.[index]?.status !== "fixed" && !p.states?.[index] && (p.inReview.length ? p.inReview.includes(index) : finding.severity === "critical" || finding.severity === "high"),
       text: commentText(finding),
       where: finding.anchors.map((a) => commentLines(p.files, a)).find(Boolean) ?? null,
-    })),
+      suggest: false,
+      canSuggest: false,
+    })).map((i) => {
+      const where = i.finding.anchors[0] ? commentLines(p.files, i.finding.anchors[0]) : null;
+      const can = suggestable(i.finding, where);
+      return can ? { ...i, where, canSuggest: true, suggest: true } : i;
+    }),
   );
   const suggested: ReviewEvent = { approve: "APPROVE", request_changes: "REQUEST_CHANGES", comment: "COMMENT" }[p.analysis?.recommendation?.decision ?? "comment"] as ReviewEvent;
   const [event, setEvent] = useState<ReviewEvent>(p.ownPr ? "COMMENT" : suggested);
@@ -95,7 +110,7 @@ export function SubmitReview(p: Props) {
         commitId: p.details.headRefOid,
         event,
         body,
-        comments: inline.map((i) => ({ ...i.where!, body: i.text })),
+        comments: inline.map((i) => ({ ...i.where!, body: i.suggest && i.canSuggest ? `${i.text}\n\n\`\`\`suggestion\n${i.finding.suggestion}\n\`\`\`` : i.text })),
       });
       p.onSubmitted(url, chosen.map((i) => i.index));
     } catch (e) {
@@ -148,6 +163,13 @@ export function SubmitReview(p: Props) {
                       <>
                         <textarea className="set-input" rows={4} value={i.text} aria-label={`Comment for ${i.finding.title}`} onChange={(e) => update(i.index, { text: e.target.value })} />
                         {!i.where && <p className="muted review-note">GitHub only takes comments on lines in the diff, so this goes in the review summary.</p>}
+                        {i.canSuggest && (
+                          <label className="review-suggest">
+                            <input type="checkbox" checked={i.suggest} onChange={(e) => update(i.index, { suggest: e.target.checked })} />
+                            <span>Add the fix as a suggestion the author can apply</span>
+                          </label>
+                        )}
+                        {i.canSuggest && i.suggest && <pre className="suggestion-code" aria-label="Suggested change">{i.finding.suggestion}</pre>}
                       </>
                     )}
                   </div>
