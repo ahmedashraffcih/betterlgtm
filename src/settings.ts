@@ -9,6 +9,8 @@ export interface Settings {
   autoUpdate: boolean;
   /** Single-letter, vim-style keys (j/k, h/l, gg, …) when no text field has focus. */
   vimKeys: boolean;
+  /** Desktop notifications and the dock or taskbar count for review requests. */
+  notifications: boolean;
   // Organizations and review requests
   orgMode: "all" | "selected";
   /** Used in "all" mode: organizations left out of the inbox. */
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   refreshMinutes: 5,
   autoUpdate: true,
   vimKeys: true,
+  notifications: true,
   orgMode: "all",
   hiddenOrgs: [],
   selectedOrgs: [],

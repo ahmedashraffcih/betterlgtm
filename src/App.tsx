@@ -24,6 +24,7 @@ import { emptySession, useSessions, useStoredState, type ChatItem } from "./sess
 import { Settings, type SettingsSection } from "./components/Settings";
 import { ownerVisible, useSettings } from "./settings";
 import { useUpdater } from "./updates";
+import { useReviewNotifications } from "./notify";
 
 interface Loaded {
   key: string;
@@ -191,6 +192,7 @@ export default function App() {
   const visibleRequests = useMemo(() => visibleOf(requests), [visibleOf, requests]);
   const visibleMine = useMemo(() => visibleOf(myPrs), [visibleOf, myPrs]);
   const inboxList = inboxView === "mine" ? visibleMine : visibleRequests;
+  useReviewNotifications(visibleRequests, settings.notifications);
   const hiddenCount = inboxView === "mine" ? (myPrs?.length ?? 0) - (visibleMine?.length ?? 0) : (requests?.length ?? 0) - (visibleRequests?.length ?? 0);
   /** The inbox's "hide" button: drops an organization, or personal repositories, from the inbox. */
   const hideOwner = (owner: string) => {

@@ -24,7 +24,7 @@ It runs on your machine with the `gh` and `claude` command-line tools you alread
 
 ## Features
 
-- **Review inbox.** Pull requests where your review is requested, directly or through a team, grouped by organization and refreshed on a timer. Switch to **Mine** for your own open pull requests. Each row shows CI, review state, size and a risk estimate, and the list sorts by risk, waiting time, size or last update. Hide the organizations you don't care about.
+- **Review inbox.** Pull requests where your review is requested, directly or through a team, grouped by organization and refreshed on a timer. Switch to **Mine** for your own open pull requests. Each row shows CI, review state, size and a risk estimate, and the list sorts by risk, waiting time, size or last update. A desktop notification and a count on the app icon tell you when a review is requested or requested again. Hide the organizations you don't care about.
 - **A worktree per PR.** Each pull request is checked out next to a shared clone, so Claude reads real files, not just the diff, and your own working copy is never touched.
 - **Description check.** Each claim in the PR description is marked as matching, partly implemented, or contradicted by the code.
 - **Findings.** Bugs, risks and gaps, ranked by severity and linked to the exact diff lines.
