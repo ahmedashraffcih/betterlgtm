@@ -2,6 +2,13 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.4.1] — 2026-11-08
+
+- **Faster startup**: the inbox shows its last copy right away and refreshes in the background, and the parts of the app you don't see at launch load after the first paint.
+- **Faster PR switching**: recently opened PRs reopen instantly, PRs start loading when you hover them or move next to them, and the diff shows before the description and conversations finish loading.
+- **Faster diffs**: syntax highlighting runs in the background and is remembered per file, typing and Claude's live output no longer redraw the diff, and long files render as you scroll.
+- **Fixed**: the main button in dialogs lost its color on hover in dark mode.
+
 ## [0.4.0] — 2026-11-08
 
 - **What's blocking merge** ([#17](https://github.com/drmas/betterlgtm/issues/17)): your own PRs show what stands between them and merging: draft status, conflicts or a branch behind its base, failing or running checks, requested changes, missing approvals and unresolved conversations.
@@ -78,6 +85,7 @@ The first release.
 - Menu bar, command palette, keyboard shortcuts, light and dark themes, and a Settings page.
 - Installers for macOS (Apple silicon and Intel), Windows and Linux.
 
+[0.4.1]: https://github.com/drmas/betterlgtm/releases/tag/v0.4.1
 [0.4.0]: https://github.com/drmas/betterlgtm/releases/tag/v0.4.0
 [0.3.0]: https://github.com/drmas/betterlgtm/releases/tag/v0.3.0
 [0.2.6]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.6

@@ -1,7 +1,7 @@
 {
   "name": "betterlgtm",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Review GitHub pull requests with Claude Code, from your desktop",
   "license": "MIT",
   "repository": {
