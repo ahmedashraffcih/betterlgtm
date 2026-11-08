@@ -194,6 +194,16 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
   switch (cmd) {
     case "list_review_requests":
       return requests;
+    case "review_threads":
+      return [
+        { isResolved: false, isOutdated: false, path: "src/http/charges.ts", line: 42, startLine: null, comments: [
+          { author: "mchen", body: "Should this return 409 when the same key comes with a different body?", createdAt: new Date(Date.now() - 3 * 3600e3).toISOString(), url: "https://github.com/acme/payments-api/pull/482#discussion_r1" },
+          { author: "lkowal", body: "Good point, I'll add that check.", createdAt: new Date(Date.now() - 2 * 3600e3).toISOString(), url: "https://github.com/acme/payments-api/pull/482#discussion_r2" },
+        ] },
+        { isResolved: true, isOutdated: true, path: "src/idempotency/store.ts", line: 12, startLine: null, comments: [
+          { author: "review-bot", body: "Consider a shorter TTL for test environments.", createdAt: new Date(Date.now() - 6 * 3600e3).toISOString(), url: "https://github.com/acme/payments-api/pull/482#discussion_r3" },
+        ] },
+      ];
     case "linked_issues":
       return [{ number: 311, title: "Retried charges are billed twice", body: "When a client times out and retries POST /v1/charges, the customer is charged twice.\n\nAcceptance:\n- Retrying with the same Idempotency-Key never creates a second charge\n- Works when two retries arrive at the same time", url: "https://github.com/acme/payments-api/issues/311", repository: { nameWithOwner: "acme/payments-api" } }];
     case "last_review":

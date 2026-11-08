@@ -4,7 +4,7 @@ import { Check, Code, Download, ExternalLink, History, FileDiff, GitBranch, GitP
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
-import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest } from "./api";
+import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
 import { anchorLabel, findingId, type Finding, type FindingState, buildAnalysisPrompt, buildSummaryPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
 import { AnalysisView, type OutlineKey, type RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
@@ -35,6 +35,7 @@ interface Loaded {
   bodyHtml: string;
   files: FileData[];
   issues: LinkedIssue[];
+  threads: ReviewThread[];
 }
 
 type Pane = "inbox" | "outline" | "content";
@@ -258,8 +259,9 @@ export default function App() {
       // The rendered description is a nicety; fall back to the raw Markdown if it fails.
       api.prBodyHtml(repo, selected.number).catch(() => ""),
       api.linkedIssues(repo, selected.number).catch(() => [] as LinkedIssue[]),
+      api.reviewThreads(repo, selected.number).catch(() => [] as ReviewThread[]),
     ])
-      .then(([details, diff, bodyHtml, issues]) => !stale && setLoaded({ key, details, bodyHtml, issues, files: parseDiff(diff, { nearbySequences: "zip" }) }))
+      .then(([details, diff, bodyHtml, issues, threads]) => !stale && setLoaded({ key, details, bodyHtml, issues, threads, files: parseDiff(diff, { nearbySequences: "zip" }) }))
       .catch((e) => !stale && setLoadError(errorText(e)));
     return () => {
       stale = true;
@@ -284,12 +286,15 @@ export default function App() {
     setRun(k, () => ({ running: true, step: "Preparing the worktree…", log: [] }));
     try {
       const wt = await ensureWorktree(k, pr, details);
-      const issues = await api.linkedIssues(pr.repository.nameWithOwner, pr.number).catch(() => [] as LinkedIssue[]);
+      const [issues, threads] = await Promise.all([
+        api.linkedIssues(pr.repository.nameWithOwner, pr.number).catch(() => [] as LinkedIssue[]),
+        api.reviewThreads(pr.repository.nameWithOwner, pr.number).catch(() => [] as ReviewThread[]),
+      ]);
       setRun(k, (r) => ({ ...r, step: "Claude is reading the change…", log: [...r.log, `Worktree: ${wt}`, ...issues.map((i) => `Linked issue #${i.number}: ${i.title}`)] }));
       let finalText = "";
       let sessionId: string | undefined;
       let usage: ClaudeUsage = {};
-      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"), opts.since, issues), undefined, (e) => {
+      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"), opts.since, issues, threads), undefined, (e) => {
         if (e.session_id) sessionId = e.session_id;
         if (e.type === "assistant") {
           for (const block of e.message?.content ?? []) {
@@ -937,6 +942,7 @@ export default function App() {
             checks={checks?.results}
             states={findingStates}
             onState={setFindingState}
+            threads={loaded && loaded.key === key ? loaded.threads : []}
             onSelect={(k) => { setOutlineKey(k); setFocusPane("outline"); }}
             onOpenAnchor={openAnchor}
             onStart={() => startAnalysis()}

@@ -7,7 +7,7 @@ import {
 import { useState } from "react";
 import type { FileData } from "react-diff-view";
 import { anchorLabel, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck, type FindingState } from "../analysis";
-import type { PrDetails } from "../api";
+import type { PrDetails, ReviewThread } from "../api";
 import { categoryIcon, SEVERITY, VERDICT } from "../icons";
 import { changesInRange, findFile, lineNumbers, testCodeLines } from "../diffUtils";
 import { prRisk } from "../risk";
@@ -15,7 +15,7 @@ import { useElementWidth } from "../hooks";
 import { GithubHtml, Markdown } from "./Markdown";
 
 /** s0 = overview, d0 = PR description, c = claim, f = finding. */
-export type OutlineKey = `s${number}` | `d${number}` | `f${number}` | `c${number}`;
+export type OutlineKey = `s${number}` | `d${number}` | `f${number}` | `c${number}` | `t${number}`;
 
 export interface RunState {
   running: boolean;
@@ -39,6 +39,8 @@ interface Props {
   /** Dismissed, resolved or commented findings, by index. */
   states?: Record<number, FindingState>;
   onState: (finding: number, state: FindingState | null) => void;
+  /** Review threads already on the PR. */
+  threads?: ReviewThread[];
   onSelect: (k: OutlineKey) => void;
   onOpenAnchor: (a: Anchor, finding: number | null) => void;
   onStart: () => void;
@@ -119,6 +121,7 @@ export function AnalysisView(p: Props) {
   const [showVerified, setShowVerified] = useState(false);
   const [showMinor, setShowMinor] = useState(false);
   const [showDismissed, setShowDismissed] = useState(false);
+  const [showResolvedThreads, setShowResolvedThreads] = useState(false);
   // In narrow panes the list and the detail take turns instead of sitting side by side.
   const [rootRef, width] = useElementWidth<HTMLDivElement>();
   const [showDetail, setShowDetail] = useState(false);
@@ -201,6 +204,23 @@ export function AnalysisView(p: Props) {
           <Toggle open={showDismissed} text={dismissed.length === 1 ? "1 dismissed finding" : `${dismissed.length} dismissed findings`} onClick={() => setShowDismissed(!showDismissed)} />
         )}
         {showDismissed && dismissed.map(({ f, i }) => <Row key={i} k={`f${i}`} sub Icon={SEVERITY[f.severity].icon} tone="tone-muted" text={f.title} meta={String(i + 1)} state={p.states?.[i]} />)}
+
+        {(p.threads ?? []).length > 0 && (() => {
+          const all = (p.threads ?? []).map((t, i) => ({ t, i })).filter(({ t }) => t.comments.length);
+          const open = all.filter(({ t }) => !t.isResolved);
+          const resolved = all.filter(({ t }) => t.isResolved);
+          const text = (t: ReviewThread) => `${t.comments[0].author}: ${t.comments[0].body.replace(/\s+/g, " ")}`;
+          return (
+            <>
+              <Group title="Conversations" meta={open.length ? `${open.length} open` : "all resolved"} />
+              {open.map(({ t, i }) => <Row key={i} k={`t${i}`} Icon={MessageSquare} tone="tone-accent" text={text(t)} meta={String(t.comments.length)} />)}
+              {resolved.length > 0 && (
+                <Toggle open={showResolvedThreads} text={resolved.length === 1 ? "1 resolved conversation" : `${resolved.length} resolved conversations`} onClick={() => setShowResolvedThreads(!showResolvedThreads)} />
+              )}
+              {showResolvedThreads && resolved.map(({ t, i }) => <Row key={i} k={`t${i}`} sub Icon={MessageSquare} tone="tone-muted" text={text(t)} meta={String(t.comments.length)} />)}
+            </>
+          );
+        })()}
         {a.findings.length === 0 && <p className="muted" style={{ margin: "2px 10px", fontSize: 12 }}>No findings.</p>}
       </nav>
     </div>
@@ -435,6 +455,31 @@ function Detail(p: Props & { analysis: Analysis }) {
   const a = p.analysis;
   const kind = p.selected[0];
   const idx = Number(p.selected.slice(1));
+
+  if (kind === "t" && p.threads?.[idx]) {
+    const t = p.threads[idx];
+    const anchor = t.line ? { path: t.path, startLine: t.startLine ?? t.line, endLine: t.line } : null;
+    return (
+      <>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span className={t.isResolved ? "check-badge state-resolved" : "check-badge state-commented"}>{t.isResolved ? "Resolved" : "Open"}</span>
+          {t.isOutdated && <span className="tag">Outdated</span>}
+          <span className="mono muted" style={{ fontSize: 12 }}>{t.path}{t.line ? `:${t.line}` : ""}</span>
+          <span style={{ flex: 1 }} />
+          <button type="button" className="btn sm" onClick={() => openUrl(t.comments[0]?.url ?? p.pr.url)}><ExternalLink size={13} />GitHub</button>
+        </div>
+        {anchor && !t.isOutdated && <Excerpt files={p.files} anchor={anchor} onOpen={() => p.onOpenAnchor(anchor, null)} />}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {t.comments.map((c, i) => (
+            <div key={i} className="thread-comment">
+              <div className="muted" style={{ fontSize: 12 }}><strong style={{ color: "var(--text)" }}>{c.author}</strong> · {ago(new Date(c.createdAt).getTime())}</div>
+              <Markdown text={c.body} />
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
 
   if (kind === "d") {
     return (

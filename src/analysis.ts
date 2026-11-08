@@ -1,4 +1,4 @@
-import type { LinkedIssue, PrDetails } from "./api";
+import type { LinkedIssue, PrDetails, ReviewThread } from "./api";
 
 export type Verdict = "implemented" | "partial" | "contradicted" | "missing";
 export type Severity = "critical" | "high" | "medium" | "low";
@@ -93,7 +93,7 @@ Reply with only one JSON block: \`\`\`json { ${WALKTHROUGH_SHAPE} } \`\`\``;
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 /** With `since`, a re-review: focus on what changed after the commit the reviewer last reviewed. */
-export function buildAnalysisPrompt(pr: PrDetails, extraInstructions = "", since?: string, issues: LinkedIssue[] = []): string {
+export function buildAnalysisPrompt(pr: PrDetails, extraInstructions = "", since?: string, issues: LinkedIssue[] = [], threads: ReviewThread[] = []): string {
   const extra = extraInstructions.trim() ? `\n\nThe reviewer's own instructions (follow them):\n${extraInstructions.trim()}` : "";
   const focus = since
     ? `\n\nThis is a re-review. The reviewer last reviewed commit ${since}. Focus on what changed since then: git diff ${since} HEAD (and git log ${since}..HEAD). Use the full PR diff only for context. Report findings only for code changed since ${since}, and check description claims only where the new commits affect them. Mention in the summary that this covers the changes since the last review.`
@@ -102,7 +102,12 @@ export function buildAnalysisPrompt(pr: PrDetails, extraInstructions = "", since
     ? `\n\nThe PR says it closes these issues. Turn their concrete requirements into claims as well, check them the same way, and set "source" to the issue number (for example "#${issues[0].number}"):\n` +
       issues.map((i) => `<issue number="${i.number}" title="${i.title.replace(/"/g, "'")}">\n${(i.body ?? "").trim().slice(0, 2000) || "(no description)"}\n</issue>`).join("\n")
     : "";
-  return baseAnalysisPrompt(pr) + linked + focus + extra;
+  const open = threads.filter((t) => !t.isResolved && t.comments.length);
+  const discussed = open.length
+    ? `\n\nReviewers have already raised these points on the PR. Don't report them again as findings; only add what they missed:\n` +
+      open.map((t) => `- ${t.path}${t.line ? `:${t.line}` : ""} (${t.comments[0].author}): ${t.comments[0].body.replace(/\s+/g, " ").slice(0, 300)}`).join("\n")
+    : "";
+  return baseAnalysisPrompt(pr) + linked + discussed + focus + extra;
 }
 
 function baseAnalysisPrompt(pr: PrDetails): string {

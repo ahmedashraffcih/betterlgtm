@@ -147,6 +147,44 @@ pub async fn linked_issues(config: State<'_, ConfigState>, repo: String, number:
     Ok(data["data"]["repository"]["pullRequest"]["closingIssuesReferences"]["nodes"].clone())
 }
 
+/// Review threads already on the PR: where they are, whether they're resolved, and their comments.
+#[tauri::command]
+pub async fn review_threads(config: State<'_, ConfigState>, repo: String, number: u64) -> Result<Value, String> {
+    let (owner, name) = repo.split_once('/').ok_or_else(|| format!("Unexpected repository name: {repo}"))?;
+    let query = "query($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { pullRequest(number: $num) {
+      reviewThreads(first: 100) { nodes { isResolved isOutdated path line startLine originalLine
+        comments(first: 30) { nodes { author { login } body createdAt url } } } } } } }";
+    let out = run(
+        &config.get().gh_path,
+        &["api", "graphql", "-f", &format!("query={query}"), "-f", &format!("o={owner}"), "-f", &format!("n={name}"), "-F", &format!("num={number}")],
+        None,
+    )
+    .await?;
+    let data = parse(&out)?;
+    let threads: Vec<Value> = data["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|t| {
+            serde_json::json!({
+                "isResolved": t["isResolved"],
+                "isOutdated": t["isOutdated"],
+                "path": t["path"],
+                "line": if t["line"].is_null() { t["originalLine"].clone() } else { t["line"].clone() },
+                "startLine": t["startLine"],
+                "comments": t["comments"]["nodes"].as_array().map(|c| c.iter().map(|x| serde_json::json!({
+                    "author": x["author"]["login"].as_str().unwrap_or("ghost"),
+                    "body": x["body"],
+                    "createdAt": x["createdAt"],
+                    "url": x["url"],
+                })).collect::<Vec<_>>()),
+            })
+        })
+        .collect();
+    Ok(Value::Array(threads))
+}
+
 /// The user's login and the organizations they belong to, for the organization settings.
 #[tauri::command]
 pub async fn list_orgs(config: State<'_, ConfigState>) -> Result<Value, String> {

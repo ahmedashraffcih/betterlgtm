@@ -27,6 +27,7 @@ pub fn run() {
             gh::submit_review,
             gh::last_review,
             gh::linked_issues,
+            gh::review_threads,
             gh::pr_details,
             gh::pr_diff,
             gh::pr_body_html,

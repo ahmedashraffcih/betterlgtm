@@ -27,6 +27,16 @@ export interface ReviewRequest {
   requestedAt?: string | null;
 }
 
+/** A conversation already on the PR, attached to a line of a file. */
+export interface ReviewThread {
+  isResolved: boolean;
+  isOutdated: boolean;
+  path: string;
+  line: number | null;
+  startLine: number | null;
+  comments: { author: string; body: string; createdAt: string; url: string }[];
+}
+
 /** An issue the PR closes. */
 export interface LinkedIssue {
   number: number;
@@ -107,6 +117,7 @@ export const api = {
   diffSince: (repo: string, number: number, baseRef: string, since: string) =>
     invoke<{ diff: string; commits: { oid: string; subject: string }[] }>("diff_since", { repo, number, baseRef, since }),
   linkedIssues: (repo: string, number: number) => invoke<LinkedIssue[]>("linked_issues", { repo, number }),
+  reviewThreads: (repo: string, number: number) => invoke<ReviewThread[]>("review_threads", { repo, number }),
   listOrgs: () => invoke<{ login: string; orgs: string[] }>("list_orgs"),
   setConfig: (config: { ghPath: string; claudePath: string; dataDir: string; model: string; effort: string }) => invoke<void>("set_config", { config }),
   toolStatus: () =>
