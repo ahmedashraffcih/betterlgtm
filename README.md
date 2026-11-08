@@ -51,7 +51,7 @@ Download the installer for your platform from [Releases](https://github.com/drma
 
 The macOS app is signed with a Developer ID and notarized by Apple, so it opens like any other Mac app. Windows builds aren't signed yet: if SmartScreen warns about an unknown publisher, choose **More info › Run anyway**.
 
-From version 0.2.0 the app updates itself: when a new release is out, choose **Install update** in the status bar.
+From version 0.2.1 the app updates itself: when a new release is out, choose **Install update** in the status bar.
 
 ### Requirements
 

@@ -2,9 +2,12 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
-## 0.2.0 — 2026-11-08
+## 0.2.1 — 2026-11-08
 
 - The app checks for new versions and installs them when you choose **Install update** in the status bar. Turn automatic checks off in Settings › General, or use Help › Check for updates.
+- Fixed `git`, `gh` and `claude` crashing with library errors when run from the Linux AppImage.
+
+0.2.0 was tagged but never published; its changes are in 0.2.1.
 
 ## 0.1.1 — 2026-11-07
 
@@ -25,6 +28,6 @@ The first release.
 - Menu bar, command palette, keyboard shortcuts, light and dark themes, and a Settings page.
 - Installers for macOS (Apple silicon and Intel), Windows and Linux.
 
-[0.2.0]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.0
+[0.2.1]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.1
 [0.1.1]: https://github.com/drmas/betterlgtm/releases/tag/v0.1.1
 [0.1.0]: https://github.com/drmas/betterlgtm/releases/tag/v0.1.0
