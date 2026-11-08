@@ -15,356 +15,748 @@
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans:wght@800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,300..800&family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --brand: #2557BE;
-  --hero: #2557BE;
-  --hero-text: #E4ECFB;
-  --hero-muted: #DCE6FA;
-  --hero-shadow: #173C8C;
-  --bg: #F7F9FC;
-  --surface: #FFFFFF;
-  --surface-2: #F4F6FA;
-  --line: #E3E8F0;
-  --line-2: #EEF1F6;
-  --line-strong: #D5DDEA;
-  --text: #0F1E36;
-  --body: #3B4B63;
-  --muted: #52627A;
-  --faint: #6B7A90;
-  --link: #2557BE;
-  --bubble: #2557BE;
-  --bad: #A3261B;
-  --bad-icon: #B42318;
-  --add-bg: #EEF8F1;
-  --add-text: #1C5E31;
-  --hit-bg: #FFF1D6;
-  --hit-text: #5C3A00;
-  --hit-mark: #D98A12;
-  --shot-border: rgba(15, 30, 54, 0.18);
-  --shadow: rgba(10, 24, 56, 0.6);
-  --ring: rgba(255, 255, 255, 0.12);
+  --bg: #FFFFFF;
+  --surface: #F3F5F8;
+  --line: #D5D9E0;
+  --line-soft: #E6E9EE;
+  --text: #1A1F2B;
+  --body: #2C3240;
+  --muted: #444B59;
+  --faint: #5A6270;
+  --accent: #2B5FC7;
+  --accent-hover: #1D4594;
+  --on-accent: #FFFFFF;
+  --del-bg: #FCE8E6;
+  --del-line: #F4CFCA;
+  --del-text: #A3261A;
+  --del-body: #4A2A26;
+  --del-gutter: #B9574D;
+  --add-bg: #E3F5E8;
+  --add-line: #C9EAD3;
+  --add-flash: #B9E8C6;
+  --add-text: #14532F;
+  --add-body: #24402F;
+  --add-gutter: #3F7D57;
+  --high-bg: #FDF1DC;
+  --high-text: #8A4B00;
+  --shadow: rgba(26, 31, 43, 0.45);
+  --mono: "Martian Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --hero: #173A85;
-    --hero-text: #D6E1F7;
-    --hero-muted: #D6E1F7;
-    --hero-shadow: #0E2557;
-    --bg: #0C1524;
-    --surface: #111D31;
-    --surface-2: #1A2840;
-    --line: #22314B;
-    --line-2: #1A2840;
-    --line-strong: #2A3B58;
-    --text: #E6ECF6;
-    --body: #B9C5D8;
-    --muted: #A2B0C6;
-    --faint: #8D9BB2;
-    --link: #8AB4FF;
-    --bubble: #2B5FC7;
-    --bad: #F49A90;
-    --bad-icon: #F28B82;
-    --add-bg: #12281E;
-    --add-text: #8FDCA8;
-    --hit-bg: #33270F;
-    --hit-text: #F6CF8A;
-    --hit-mark: #E09A2A;
-    --shot-border: rgba(255, 255, 255, 0.16);
-    --shadow: rgba(0, 0, 0, 0.8);
-    --ring: rgba(255, 255, 255, 0.08);
+    --bg: #14171D;
+    --surface: #1C2028;
+    --line: #2F3540;
+    --line-soft: #252A33;
+    --text: #ECEEF2;
+    --body: #CDD2DA;
+    --muted: #AAB1BC;
+    --faint: #9AA2AE;
+    --accent: #8AB4FF;
+    --accent-hover: #B3CDFF;
+    --on-accent: #0E1116;
+    --del-bg: #33191A;
+    --del-line: #4A2526;
+    --del-text: #FFB0A6;
+    --del-body: #E9CCC8;
+    --del-gutter: #C9867D;
+    --add-bg: #142B1D;
+    --add-line: #1F3D2A;
+    --add-flash: #1F4D30;
+    --add-text: #9BE3B0;
+    --add-body: #CBE7D3;
+    --add-gutter: #74B98A;
+    --high-bg: #2E2414;
+    --high-text: #F0B562;
+    --shadow: rgba(0, 0, 0, 0.7);
   }
 }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 18px/1.55 "Schibsted Grotesk", system-ui, sans-serif;
-  overflow-x: hidden;
-}
-a { color: var(--link); }
-a:focus-visible { outline: 3px solid #F2B33D; outline-offset: 3px; border-radius: 6px; }
-code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.85em; }
-img { display: block; max-width: 100%; height: auto; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+code { font-family: var(--mono); font-stretch: 80%; font-size: 0.86em; }
+img { max-width: 100%; height: auto; }
 h1, h2, h3 { margin: 0; }
-p { margin: 0; }
+h2 { font-size: clamp(30px, 3.4vw, 44px); line-height: 1.08; letter-spacing: -0.025em; font-weight: 700; font-stretch: 90%; }
+h3 { font-size: 19px; line-height: 1.35; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-.wrap { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
-.badge {
-  display: inline-flex; align-items: center;
-  height: 28px; padding: 0 9px; border-radius: 7px;
-  background: #FFFFFF; color: var(--brand);
-  font: 800 16px/1 "Noto Sans", sans-serif; letter-spacing: -0.03em;
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 18px; border-radius: 9px; background: var(--accent); color: var(--on-accent); text-decoration: none; font-weight: 600; font-size: 15px; }
+.btn:hover { color: var(--on-accent); background: var(--accent-hover); }
+.btn-lg { min-height: 50px; padding: 0 22px; font-size: 16px; }
+
+/* Nav: brand, a pill of section links, then source and download */
+.nav { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding-top: 14px; padding-bottom: 14px; }
+.brand { flex: 1 1 0; display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); font-weight: 700; font-size: 18px; }
+.brand:hover { color: var(--text); }
+.brand img { width: 30px; height: 30px; border-radius: 8px; }
+.nav-links { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface); font-size: 15px; }
+.nav-links a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px; color: var(--muted); text-decoration: none; }
+.nav-links a:hover { color: var(--text); background: var(--bg); }
+.nav-end { flex: 1 1 0; display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.gh { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border-radius: 9px; color: var(--muted); text-decoration: none; font-size: 15px; font-weight: 600; }
+.gh:hover { color: var(--text); background: var(--surface); }
+.btn-dark { background: var(--text); color: var(--bg); }
+.btn-dark:hover { background: var(--body); color: var(--bg); }
+
+/* Hero: the tagline as a change, then the app */
+.hero { padding-top: 32px; text-align: center; }
+.hero h1 { margin: 0; font-weight: inherit; font-family: var(--mono); }
+.was { display: inline-flex; align-items: center; gap: 10px; padding: 4px 14px; border-radius: 8px; background: var(--del-bg); color: var(--del-text); font-stretch: 87.5%; font-size: 18px; }
+.struck { position: relative; display: inline-block; }
+.strike { position: absolute; left: -3px; right: -3px; top: 54%; height: 2px; background: currentColor; transform-origin: left center; }
+.now { display: block; margin-top: 18px; font-stretch: 76%; font-size: clamp(36px, 4.9vw, 72px); font-weight: 780; line-height: 1.16; text-wrap: balance; letter-spacing: -0.05em; color: var(--add-text); }
+.now span { background: var(--add-bg); box-shadow: 0 0 0 0.14em var(--add-bg); border-radius: 3px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.lede { margin: 34px auto 0; max-width: 40em; font-size: clamp(17px, 1.4vw, 19px); color: var(--body); }
+.cta-row { margin-top: 24px; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; align-items: center; }
+.brew { display: flex; align-items: center; gap: 10px; min-height: 50px; min-width: 0; max-width: 100%; padding: 0 6px 0 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.brew code { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--text); }
+.brew button { flex: none; min-height: 40px; min-width: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--text); font: 600 14px var(--sans); cursor: pointer; }
+.brew button:hover { border-color: var(--faint); }
+.note { margin: 16px 0 0; font-size: 14.5px; color: var(--faint); }
+
+.stage { margin-top: 64px; text-align: left; }
+.panes { display: grid; grid-template-columns: 250px minmax(0, 420px) minmax(0, 1fr); }
+.captions { margin-bottom: 12px; font-size: 14px; color: var(--faint); }
+.captions span { padding-left: 16px; border-left: 2px solid var(--line); }
+.app { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--bg); box-shadow: 0 40px 90px -50px var(--shadow); font-size: 14.5px; }
+.app-side { border-right: 1px solid var(--line-soft); background: var(--surface); font-size: 14px; }
+.app-bar { display: flex; gap: 7px; padding: 13px 16px; border-bottom: 1px solid var(--line-soft); }
+.app-bar span { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+.app-org { padding: 10px 16px 6px; font-size: 12.5px; font-weight: 600; color: var(--faint); }
+.app-pr { padding: 10px 16px; border-top: 1px solid var(--line-soft); }
+.app-pr.on { background: var(--bg); box-shadow: inset 3px 0 0 var(--accent); border-top-color: transparent; }
+.app-pr b { display: block; font-weight: 600; line-height: 1.35; }
+.app-pr span { display: flex; gap: 8px; align-items: center; margin-top: 4px; color: var(--faint); font-size: 12.5px; }
+.app-mid { border-right: 1px solid var(--line-soft); padding: 18px 20px; }
+.app-mid .verdict b { display: block; font-size: 16px; }
+.app-mid .verdict { display: block; padding: 12px 16px; }
+.app-h { margin: 16px 0 6px; font-size: 12.5px; font-weight: 600; color: var(--faint); }
+.app-item { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+.app-item:last-child { border-bottom: none; }
+.app-item.on { margin: 0 -10px; padding: 9px 10px; border-radius: 8px; border-bottom: none; background: var(--surface); }
+.app-code { padding: 18px 0; min-width: 0; }
+.app-file { padding: 0 20px 10px; font-family: var(--mono); font-stretch: 80%; font-size: 12.5px; color: var(--faint); }
+.app-code .ln { padding: 0 20px; white-space: pre; font-family: var(--mono); font-stretch: 80%; font-size: 12.5px; line-height: 2; color: var(--body); overflow: hidden; text-overflow: ellipsis; }
+.app-code .ln span { color: var(--faint); }
+.app-code .ln.hit, .app-code .ln.hit span { background: var(--del-bg); color: var(--del-text); }
+.inline-comment { margin: 8px 20px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 14px; line-height: 1.45; color: var(--body); }
+.inline-comment div { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12.5px; color: var(--faint); }
+.inline-comment img { width: 18px; height: 18px; border-radius: 5px; }
+.inline-comment b { color: var(--text); }
+
+/* The one load moment: the old tagline is struck out */
+@keyframes strike { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.strike { animation: strike .55s cubic-bezier(.6, 0, .2, 1) .35s both; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .strike { animation: none; }
+}
+@media (max-width: 1100px) {
+  .panes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .app-side, .captions span:first-child { display: none; }
+}
+@media (max-width: 860px) {
+  .nav-links { order: 3; width: 100%; justify-content: center; }
+  .brand, .nav-end { flex: 1 1 auto; }
+  .panes { grid-template-columns: minmax(0, 1fr); }
+  .captions { display: none; }
+  .app-mid { border-right: none; border-bottom: 1px solid var(--line-soft); }
 }
 
-/* Hero */
-.hero { background: var(--hero); color: #FFFFFF; }
-.nav { display: flex; align-items: center; gap: 24px; height: 80px; }
-.brand { display: flex; align-items: center; gap: 10px; color: #FFFFFF; text-decoration: none; font-weight: 700; font-size: 19px; }
-.nav-links { display: flex; gap: 28px; margin-left: 24px; font-size: 16px; }
-.nav-links a { color: var(--hero-muted); text-decoration: none; }
-.nav-links a:hover { color: #FFFFFF; }
-.nav-cta {
-  margin-left: auto; display: inline-flex; align-items: center;
-  height: 44px; padding: 0 18px; border-radius: 10px;
-  border: 1.5px solid rgba(255, 255, 255, 0.55);
-  color: #FFFFFF; font-weight: 600; font-size: 16px; text-decoration: none;
-}
-.nav-cta:hover { background: rgba(255, 255, 255, 0.12); }
-.hero-copy { padding-top: 88px; padding-bottom: 72px; }
-.hero h1 { font-size: clamp(48px, 8.4vw, 128px); font-weight: 800; letter-spacing: -0.05em; line-height: 0.95; }
-.stamp {
-  display: inline-block; transform: rotate(-4deg);
-  padding: 0 0.15em 0.07em; border-radius: 0.15em;
-  background: #FFFFFF; color: var(--brand);
-  font-family: "Noto Sans", sans-serif; letter-spacing: -0.04em;
-  box-shadow: 0 0.06em 0 var(--hero-shadow);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .stamp { animation: stamp 0.55s cubic-bezier(0.2, 1.6, 0.4, 1) 0.3s both; }
-  @keyframes stamp {
-    from { transform: scale(1.7) rotate(-10deg); opacity: 0; }
-    to { transform: scale(1) rotate(-4deg); opacity: 1; }
-  }
-}
-.lede { margin-top: 44px; max-width: 32em; font-size: 21px; line-height: 1.5; color: var(--hero-text); }
-.cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 32px; }
-.cta {
-  display: inline-flex; align-items: center; gap: 10px;
-  height: 56px; padding: 0 26px; border-radius: 12px;
-  background: #FFFFFF; color: var(--hero-shadow);
-  font-weight: 700; font-size: 18px; text-decoration: none;
-}
-.cta:hover { background: #EEF3FD; }
-.cta-note { font-size: 15px; color: var(--hero-muted); }
-.cta-note a { color: #FFFFFF; }
-.shot { position: relative; margin-bottom: -200px; }
-.shot img {
-  width: 100%; border-radius: 14px; border: 1px solid var(--shot-border);
-  box-shadow: 0 40px 80px -40px var(--shadow), 0 0 0 8px var(--ring);
-}
+/* Sections */
+.section { padding-top: 136px; }
+.split { display: flex; flex-wrap: wrap; gap: 40px 80px; align-items: center; }
+.split.top { align-items: flex-start; }
+.split.flip { flex-wrap: wrap-reverse; }
+.split > .copy { flex: 1 1 340px; min-width: 0; }
+.split > .visual { flex: 1.4 1 460px; min-width: 0; }
+.copy p { margin: 20px 0 0; max-width: 52ch; font-size: 18px; color: var(--body); }
 
-/* Features */
-.features { padding: 312px 0 120px; }
-.features .wrap { display: flex; flex-direction: column; gap: 120px; }
-.feature { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; align-items: center; }
-h2 { font-size: 42px; line-height: 1.06; letter-spacing: -0.03em; font-weight: 800; }
-.feature p { margin-top: 18px; color: var(--body); max-width: 30em; }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; font-size: 16px; }
-.panel-shadow { box-shadow: 0 24px 48px -36px var(--shadow); }
-.claim { display: flex; gap: 14px; padding: 20px 22px 18px; }
-.claim svg { flex-shrink: 0; margin-top: 2px; }
-.claim-kind { font-weight: 700; color: var(--bad); }
-.claim-text { margin-top: 4px; font-size: 19px; font-weight: 600; }
-.claim-why { margin-top: 8px; color: var(--body); }
-.code { border-top: 1px solid var(--line); font: 13.5px/1.8 "JetBrains Mono", ui-monospace, monospace; overflow-x: auto; border-radius: 0 0 12px 12px; }
-.code .file { padding: 6px 22px; background: var(--surface-2); border-bottom: 1px solid var(--line); color: var(--muted); }
-.code .ln { padding: 0 22px; white-space: pre; background: var(--add-bg); color: var(--add-text); }
-.code .ln:last-child { padding-bottom: 4px; }
-.code .hit { background: var(--hit-bg); color: var(--hit-text); box-shadow: inset 4px 0 0 var(--hit-mark); }
-.feature-shot { width: 100%; border-radius: 12px; border: 1px solid var(--line-strong); box-shadow: 0 24px 48px -32px var(--shadow); }
-.chat { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-.msg-me { align-self: flex-end; max-width: 80%; background: var(--bubble); color: #FFFFFF; padding: 10px 14px; border-radius: 14px 14px 4px 14px; }
-.msg-ai { max-width: 88%; background: var(--surface-2); padding: 12px 14px; border-radius: 14px 14px 14px 4px; }
-.composer { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 6px 0 14px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--faint); }
-.composer span:first-child { flex: 1; }
-.send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: var(--bubble); }
+/* How a review goes */
+.steps { flex: 2 1 520px; min-width: 0; list-style: none; margin: 0; padding: 0; }
+.steps h2 { flex: 1 1 300px; }
+.step { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 20px; padding-bottom: 36px; }
+.step:last-child { padding-bottom: 0; }
+.step:not(:last-child)::before { content: ""; position: absolute; left: 19px; top: 40px; bottom: 0; width: 2px; background: var(--line-soft); }
+.dot { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--muted); }
+.dot.done { background: var(--add-bg); border-color: var(--add-gutter); color: var(--add-text); }
+.step > div { padding-top: 6px; }
+.step p { margin: 6px 0 0; max-width: 60ch; color: var(--muted); }
 
-/* Local */
-.local { background: var(--surface); border-top: 1px solid var(--line); padding: 112px 0; }
-@media (prefers-color-scheme: dark) { .local { background: #101B2E; } }
-.local h2 { max-width: 18em; }
-.local-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px 64px; margin-top: 56px; }
-.local h3 { margin-bottom: 8px; font-size: 21px; font-weight: 700; }
-.local p { color: var(--body); }
+/* Description check */
+.claim-card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.claim { padding: 22px 24px; }
+.claim p { margin: 0; }
+.claim .kind { font-size: 15px; font-weight: 600; color: var(--del-text); }
+.claim .quote { margin-top: 8px; font-size: 19px; font-weight: 600; line-height: 1.4; }
+.claim .why { margin-top: 8px; font-size: 16px; color: var(--muted); }
+.code { border-top: 1px solid var(--line-soft); font-family: var(--mono); font-stretch: 80%; font-size: 13px; line-height: 2; overflow-x: auto; }
+.code .file { padding: 8px 20px; background: var(--surface); border-bottom: 1px solid var(--line-soft); color: var(--faint); }
+.code .ln { padding: 0 20px; white-space: pre; color: var(--body); }
+.code .ln:last-child { padding-bottom: 6px; }
+.code .ln span { color: var(--faint); }
+.code .ln.hit, .code .ln.hit span { background: var(--del-bg); color: var(--del-text); }
+
+.feature-shot { display: block; width: 100%; border-radius: 12px; border: 1px solid var(--line); }
+
+/* Chat */
+.chat { display: flex; flex-direction: column; gap: 14px; }
+.chat p { margin: 0; }
+.msg-me { align-self: flex-end; max-width: 80%; padding: 12px 18px; border-radius: 16px 16px 4px 16px; background: var(--accent); color: var(--on-accent); }
+.msg-ai { max-width: 94%; padding: 16px 18px; border-radius: 16px 16px 16px 4px; background: var(--surface); }
+.msg-ai code { padding: 2px 6px; border-radius: 4px; background: var(--bg); }
+.msg-ai code.fix { background: var(--add-bg); color: var(--add-text); }
+
+/* Lines lists: added features, removed things */
+.lines { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.lines li { display: grid; grid-template-columns: 44px minmax(0, 1fr); padding: 14px 22px 14px 0; }
+.lines .s { text-align: center; font-family: var(--mono); }
+.lines .add { background: var(--add-bg); border-bottom: 1px solid var(--add-line); }
+.lines .add .s, .lines .add strong, .lines .add a { color: var(--add-text); }
+.lines .add > span:last-child { color: var(--add-body); }
+.lines .del { background: var(--del-bg); border-bottom: 1px solid var(--del-line); padding-top: 18px; padding-bottom: 18px; }
+.lines .del .s, .lines .del strong { color: var(--del-text); }
+.lines .del > span:last-child { color: var(--del-body); }
+.lines.privacy .add { padding-top: 18px; padding-bottom: 18px; }
+.lines.privacy strong { display: block; }
+.lines li:last-child { border-bottom: none; }
+.also { margin-top: 28px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); }
+.lines.also .add { background: var(--bg); border-bottom-color: var(--line-soft); }
+.lines.also .add .s { background: var(--add-bg); align-self: stretch; margin: -14px 12px -14px 0; padding-top: 14px; }
+.lines.also .add > span:last-child { color: var(--muted); }
+.lines.also .add strong { color: var(--text); }
 
 /* Download */
-.download { background: var(--hero); color: #FFFFFF; padding: 104px 0; }
-.download h2 { font-size: clamp(36px, 5vw, 60px); line-height: 1.02; letter-spacing: -0.04em; }
-.download .sub { margin-top: 16px; font-size: 19px; color: var(--hero-muted); max-width: 34em; }
-.platforms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; margin-top: 48px; }
-.platform { display: flex; flex-direction: column; gap: 10px; }
-.platform h3 { margin-bottom: 4px; font-size: 22px; font-weight: 700; }
-.dl {
-  display: flex; align-items: center; gap: 12px;
-  min-height: 56px; padding: 0 16px; border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.28);
-  color: #FFFFFF; text-decoration: none; font-weight: 600;
-}
-.dl:hover { background: rgba(255, 255, 255, 0.18); }
-.dl span:first-child { flex: 1; }
-.dl .meta { font-weight: 500; font-size: 15px; color: var(--hero-muted); }
-.download .fine { margin-top: 36px; font-size: 15px; color: var(--hero-muted); max-width: 46em; }
-.download .fine a { color: #FFFFFF; }
-.brew { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 56px; margin-top: 32px; padding: 8px 8px 8px 16px; border-radius: 10px; border: 1px dashed rgba(255, 255, 255, 0.4); }
-.brew-label { font-weight: 600; }
-.brew code { flex: 1; min-width: 0; font-size: 15px; color: #FFFFFF; }
-.brew button { flex: none; height: 40px; padding: 0 14px; border-radius: 7px; border: 0; background: rgba(255, 255, 255, 0.16); color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
-.brew button:hover { background: rgba(255, 255, 255, 0.26); }
-.brew button:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
+.download { padding-top: 152px; padding-bottom: 112px; }
+.download h2 { font-size: clamp(34px, 5vw, 60px); line-height: 1.04; letter-spacing: -0.035em; font-weight: 700; }
+.download .sub { margin: 16px 0 0; font-size: 18px; color: var(--body); }
+.platforms { margin-top: 44px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 40px 48px; }
+.platform h3 { margin-bottom: 4px; font-size: 21px; }
+.platform p { margin: 14px 0 0; font-size: 14.5px; color: var(--faint); }
+.dl { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 52px; padding: 0 16px; margin-top: 8px; border-radius: 9px; border: 1px solid var(--line); color: var(--text); text-decoration: none; font-weight: 600; }
+.dl:hover { color: var(--text); border-color: var(--faint); }
+.dl .meta { font-weight: 400; font-size: 14px; color: var(--faint); }
+.dl.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.dl.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.dl.primary .meta { color: var(--on-accent); }
+.fine { margin: 36px 0 0; font-size: 15px; color: var(--faint); }
 
-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding-top: 32px; padding-bottom: 40px; font-size: 15px; color: var(--muted); }
-footer .badge { height: 22px; padding: 0 7px; border-radius: 5px; background: var(--brand); color: #FFFFFF; font-size: 12px; }
+footer { border-top: 1px solid var(--line-soft); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: center; padding-top: 28px; padding-bottom: 40px; font-size: 14.5px; color: var(--faint); }
 footer a { color: var(--muted); }
-footer .end { margin-left: auto; }
+footer .end { flex-grow: 1; text-align: right; }
 
-@media (max-width: 860px) {
-  .wrap { padding: 0 16px; }
-  .nav-links { display: none; }
-  .hero-copy { padding-top: 56px; padding-bottom: 48px; }
-  .lede { margin-top: 32px; font-size: 19px; }
-  .shot { margin-bottom: -48px; }
-  .features { padding: 112px 0 96px; }
-  .features .wrap { gap: 88px; }
-  .feature { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-  h2 { font-size: 34px; }
-  .local, .download { padding: 80px 0; }
-  .local-grid { grid-template-columns: minmax(0, 1fr); gap: 32px; }
-  .platforms { grid-template-columns: minmax(0, 1fr); }
-  .brew-label { flex-basis: 100%; }
-  footer .end { margin-left: 0; }
+/* GitHub link with live star count */
+.nav-links a.gh { display: inline-flex; align-items: center; gap: 7px; }
+.stars { padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* Product tour */
+.tour { padding-top: 88px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.tabs button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--muted); font: 600 15px var(--sans); cursor: pointer; }
+.tabs button:hover { color: var(--text); border-color: var(--faint); }
+.tabs button[aria-selected="true"] { background: var(--text); border-color: var(--text); color: var(--bg); }
+.tabs .k { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); color: var(--muted); font: 600 12px var(--mono); }
+.tabs button[aria-selected="true"] .k { background: var(--bg); color: var(--text); }
+.window { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); box-shadow: 0 40px 90px -50px var(--shadow); }
+.titlebar { display: flex; align-items: center; gap: 7px; padding: 11px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.titlebar span { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+.titlebar b { margin-left: 10px; font-weight: 500; font-size: 13px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel { padding: clamp(18px, 3vw, 32px); min-height: 380px; }
+.panel[hidden] { display: none; }
+#panel-guided { padding: 0; }
+#panel-guided img { display: block; width: 100%; }
+.panel-note { margin: 0 0 16px; color: var(--faint); font-size: 15px; }
+.panel-h { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--faint); }
+.tour-note { margin: 14px 0 0; font-size: 14.5px; color: var(--faint); }
+
+.inbox { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+.inbox li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px 20px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+.inbox li:last-child { border-bottom: none; }
+.inbox li.on { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); }
+.inbox .pr { display: flex; flex-direction: column; min-width: 0; }
+.inbox .pr b { font-size: 15.5px; font-weight: 600; }
+.inbox .pr span { color: var(--faint); font-size: 13.5px; }
+.inbox .size { font-family: var(--mono); font-stretch: 80%; font-size: 13px; }
+.inbox i { font-style: normal; }
+.plus { color: var(--add-text); }
+.minus { color: var(--del-text); }
+.ci { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.ci::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.ci.ok::before { background: var(--add-gutter); }
+.ci.bad::before { background: var(--del-text); }
+.ci.run::before { background: var(--high-text); }
+.risk, .tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.risk.high, .tag.crit { background: var(--del-bg); color: var(--del-text); }
+.risk.med, .tag.high { background: var(--high-bg); color: var(--high-text); }
+.risk.low { background: var(--surface); color: var(--muted); }
+.tag.ok { background: var(--add-bg); color: var(--add-text); }
+i.risk { font-style: normal; font-size: 11.5px; padding: 0 7px; }
+
+.verdict { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 16px 20px; border-radius: 10px; background: var(--del-bg); color: var(--del-body); }
+.verdict b { color: var(--del-text); font-size: 18px; }
+.cols { margin-top: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 24px 40px; }
+.short { margin: 0; padding-left: 20px; color: var(--body); font-size: 15.5px; }
+.short li + li { margin-top: 6px; }
+.attn { list-style: none; margin: 0; padding: 0; }
+.attn li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line-soft); font-size: 15px; }
+.attn li:first-child { padding-top: 0; }
+.attn li span:nth-child(2) { flex: 1 1 200px; }
+.attn code { color: var(--faint); }
+
+.decision { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; font-size: 14px; font-weight: 600; }
+.decision span { padding: 8px 14px; color: var(--muted); }
+.decision span + span { border-left: 1px solid var(--line); }
+.decision .on { background: var(--del-bg); color: var(--del-text); }
+.summary { margin: 16px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px; font-size: 15px; color: var(--body); }
+.post { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-top: 10px; }
+.post-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 12px 14px; font-size: 14.5px; }
+.post-head b { font-family: var(--mono); font-stretch: 80%; font-size: 13px; font-weight: 500; }
+.check { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--faint); }
+.check.on { background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / 12px no-repeat; border-color: var(--accent); }
+.suggest { border-top: 1px solid var(--line-soft); font-family: var(--mono); font-stretch: 80%; font-size: 12.5px; line-height: 1.9; overflow-x: auto; }
+.suggest-h { padding: 6px 14px; background: var(--surface); color: var(--faint); font-family: var(--sans); font-stretch: 100%; font-size: 13px; font-weight: 600; }
+.sl { padding: 0 14px; white-space: pre; }
+.sl.del { background: var(--del-bg); color: var(--del-text); }
+.sl.add { background: var(--add-bg); color: var(--add-text); }
+.post-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 18px; font-size: 14px; color: var(--faint); }
+.fake-btn { padding: 9px 16px; border-radius: 8px; background: var(--del-text); color: var(--bg); font-weight: 600; }
+
+/* Comparison */
+.compare-wrap { margin-top: 36px; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.compare { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 15.5px; }
+.compare th, .compare td { padding: 16px 20px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-soft); }
+.compare tbody tr:last-child > * { border-bottom: none; }
+.compare thead th { background: var(--surface); font-size: 14px; color: var(--faint); font-weight: 600; }
+.compare thead th:last-child { color: var(--add-text); }
+.compare tbody th { width: 22%; font-weight: 600; }
+.compare td:nth-child(2) { color: var(--faint); width: 36%; }
+.compare td:last-child { background: var(--add-bg); color: var(--add-body); }
+
+/* Keys */
+.keys { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 0 32px; }
+.keys > div { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+.keys dt { display: flex; gap: 4px; flex: none; width: 76px; }
+.keys dd { margin: 0; color: var(--body); font-size: 15.5px; }
+kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 30px; padding: 0 8px; border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 7px; background: var(--bg); font: 600 13px var(--mono); color: var(--text); }
+
+.h-small { font-size: clamp(26px, 2.6vw, 34px); }
+
+/* What's new */
+.releases { list-style: none; margin: 0; padding: 0; }
+.releases li { padding: 18px 0; border-bottom: 1px solid var(--line-soft); }
+.releases li:first-child { padding-top: 4px; }
+.releases h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.ver { font-family: var(--mono); font-stretch: 80%; font-size: 14px; color: var(--add-text); background: var(--add-bg); padding: 1px 8px; border-radius: 6px; }
+.releases p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+
+/* FAQ */
+.faq-title { flex: 1 1 340px; }
+.faq details { border-bottom: 1px solid var(--line-soft); }
+.faq details:first-child { border-top: 1px solid var(--line-soft); }
+.faq summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 60px; padding: 14px 0; cursor: pointer; list-style: none; font-size: 18px; font-weight: 600; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; flex: none; width: 28px; text-align: center; font: 500 20px var(--mono); color: var(--add-text); }
+.faq details[open] summary::after { content: "−"; color: var(--del-text); }
+.faq summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.faq details p { margin: 0 0 20px; max-width: 62ch; color: var(--body); }
+
+@media (max-width: 760px) {
+  .inbox li { grid-template-columns: minmax(0, 1fr) auto; }
+  .inbox .size { display: none; }
+  .inbox .pr { grid-column: 1 / -1; }
+  .inbox .ci { grid-column: 1; }
+  .panel { min-height: 0; }
+}
+
+@media (max-width: 640px) {
+  .tour { padding-top: 64px; }
+  .lines li { grid-template-columns: 32px minmax(0, 1fr); }
+  .section { padding-top: 96px; }
+  .nav-links { justify-content: flex-start; overflow-x: auto; }
+  .nav-links a { padding: 0 12px; white-space: nowrap; }
+  .nav-links a[href="#news"] { display: none; }
+  .gh span:not(.stars) { display: none; }
+  .hero { padding-top: 20px; }
+  .was { font-size: 15px; }
+  .now { font-size: 36px; }
+  .stage { margin-top: 48px; }
+  footer .end { text-align: left; }
 }
 </style>
 </head>
 <body>
-
-<section class="hero">
-  <header class="wrap nav">
-    <a class="brand" href="#top"><span class="badge">lgtm</span>BetterLGTM</a>
-    <nav class="nav-links" aria-label="Sections">
-      <a href="#how">How it works</a>
-      <a href="#local">Privacy</a>
-      <a href="https://github.com/drmas/betterlgtm">GitHub</a>
-    </nav>
-    <a class="nav-cta" href="#download">Download</a>
-  </header>
-
-  <div id="top" class="wrap hero-copy">
-    <h1>Mean it when<br>you say <span class="stamp">lgtm</span></h1>
-    <p class="lede">A desktop app for the pull requests waiting on your review. It checks each one out, has Claude Code compare the description with the code, and walks you through the changes in an order that makes sense.</p>
-    <div class="cta-row">
-      <a class="cta" id="hero-cta" href="https://github.com/drmas/betterlgtm/releases/latest">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-        <span id="hero-label">Download for free</span>
-      </a>
-      <span class="cta-note"><span id="hero-note">Free for macOS, Windows and Linux.</span> <a href="#download">Other platforms</a></span>
-    </div>
+<header class="wrap nav">
+  <a class="brand" href="#top"><img src="assets/favicon.png" alt=""><span>BetterLGTM</span></a>
+  <nav class="nav-links" aria-label="Sections">
+    <a href="#how">How it works</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#news">Changelog</a>
+    <a href="#faq">FAQ</a>
+  </nav>
+  <div class="nav-end">
+    <a class="gh" href="https://github.com/drmas/betterlgtm" aria-label="Source on GitHub">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65S8.93 17.38 9 18v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+      <span>Source</span><span class="stars" id="stars" hidden></span>
+    </a>
+    <a class="btn btn-dark" href="#download">Download</a>
   </div>
-
-  <div class="wrap shot">
-    <picture>
-      <source media="(max-width: 860px) and (prefers-color-scheme: dark)" srcset="assets/verdict-dark.webp">
-      <source media="(max-width: 860px)" srcset="assets/verdict-light.webp">
-      <source media="(prefers-color-scheme: dark)" srcset="assets/analysis-dark.webp">
-      <img src="assets/analysis-light.webp" width="2400" height="1500" alt="BetterLGTM showing a pull request analysis: a request-changes verdict, a short summary, and the findings and description claims that need attention">
-    </picture>
-  </div>
-</section>
+</header>
 
 <main>
-<section id="how" class="features">
-  <div class="wrap">
+<section id="top" class="wrap hero">
+  <h1>
+    <span class="was"><span aria-hidden="true">−</span><span class="struck"><span class="sr-only">Not just </span>Looks good to me.<span class="strike" aria-hidden="true"></span></span></span>
+    <span class="now"><span>Mean it when you say lgtm.</span></span>
+  </h1>
+  <p class="lede">A desktop app for the pull requests waiting on your review. Claude Code checks the description against the code, so you know what to read first.</p>
+  <div class="cta-row">
+    <a class="btn btn-lg" id="hero-cta" href="https://github.com/drmas/betterlgtm/releases/latest">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+      <span id="hero-label">Download for free</span>
+    </a>
+    <div class="brew">
+      <code id="brew-cmd">brew install --cask drmas/tap/betterlgtm</code>
+      <button type="button" id="brew-copy" aria-label="Copy the Homebrew command">Copy</button>
+    </div>
+  </div>
+  <p class="note"><span id="hero-note">Free and open source, for macOS, Windows and Linux.</span> Needs the <a href="https://cli.github.com/">GitHub CLI</a> and <a href="https://claude.com/claude-code">Claude Code</a>, signed in.</p>
 
-    <div class="feature">
-      <div>
-        <h2>Does the code do what the description says?</h2>
-        <p>Claude Code reads the pull request in its own checkout, then checks each claim from the description against what the code actually does. When a claim doesn't hold, you get the reason and the exact lines.</p>
+  <figure class="stage" style="margin-left: 0; margin-right: 0; margin-bottom: 0;">
+    <div class="panes captions" aria-hidden="true">
+      <span>Your queue, sorted by risk</span>
+      <span>What needs you, before you read a line</span>
+      <span>The exact line, with the reason</span>
+    </div>
+    <div class="panes app">
+      <div class="app-side">
+        <div class="app-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="app-org">acme</div>
+        <div class="app-pr on"><b>Add idempotency keys to charge endpoint</b><span>payments-api #482 <i class="risk high">High</i></span></div>
+        <div class="app-pr"><b>Bump terraform AWS provider to 5.80</b><span>infra #77 <i class="risk med">Medium</i></span></div>
+        <div class="app-pr"><b>Move settings page to the new layout</b><span>web #1291 <i class="risk med">Medium</i></span></div>
       </div>
-      <div class="panel panel-shadow">
-        <div class="claim">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--bad-icon)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/></svg>
-          <div>
-            <div class="claim-kind">Contradicted by the code</div>
-            <div class="claim-text">“Safe to retry, even when requests arrive concurrently.”</div>
-            <div class="claim-why">Two requests with the same key can both miss the cache before either saves, so both charge the card.</div>
-          </div>
+      <div class="app-mid">
+        <div class="verdict"><b>Request changes</b>Concurrent retries can still double-charge.</div>
+        <div class="app-h">Needs your attention</div>
+        <div class="app-item on"><span class="tag crit">Critical</span><span>Concurrent retries can double-charge</span></div>
+        <div class="app-item"><span class="tag high">High</span><span>Keys aren't scoped to the merchant</span></div>
+        <div class="app-item"><span class="tag crit">Contradicted</span><span>“Safe to retry concurrently”</span></div>
+        <div class="app-item"><span class="tag ok">Matches</span><span>“Repeats get the cached response”</span></div>
+      </div>
+      <div class="app-code">
+        <div class="app-file">src/idempotency/store.ts</div>
+        <div class="ln"><span>18 </span> export async function save(key, res) {</div>
+        <div class="ln hit"><span>19 </span>   const existing = await redis.get(`idem:${key}`);</div>
+        <div class="inline-comment">
+          <div><img src="assets/favicon.png" alt=""><b>BetterLGTM</b><span class="tag crit">Critical</span></div>
+          Two requests with the same key can both miss the cache before either saves, so both charge the card.
         </div>
-        <div class="code" role="img" aria-label="Lines 18 to 21 of src/idempotency/store.ts, with line 19 highlighted">
-          <div class="file">src/idempotency/store.ts</div>
-          <div class="ln">18  export async function save(key, res) {</div>
-          <div class="ln hit">19    const existing = await redis.get(`idem:${key}`);</div>
-          <div class="ln">20    if (existing) return JSON.parse(existing);</div>
-          <div class="ln">21    await redis.set(`idem:${key}`, …);</div>
+        <div class="ln"><span>20 </span>   if (existing) return JSON.parse(existing);</div>
+        <div class="ln"><span>21 </span>   await redis.set(`idem:${key}`, …);</div>
+      </div>
+    </div>
+    <figcaption class="sr-only">A sample review in BetterLGTM: the inbox, the verdict and findings for an idempotency change, and the line the critical finding is about.</figcaption>
+  </figure>
+</section>
+
+<section id="tour" class="wrap tour" aria-labelledby="tour-title">
+  <h2 id="tour-title" class="sr-only">A review in BetterLGTM</h2>
+  <div class="tabs" role="tablist" aria-label="Steps of a review">
+    <button type="button" role="tab" id="tab-inbox" aria-controls="panel-inbox" aria-selected="false" tabindex="-1"><span class="k">1</span>Inbox</button>
+    <button type="button" role="tab" id="tab-analysis" aria-controls="panel-analysis" aria-selected="false" tabindex="-1"><span class="k">2</span>Analysis</button>
+    <button type="button" role="tab" id="tab-guided" aria-controls="panel-guided" aria-selected="true"><span class="k">3</span>Guided review</button>
+    <button type="button" role="tab" id="tab-submit" aria-controls="panel-submit" aria-selected="false" tabindex="-1"><span class="k">4</span>Submit</button>
+  </div>
+  <div class="window">
+    <div class="titlebar" aria-hidden="true"><span></span><span></span><span></span><b>payments-api #482 · Add idempotency keys to charge endpoint</b></div>
+
+    <div class="panel" role="tabpanel" id="panel-inbox" aria-labelledby="tab-inbox" hidden>
+      <p class="panel-note">Pull requests waiting on you, sorted by risk. A review requested from your team counts too.</p>
+      <ul class="inbox">
+        <li class="on"><span class="pr"><b>Add idempotency keys to charge endpoint</b><span>acme/payments-api #482 · mira-k · requested 2h ago</span></span><span class="size"><i class="plus">+214</i> <i class="minus">−38</i></span><span class="ci ok">CI passing</span><span class="risk high">High risk</span></li>
+        <li><span class="pr"><b>Bump terraform AWS provider to 5.80</b><span>acme/infra #77 · dev-ops team · requested 5h ago</span></span><span class="size"><i class="plus">+6</i> <i class="minus">−6</i></span><span class="ci bad">CI failing</span><span class="risk med">Medium</span></li>
+        <li><span class="pr"><b>Move settings page to the new layout</b><span>acme/web #1291 · tom-r · requested 1d ago</span></span><span class="size"><i class="plus">+512</i> <i class="minus">−470</i></span><span class="ci run">CI running</span><span class="risk med">Medium</span></li>
+        <li><span class="pr"><b>Fix typos in the CLI reference</b><span>acme/docs #305 · ana-p · requested 1d ago</span></span><span class="size"><i class="plus">+9</i> <i class="minus">−9</i></span><span class="ci ok">CI passing</span><span class="risk low">Low</span></li>
+      </ul>
+    </div>
+
+    <div class="panel" role="tabpanel" id="panel-analysis" aria-labelledby="tab-analysis" hidden>
+      <div class="verdict"><b>Request changes</b><span>Concurrent retries can still double-charge.</span></div>
+      <div class="cols">
+        <div>
+          <h3 class="panel-h">In short</h3>
+          <ul class="short">
+            <li>Adds an <code>Idempotency-Key</code> header to <code>POST /v1/charges</code>.</li>
+            <li>Caches the first response in Redis for 24 hours.</li>
+            <li>Repeats with the same key get the cached response.</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="panel-h">Needs your attention</h3>
+          <ul class="attn">
+            <li><span class="tag crit">Critical</span><span>Concurrent retries can double-charge</span><code>store.ts:19</code></li>
+            <li><span class="tag high">High</span><span>Keys aren't scoped to the merchant</span><code>keys.ts:12</code></li>
+            <li><span class="tag crit">Contradicted</span><span>“Safe to retry, even when requests arrive concurrently.”</span></li>
+            <li><span class="tag high">Partly</span><span>“Keys are stored in Redis for 24 hours.”</span></li>
+          </ul>
         </div>
       </div>
     </div>
 
-    <div class="feature">
-      <div>
-        <h2>Read the change, not the file list</h2>
-        <p>Related edits are grouped into sections with a line on what each one does, in one continuous scroll. Tick off a section, a file or a single change as you go, and generated files stay folded until you open them.</p>
-      </div>
+    <div class="panel" role="tabpanel" id="panel-guided" aria-labelledby="tab-guided">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="assets/guided-dark.webp">
-        <img class="feature-shot" src="assets/guided-light.webp" width="1600" height="1031" loading="lazy" alt="Guided review: the change split into three sections, each with a short summary above the diff of its file">
+        <img src="assets/guided-light.webp" width="1600" height="1031" loading="lazy" alt="Guided review: the change split into three sections, each with a short summary above the diff of its file">
       </picture>
     </div>
 
-    <div class="feature">
-      <div>
-        <h2>Ask about the line you're on</h2>
-        <p>The chat knows which finding, section or file you're looking at, and Claude can read the whole repository to answer. It can't change your code or post anything to GitHub.</p>
+    <div class="panel" role="tabpanel" id="panel-submit" aria-labelledby="tab-submit" hidden>
+      <div class="decision" aria-hidden="true"><span>Comment</span><span>Approve</span><span class="on">Request changes</span></div>
+      <p class="summary">Thanks, this is close. The lock below closes the race; the merchant scoping can follow in its own PR.</p>
+      <div class="post">
+        <div class="post-head"><span class="check on" aria-hidden="true"></span><b>store.ts:19</b><span class="tag crit">Critical</span><span>Concurrent retries can double-charge</span></div>
+        <div class="suggest" role="img" aria-label="Suggested change: replace the cache read on line 19 with a lock taken before charging">
+          <div class="suggest-h">Suggested change</div>
+          <div class="sl del">−   const existing = await redis.get(`idem:${key}`);</div>
+          <div class="sl add">+   const locked = await redis.set(`idem:lock:${key}`, "1", "NX", "EX", 30);</div>
+          <div class="sl add">+   if (!locked) return waitForResponse(key);</div>
+        </div>
       </div>
-      <div class="panel chat">
-        <div class="msg-me">How would you fix the double charge?</div>
-        <div class="msg-ai">Take a short lock on the key before charging: <code>SET idem:lock:{key} NX EX 30</code> in <code>store.ts:19</code>. A second request that can't get the lock waits for the first response instead of charging again.</div>
-        <div class="composer" aria-hidden="true"><span>Ask about this…</span><span class="send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></span></div>
-      </div>
+      <div class="post"><div class="post-head"><span class="check on" aria-hidden="true"></span><b>keys.ts:12</b><span class="tag high">High</span><span>Keys aren't scoped to the merchant</span></div></div>
+      <div class="post-foot"><span class="fake-btn" aria-hidden="true">Request changes</span><span>Posts one review with 2 line comments</span></div>
     </div>
+  </div>
+  <p class="tour-note">The pull requests here are samples. Use the tabs, or the arrow keys, to step through a review.</p>
+</section>
 
+<section id="how" class="wrap section">
+  <div class="split top">
+    <h2 style="flex: 1 1 300px;">How a review goes</h2>
+    <ol class="steps">
+      <li class="step">
+        <span class="dot" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span>
+        <div><h3>A review is requested</h3><p>It lands in your inbox, directly or through a team, with CI, size and a risk estimate on the row. You get a notification when it's requested again.</p></div>
+      </li>
+      <li class="step">
+        <span class="dot" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="9" r="3"/><path d="M6 9v6"/><path d="M18 12c0 3-3 3-6 3H9"/></svg></span>
+        <div><h3>It's checked out on its own</h3><p>Each pull request gets a git worktree next to a shared clone, so Claude reads real files, not just the diff.</p></div>
+      </li>
+      <li class="step">
+        <span class="dot" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+        <div><h3>Claude Code reads it</h3><p>It checks every claim in the description against the code and ranks the findings by severity. With auto-analyze on, this happens before you open it.</p></div>
+      </li>
+      <li class="step">
+        <span class="dot" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <div><h3>You read the change</h3><p>Section by section, with a line on what each one does. Ask about anything in the chat as you go.</p></div>
+      </li>
+      <li class="step">
+        <span class="dot done" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <div><h3>You approve, and mean it</h3><p>Post the review to GitHub with the findings you picked as line comments, or request changes.</p></div>
+      </li>
+    </ol>
   </div>
 </section>
 
-<section id="local" class="local">
-  <div class="wrap">
-    <h2>Runs on your machine, with the tools you already use</h2>
-    <div class="local-grid">
-      <div><h3>No account, no server</h3><p>BetterLGTM talks to GitHub through your signed-in <code>gh</code> and to Claude through your <code>claude</code>. Your code and tokens never pass through us.</p></div>
-      <div><h3>A worktree per pull request</h3><p>Each PR gets its own checkout next to a shared clone, so Claude reads real files and your working copy is never touched.</p></div>
-      <div><h3>Read-only by design</h3><p>Claude Code can read, search and look at git history. It can't edit files, run other commands, or comment on GitHub.</p></div>
-      <div><h3>Open source</h3><p>MIT licensed. Read the code, file an issue, or send a pull request on <a href="https://github.com/drmas/betterlgtm">GitHub</a>.</p></div>
+<section class="wrap section">
+  <div class="split">
+    <div class="copy">
+      <h2>Does the code do what the description says?</h2>
+      <p>Each claim is marked as matching, partly implemented, or contradicted by the code. When one doesn't hold, you get the reason and the exact lines.</p>
+    </div>
+    <div class="visual claim-card">
+      <div class="claim">
+        <p class="kind">Contradicted by the code</p>
+        <p class="quote">“Safe to retry, even when requests arrive concurrently.”</p>
+        <p class="why">Two requests with the same key can both miss the cache before either saves, so both charge the card.</p>
+      </div>
+      <div class="code" role="img" aria-label="Lines 18 to 21 of src/idempotency/store.ts, with line 19 highlighted">
+        <div class="file">src/idempotency/store.ts</div>
+        <div class="ln"><span>18 </span> export async function save(key, res) {</div>
+        <div class="ln hit"><span>19 </span>   const existing = await redis.get(`idem:${key}`);</div>
+        <div class="ln"><span>20 </span>   if (existing) return JSON.parse(existing);</div>
+        <div class="ln"><span>21 </span>   await redis.set(`idem:${key}`, …);</div>
+      </div>
     </div>
   </div>
 </section>
 
-<section id="download" class="download">
-  <div class="wrap">
-    <h2>Download BetterLGTM</h2>
-    <p class="sub">Free. You'll need the <a href="https://cli.github.com/" style="color:#FFFFFF">GitHub CLI</a> and <a href="https://claude.com/claude-code" style="color:#FFFFFF">Claude Code</a> installed and signed in.</p>
-    <div class="platforms">
-      <div class="platform">
-        <h3>macOS</h3>
-        <a class="dl" data-asset="mac-arm" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_aarch64.dmg"><span>Apple silicon</span><span class="meta">.dmg, 3.2 MB</span></a>
-        <a class="dl" data-asset="mac-intel" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_x64.dmg"><span>Intel</span><span class="meta">.dmg, 3.5 MB</span></a>
-      </div>
-      <div class="platform">
-        <h3>Windows</h3>
-        <a class="dl" data-asset="win-exe" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_x64-setup.exe"><span>Installer</span><span class="meta">.exe, 2.5 MB</span></a>
-        <a class="dl" data-asset="win-msi" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_x64_en-US.msi"><span>Windows Installer</span><span class="meta">.msi, 3.4 MB</span></a>
-      </div>
-      <div class="platform">
-        <h3>Linux</h3>
-        <a class="dl" data-asset="appimage" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_amd64.AppImage"><span>AppImage</span><span class="meta">79 MB</span></a>
-        <a class="dl" data-asset="deb" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_amd64.deb"><span>Debian, Ubuntu</span><span class="meta">.deb, 4.2 MB</span></a>
-        <a class="dl" data-asset="rpm" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM-0.4.1-1.x86_64.rpm"><span>Fedora</span><span class="meta">.rpm, 4.2 MB</span></a>
-      </div>
-    </div>
-    <div class="brew"><span class="brew-label">On a Mac with Homebrew</span><code id="brew-cmd">brew install --cask drmas/tap/betterlgtm</code><button type="button" id="brew-copy" aria-label="Copy the Homebrew command">Copy</button></div>
-    <p class="fine"><span id="version">Version 0.4.1.</span> The macOS app is signed and notarized by Apple, and the app updates itself from here on. Windows builds aren't signed yet: if SmartScreen warns, choose More info › Run anyway. <a href="https://github.com/drmas/betterlgtm/releases">All releases</a></p>
+<section id="compare" class="wrap section">
+  <h2>What changes when you review with it</h2>
+  <div class="compare-wrap">
+    <table class="compare">
+      <thead><tr><th scope="col"><span class="sr-only">Task</span></th><th scope="col">By hand</th><th scope="col">With BetterLGTM</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Getting the code</th><td>Stash your work, fetch the branch, check it out, switch back later.</td><td>Each pull request gets its own worktree. Your branch stays as it was.</td></tr>
+        <tr><th scope="row">Checking the description</th><td>Read it, then hunt for the code behind each claim.</td><td>Every claim is marked as matching, partly done or contradicted, with the lines.</td></tr>
+        <tr><th scope="row">Reading the diff</th><td>Files in alphabetical order, generated ones included.</td><td>Related edits in sections, each with a line on what it does.</td></tr>
+        <tr><th scope="row">After the author pushes</th><td>Re-read it and try to remember what you flagged.</td><td>See only the new commits, and which findings are fixed.</td></tr>
+        <tr><th scope="row">Posting the review</th><td>Copy your notes into line comments one by one.</td><td>Pick findings, edit them, and post one review with suggested fixes.</td></tr>
+      </tbody>
+    </table>
   </div>
+</section>
+
+<section class="wrap section">
+  <div class="split">
+    <div class="copy">
+      <h2>Ask about the line you're on</h2>
+      <p>The chat knows which finding, section or file you're looking at, and Claude can read the whole repository to answer.</p>
+    </div>
+    <div class="visual chat">
+      <p class="msg-me">How would you fix the double charge?</p>
+      <p class="msg-ai">Take a short lock on the key before charging: <code class="fix">SET idem:lock:{key} NX EX 30</code> in <code>store.ts:19</code>. A second request that can't get the lock waits for the first response instead of charging again.</p>
+    </div>
+  </div>
+</section>
+
+<section id="keys" class="wrap section">
+  <div class="split top">
+    <div class="copy">
+      <h2>Review without reaching for the mouse</h2>
+      <p>Vim-style keys move through the inbox, findings and sections whenever no text field has focus. Turn them off in Settings if they're not for you.</p>
+    </div>
+    <dl class="visual keys">
+      <div><dt><kbd>j</kbd><kbd>k</kbd></dt><dd>Move through the list</dd></div>
+      <div><dt><kbd>n</kbd><kbd>N</kbd></dt><dd>Next or previous finding</dd></div>
+      <div><dt><kbd>]</kbd><kbd>[</kbd></dt><dd>Next or previous file or section</dd></div>
+      <div><dt><kbd>x</kbd></dt><dd>Mark reviewed</dd></div>
+      <div><dt><kbd>a</kbd></dt><dd>Add a finding to the review</dd></div>
+      <div><dt><kbd>S</kbd></dt><dd>Submit the review</dd></div>
+      <div><dt><kbd>⌘</kbd><kbd>K</kbd></dt><dd>Go to a PR, finding, file or command</dd></div>
+      <div><dt><kbd>?</kbd></dt><dd>Show every shortcut</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="wrap section">
+  <h2 class="h-small">Also in the app</h2>
+  <ul class="lines also">
+    <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Re-check findings.</strong> After the author pushes, see which are fixed and which are still open.</span></li>
+    <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Risk and tests.</strong> The risk level and why, the sensitive areas touched, and what's tested.</span></li>
+    <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Your own pull requests.</strong> See what's blocking merge, self-review, and let Claude write the description.</span></li>
+    <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Your team's guidelines.</strong> The analysis follows a repository's REVIEW.md or the review part of CONTRIBUTING.md.</span></li>
+    <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Linked issues.</strong> Requirements from the issues a PR closes are checked like description claims.</span></li>
+    <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>A full diff view.</strong> Unified or split, whitespace hiding, and regex search across the repository.</span></li>
+  </ul>
+</section>
+
+<section id="privacy" class="wrap section">
+  <div class="split top">
+    <div class="copy">
+      <h2>What it leaves out</h2>
+      <p>BetterLGTM runs on your machine with the <code>gh</code> and <code>claude</code> you've already signed in to.</p>
+    </div>
+    <ul class="visual lines privacy">
+      <li class="del"><span class="s" aria-hidden="true">−</span><span><strong><span class="sr-only">No </span>An account and a server</strong>It talks to GitHub through your <code>gh</code> and to Claude through your <code>claude</code>. Your code and tokens never pass through us.</span></li>
+      <li class="del"><span class="s" aria-hidden="true">−</span><span><strong><span class="sr-only">No </span>Touching your working copy</strong>Each pull request has its own worktree. The branch you're on stays exactly as you left it.</span></li>
+      <li class="del"><span class="s" aria-hidden="true">−</span><span><strong><span class="sr-only">No </span>Write access</strong>Claude Code can read, search and look at git history. It can't edit files, run other commands, or comment on GitHub.</span></li>
+      <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>The source, MIT licensed</strong>Read it, file an issue, or send a pull request on <a href="https://github.com/drmas/betterlgtm">GitHub</a>.</span></li>
+    </ul>
+  </div>
+</section>
+
+<section id="news" class="wrap section">
+  <div class="split top">
+    <div class="copy">
+      <h2>What's new</h2>
+      <p>When a new release is out, the app offers to install it. <a href="https://github.com/drmas/betterlgtm/blob/main/CHANGELOG.md">Full changelog</a></p>
+    </div>
+    <ol class="visual releases">
+      <li>
+        <h3><span class="ver">0.4.1</span> Faster startup, PR switching and diffs</h3>
+        <p>The inbox shows its last copy right away, recently opened PRs reopen instantly, and long files render as you scroll.</p>
+      </li>
+      <li>
+        <h3><span class="ver">0.4.0</span> Your own pull requests</h3>
+        <p>See what's blocking merge, self-review before asking for reviews, let Claude draft the description, and reply to feedback.</p>
+      </li>
+      <li>
+        <h3><span class="ver">0.3.0</span> Suggested changes and auto-analyze</h3>
+        <p>Post small fixes the author applies in one click, and have new review requests analyzed before you open them.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="faq" class="wrap section">
+  <div class="split top">
+    <h2 class="faq-title">Questions</h2>
+    <div class="visual faq">
+      <details>
+        <summary>What does it cost?</summary>
+        <p>The app is free and MIT licensed. Analyses use your Claude Code plan or API usage, and the status bar shows the tokens each pull request used. Auto-analyze is off by default for that reason.</p>
+      </details>
+      <details>
+        <summary>Where does my code go?</summary>
+        <p>Claude reads it from a local worktree through your own <code>claude</code>, the same as when you use Claude Code yourself. BetterLGTM has no server and never sees your tokens.</p>
+      </details>
+      <details>
+        <summary>Can Claude change my code or post on GitHub?</summary>
+        <p>No. It can only read, search and run read-only git commands like <code>git log</code> and <code>git diff</code>. Reviews are posted by the app, through your <code>gh</code>, when you press Submit.</p>
+      </details>
+      <details>
+        <summary>Does it follow our review guidelines?</summary>
+        <p>Yes. It reads a repository's REVIEW.md or the review section of CONTRIBUTING.md and says which file it used. You can add your own instructions, globally or per repository, in Settings.</p>
+      </details>
+      <details>
+        <summary>Where is everything stored?</summary>
+        <p>Clones and worktrees live in <code>~/.betterlgtm</code>, and analyses, chats and settings in the app's own storage. You can move the folder or clear everything from Settings.</p>
+      </details>
+      <details>
+        <summary>Can I build it myself?</summary>
+        <p>Yes. You need Rust, Node.js 22 and the Tauri prerequisites, then <code>npm install</code> and <code>npm run tauri dev</code>. See <a href="https://github.com/drmas/betterlgtm/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section id="download" class="wrap download">
+  <h2>Download BetterLGTM</h2>
+  <p class="sub">Free. <span id="version">Version 0.4.1.</span> The app updates itself from here on.</p>
+  <div class="platforms">
+    <div class="platform">
+      <h3>macOS</h3>
+      <a class="dl primary" data-asset="mac-arm" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_aarch64.dmg"><span>Apple silicon</span><span class="meta">.dmg, 3.2 MB</span></a>
+      <a class="dl" data-asset="mac-intel" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_x64.dmg"><span>Intel</span><span class="meta">.dmg, 3.5 MB</span></a>
+      <p>Signed and notarized by Apple.</p>
+    </div>
+    <div class="platform">
+      <h3>Windows</h3>
+      <a class="dl" data-asset="win-exe" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_x64-setup.exe"><span>Installer</span><span class="meta">.exe, 2.5 MB</span></a>
+      <a class="dl" data-asset="win-msi" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_x64_en-US.msi"><span>Windows Installer</span><span class="meta">.msi, 3.4 MB</span></a>
+      <p>Not signed yet. If SmartScreen warns, choose More info › Run anyway.</p>
+    </div>
+    <div class="platform">
+      <h3>Linux</h3>
+      <a class="dl" data-asset="appimage" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_amd64.AppImage"><span>AppImage</span><span class="meta">79 MB</span></a>
+      <a class="dl" data-asset="deb" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_amd64.deb"><span>Debian, Ubuntu</span><span class="meta">.deb, 4.2 MB</span></a>
+      <a class="dl" data-asset="rpm" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM-0.4.1-1.x86_64.rpm"><span>Fedora</span><span class="meta">.rpm, 4.2 MB</span></a>
+      <p>Needs WebKitGTK 4.1.</p>
+    </div>
+  </div>
+  <p class="fine">Older versions and release notes are on the <a href="https://github.com/drmas/betterlgtm/releases">releases page</a>.</p>
 </section>
 </main>
 
-<footer class="wrap">
-  <span class="badge">lgtm</span>
-  <a href="https://github.com/drmas/betterlgtm">GitHub</a>
-  <a href="https://github.com/drmas/betterlgtm/blob/main/LICENSE">MIT License</a>
-  <span class="end">Not affiliated with GitHub or Anthropic.</span>
+<footer>
+  <div class="wrap">
+    <a href="https://github.com/drmas/betterlgtm">GitHub</a>
+    <a href="https://github.com/drmas/betterlgtm/blob/main/LICENSE">MIT License</a>
+    <a href="https://github.com/drmas/betterlgtm/blob/main/CONTRIBUTING.md">Contribute</a>
+    <span class="end">Not affiliated with GitHub or Anthropic.</span>
+  </div>
 </footer>
 
 <script>
@@ -390,9 +782,13 @@ footer .end { margin-left: auto; }
     if (!hero) return;
     document.getElementById("hero-cta").href = link(hero[0]).href;
     document.getElementById("hero-label").textContent = hero[1];
-    document.getElementById("hero-note").textContent = "Version " + version + " " + hero[2];
+    document.getElementById("hero-note").textContent = "Free and open source. Version " + version + " " + hero[2];
   }
 
+  if (hero) {
+    document.querySelectorAll(".dl.primary").forEach(function (el) { el.classList.remove("primary"); });
+    link(hero[0]).classList.add("primary");
+  }
   setHero("0.4.1");
   document.getElementById("brew-copy").addEventListener("click", function () {
     var button = this;
@@ -401,6 +797,41 @@ footer .end { margin-left: auto; }
       setTimeout(function () { button.textContent = "Copy"; }, 1600);
     });
   });
+  // Product tour tabs: click, or arrow keys / Home / End once a tab has focus.
+  var tabs = [].slice.call(document.querySelectorAll('[role="tab"]'));
+  function select(tab) {
+    tabs.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute("aria-selected", on);
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+    });
+  }
+  tabs.forEach(function (tab, i) {
+    tab.addEventListener("click", function () { select(tab); });
+    tab.addEventListener("keydown", function (e) {
+      var next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+      if (next === undefined) return;
+      e.preventDefault();
+      var t = tabs[(next + tabs.length) % tabs.length];
+      select(t);
+      t.focus();
+    });
+  });
+
+  // Star count next to the GitHub link; stays hidden if the API can't be reached.
+  fetch("https://api.github.com/repos/drmas/betterlgtm")
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (repo) {
+      var n = repo.stargazers_count;
+      if (typeof n !== "number" || n < 25) return;
+      var el = document.getElementById("stars");
+      el.textContent = n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n);
+      el.setAttribute("aria-label", n + " stars");
+      el.hidden = false;
+    })
+    .catch(function () {});
+
   fetch("https://api.github.com/repos/drmas/betterlgtm/releases/latest")
     .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
     .then(function (release) {
