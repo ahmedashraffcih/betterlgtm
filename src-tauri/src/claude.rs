@@ -6,7 +6,6 @@ use serde_json::{Value, json};
 use tauri::State;
 use tauri::ipc::Channel;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
-use tokio::process::Command;
 use tokio::sync::oneshot;
 
 use crate::config::ConfigState;
@@ -47,7 +46,7 @@ pub async fn claude_run(
     on_event: Channel<Value>,
 ) -> Result<(), String> {
     let config = config.get();
-    let mut cmd = Command::new(&config.claude_path);
+    let mut cmd = crate::process::command(&config.claude_path);
     if !config.model.trim().is_empty() {
         cmd.args(["--model", config.model.trim()]);
     }
