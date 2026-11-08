@@ -1,8 +1,9 @@
 use serde_json::Value;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::config::ConfigState;
 use crate::process::run;
+use crate::worktree;
 
 fn parse(out: &str) -> Result<Value, String> {
     serde_json::from_str(out).map_err(|e| format!("Unexpected output from gh: {e}"))
@@ -71,7 +72,20 @@ pub async fn pr_body_html(config: State<'_, ConfigState>, repo: String, number: 
 }
 
 #[tauri::command]
-pub async fn pr_diff(config: State<'_, ConfigState>, repo: String, number: u64) -> Result<String, String> {
+pub async fn pr_diff(app: AppHandle, config: State<'_, ConfigState>, repo: String, number: u64) -> Result<String, String> {
+    let config = config.get();
     let n = number.to_string();
-    run(&config.get().gh_path, &["pr", "diff", &n, "-R", &repo], None).await
+    match run(&config.gh_path, &["pr", "diff", &n, "-R", &repo], None).await {
+        // GitHub won't serve diffs over 20,000 lines; build those from the local clone instead.
+        Err(e) if e.contains("too_large") || e.contains("maximum number of lines") => {
+            let base_ref = run(
+                &config.gh_path,
+                &["pr", "view", &n, "-R", &repo, "--json", "baseRefName", "--jq", ".baseRefName"],
+                None,
+            )
+            .await?;
+            worktree::local_diff(&app, &config, &repo, number, base_ref.trim()).await
+        }
+        other => other,
+    }
 }
