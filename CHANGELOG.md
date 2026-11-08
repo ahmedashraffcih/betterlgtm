@@ -2,7 +2,7 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 0.2.4 — 2026-11-08
 
 - Fixed "Could not run `gh`" when the app is opened from the Dock, Finder, Spotlight or a desktop launcher. The app now uses your login shell's PATH plus the usual Homebrew, npm and Claude Code folders. ([#1](https://github.com/drmas/betterlgtm/issues/1))
 
@@ -43,6 +43,7 @@ The first release.
 - Menu bar, command palette, keyboard shortcuts, light and dark themes, and a Settings page.
 - Installers for macOS (Apple silicon and Intel), Windows and Linux.
 
+[0.2.4]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.4
 [0.2.3]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.3
 [0.2.2]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.2
 [0.2.1]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.1
