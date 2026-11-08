@@ -51,10 +51,10 @@ Download the installer for your platform from [Releases](https://github.com/drma
 
 | Platform | File |
 |---|---|
-| macOS, Apple silicon | [`BetterLGTM_0.4.0_aarch64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.4.0/BetterLGTM_0.4.0_aarch64.dmg) |
-| macOS, Intel | [`BetterLGTM_0.4.0_x64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.4.0/BetterLGTM_0.4.0_x64.dmg) |
-| Windows | [`BetterLGTM_0.4.0_x64-setup.exe`](https://github.com/drmas/betterlgtm/releases/download/v0.4.0/BetterLGTM_0.4.0_x64-setup.exe) or [`.msi`](https://github.com/drmas/betterlgtm/releases/download/v0.4.0/BetterLGTM_0.4.0_x64_en-US.msi) |
-| Linux | [`.AppImage`](https://github.com/drmas/betterlgtm/releases/download/v0.4.0/BetterLGTM_0.4.0_amd64.AppImage), [`.deb`](https://github.com/drmas/betterlgtm/releases/download/v0.4.0/BetterLGTM_0.4.0_amd64.deb) or [`.rpm`](https://github.com/drmas/betterlgtm/releases/download/v0.4.0/BetterLGTM-0.4.0-1.x86_64.rpm) |
+| macOS, Apple silicon | [`BetterLGTM_0.4.1_aarch64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_aarch64.dmg) |
+| macOS, Intel | [`BetterLGTM_0.4.1_x64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_x64.dmg) |
+| Windows | [`BetterLGTM_0.4.1_x64-setup.exe`](https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_x64-setup.exe) or [`.msi`](https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_x64_en-US.msi) |
+| Linux | [`.AppImage`](https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_amd64.AppImage), [`.deb`](https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM_0.4.1_amd64.deb) or [`.rpm`](https://github.com/drmas/betterlgtm/releases/download/v0.4.1/BetterLGTM-0.4.1-1.x86_64.rpm) |
 
 The macOS app is signed with a Developer ID and notarized by Apple, so it opens like any other Mac app. Windows builds aren't signed yet: if SmartScreen warns about an unknown publisher, choose **More info › Run anyway**.
 
