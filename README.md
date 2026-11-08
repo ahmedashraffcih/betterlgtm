@@ -28,7 +28,9 @@ It runs on your machine with the `gh` and `claude` command-line tools you alread
 - **A worktree per PR.** Each pull request is checked out next to a shared clone, so Claude reads real files, not just the diff, and your own working copy is never touched.
 - **Auto-analyze (optional).** New review requests can be analyzed in the background, so results are waiting when you open them.
 - **Description check.** Each claim in the PR description is marked as matching, partly implemented, or contradicted by the code.
-- **Findings.** Bugs, risks and gaps, ranked by severity and linked to the exact diff lines.
+- **Findings.** Bugs, risks and gaps, ranked by severity and linked to the exact diff lines. Resolve or dismiss them, and post fixes as suggestions the author can apply.
+- **Risk and tests.** The risk level and its reasons, the sensitive areas touched, and whether each change is tested.
+- **Context.** The issues the PR closes and the conversations already on it, so findings don't repeat what reviewers said.
 - **Guided review.** Related edits grouped into sections with a line on what each does, in one continuous scroll. Mark a change, a file or a whole section as reviewed and see your progress.
 - **Since your last review.** When new commits land after you reviewed, see just those changes and analyze only them.
 - **Re-check findings.** After the author pushes, Claude checks which findings are fixed and which are still open.
