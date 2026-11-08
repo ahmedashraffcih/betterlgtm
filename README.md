@@ -78,7 +78,6 @@ If the app can't find `gh` or `claude` (common when it's started from a launcher
 |---|---|
 | <kbd>Ctrl</kbd> <kbd>K</kbd> | Go to a pull request, finding, section, file or command |
 | <kbd>Ctrl</kbd> <kbd>1</kbd> / <kbd>Ctrl</kbd> <kbd>2</kbd> | Analysis / Diff |
-| <kbd>J</kbd> / <kbd>K</kbd> | Next / previous finding |
 | <kbd>Ctrl</kbd> <kbd>L</kbd> | Ask Claude |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Enter</kbd> | Submit review |
 | <kbd>Ctrl</kbd> <kbd>B</kbd> / <kbd>Ctrl</kbd> <kbd>J</kbd> | Show or hide the inbox / Claude panel |
@@ -87,6 +86,8 @@ If the app can't find `gh` or `claude` (common when it's started from a launcher
 | <kbd>Ctrl</kbd> <kbd>/</kbd> | All shortcuts |
 
 On macOS, use <kbd>Cmd</kbd> in place of <kbd>Ctrl</kbd>.
+
+**Vim-style keys** work whenever no text field has focus: <kbd>h</kbd> / <kbd>l</kbd> move between the inbox, the list and the content, <kbd>j</kbd> / <kbd>k</kbd> move inside a pane, <kbd>g</kbd><kbd>g</kbd> / <kbd>G</kbd> jump to the top or bottom, <kbd>n</kbd> / <kbd>N</kbd> step through findings, <kbd>x</kbd> marks the current file or section reviewed, and <kbd>S</kbd> submits the review. Press <kbd>?</kbd> for the full list, or turn them off in Settings › General.
 
 ## Privacy and safety
 

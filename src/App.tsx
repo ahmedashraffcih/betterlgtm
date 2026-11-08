@@ -32,6 +32,12 @@ interface Loaded {
   files: FileData[];
 }
 
+type Pane = "inbox" | "outline" | "content";
+const PANES: Pane[] = ["inbox", "outline", "content"];
+const paneEl = (p: Pane) => document.querySelector<HTMLElement>(`[data-pane="${p}"]`);
+const navItems = (p: Pane) => [...(paneEl(p)?.querySelectorAll<HTMLElement>("[data-nav]") ?? [])];
+const isCurrent = (el: HTMLElement) => el.matches(".sel, .cur, [aria-current='true']");
+
 /** Your last review of a PR and, once loaded, what changed after it. */
 interface SinceReview {
   review: LastReview | null;
@@ -96,7 +102,7 @@ export default function App() {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<"analysis" | "diff">("analysis");
-  const [focusPane, setFocusPane] = useState<"inbox" | "outline">("inbox");
+  const [focusPane, setFocusPane] = useState<Pane>("inbox");
   const [outlineKey, setOutlineKey] = useState<OutlineKey>("s0");
   const [diffTarget, setDiffTarget] = useState<{ path: string | null; range: Anchor | null; finding: number | null }>({ path: null, range: null, finding: null });
 
@@ -409,16 +415,91 @@ export default function App() {
     setOutlineKey(`f${next}`);
   };
 
-  // j / k move between findings when no text field has focus.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target;
-      if ((t instanceof Element && t.closest("input, textarea, select")) || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === "j") stepFinding(1);
-      if (e.key === "k") stepFinding(-1);
+  // Vim-style keys when no text field has focus: h/l pick a pane (inbox, side list, content),
+  // j/k move inside it, and single letters run common actions. Ctrl shortcuts live in `commands`.
+  const vimRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  const pendingG = useRef(0);
+  vimRef.current = (e: KeyboardEvent) => {
+    const t = e.target;
+    const typing = t instanceof HTMLElement && !!t.closest("input, textarea, select, [contenteditable]");
+    if (typing) {
+      // Esc leaves a text field, back to the keys.
+      if (e.key === "Escape" && t instanceof HTMLElement && !paletteOpen && !reviewOpen) t.blur();
+      return;
+    }
+    if (!settings.vimKeys || paletteOpen || infoDialog || reviewOpen || settingsOpen || e.metaKey || e.altKey) return;
+    // A focused button already handles Enter and Space itself.
+    if (t instanceof HTMLButtonElement && (e.key === "Enter" || e.key === " ")) return;
+
+    const panes = PANES.filter((p) => paneEl(p));
+    const pane: Pane = panes.includes(focusPane) ? focusPane : panes[0] ?? "inbox";
+    const scrollContent = (dy: number | "top" | "bottom") => {
+      const el = paneEl("content");
+      if (!el) return;
+      if (dy === "top") el.scrollTo({ top: 0 });
+      else if (dy === "bottom") el.scrollTo({ top: el.scrollHeight });
+      else el.scrollBy({ top: dy });
     };
+    const move = (p: Pane, to: number | "first" | "last") => {
+      const list = navItems(p);
+      if (!list.length) return;
+      const cur = list.findIndex(isCurrent);
+      const i = to === "first" ? 0 : to === "last" ? list.length - 1 : Math.min(list.length - 1, Math.max(0, (cur < 0 ? (to > 0 ? -1 : list.length) : cur) + to));
+      list[i].click();
+      list[i].scrollIntoView({ block: "nearest" });
+    };
+    const go = (to: number | "first" | "last") => {
+      if (pane === "content") scrollContent(to === "first" ? "top" : to === "last" ? "bottom" : to * 80);
+      else move(pane, to);
+    };
+    const switchPane = (d: number) => {
+      const i = panes.indexOf(pane);
+      const next = panes[Math.min(panes.length - 1, Math.max(0, i + d))];
+      if (next) setFocusPane(next);
+    };
+
+    if (e.ctrlKey) {
+      const half = (paneEl("content")?.clientHeight ?? 600) / 2;
+      if (e.key === "d") { e.preventDefault(); scrollContent(half); }
+      if (e.key === "u") { e.preventDefault(); scrollContent(-half); }
+      return;
+    }
+
+    const now = Date.now();
+    const g = e.key === "g" && now - pendingG.current < 600;
+    pendingG.current = e.key === "g" && !g ? now : 0;
+    const run = (f: () => void) => { e.preventDefault(); f(); };
+    switch (e.key) {
+      case "j": case "ArrowDown": return run(() => go(1));
+      case "k": case "ArrowUp": return run(() => go(-1));
+      case "g": return g ? run(() => go("first")) : undefined;
+      case "G": return run(() => go("last"));
+      case "h": return run(() => switchPane(-1));
+      case "l": case "Enter": return run(() => switchPane(1));
+      case "n": return run(() => stepFinding(1));
+      case "N": return run(() => stepFinding(-1));
+      case "]": return run(() => move("outline", 1));
+      case "[": return run(() => move("outline", -1));
+      case "1": return run(() => setTab("analysis"));
+      case "2": return run(() => setTab("diff"));
+      case "x": return run(() => document.querySelector<HTMLElement>("[data-review-toggle]")?.click());
+      case "a": return run(() => document.querySelector<HTMLElement>('[data-key="add-review"]')?.click());
+      case "i": return selected ? run(() => { setChatOpen(true); setChatFocus((c) => c + 1); }) : undefined;
+      case "/": return run(() => (pane === "inbox" ? document.querySelector<HTMLElement>('[data-key="filter"]')?.focus() : setPaletteOpen(true)));
+      case "r": return run(refresh);
+      case "S": return details ? run(() => setReviewOpen(true)) : undefined;
+      case "O": return selected ? run(() => openUrl(selected.url)) : undefined;
+      case "?": return run(() => setInfoDialog("shortcuts"));
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => vimRef.current(e);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  // Show which pane the keys act on. React doesn't manage this attribute, so it survives renders.
+  useEffect(() => {
+    for (const el of document.querySelectorAll<HTMLElement>("[data-pane]")) el.toggleAttribute("data-focused", el.dataset.pane === focusPane);
   });
 
   const details = loaded && loaded.key === key ? loaded.details : null;
@@ -912,7 +993,7 @@ export default function App() {
           }}
         />
       )}
-      {infoDialog && <InfoDialog kind={infoDialog} commands={commands} onClose={() => setInfoDialog(null)} />}
+      {infoDialog && <InfoDialog kind={infoDialog} commands={commands} vim={settings.vimKeys} onClose={() => setInfoDialog(null)} />}
     </div>
   );
 }

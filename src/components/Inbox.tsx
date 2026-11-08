@@ -137,7 +137,7 @@ export function Inbox(p: Props) {
   const visibleCount = groups.reduce((n, [, prs]) => n + prs.length, 0);
 
   return (
-    <aside className="side" aria-label={p.view === "mine" ? "Your pull requests" : "Review requests"}>
+    <aside className="side" data-pane="inbox" aria-label={p.view === "mine" ? "Your pull requests" : "Review requests"}>
       <div className="ph">
         <div className="seg" role="group" aria-label="Show" style={{ flex: 1, minWidth: 0 }}>
           <button type="button" className={p.view === "review" ? "on" : ""} aria-pressed={p.view === "review"} onClick={() => p.onViewChange("review")} title="Pull requests waiting for your review">
@@ -159,7 +159,7 @@ export function Inbox(p: Props) {
       <div style={{ padding: "0 8px 8px", display: "flex", gap: 6 }}>
         <label className="field" style={{ flex: 1, minWidth: 0 }}>
           <Funnel size={14} />
-          <input placeholder="Filter" aria-label="Filter pull requests" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <input data-key="filter" placeholder="Filter" aria-label="Filter pull requests" value={filter} onChange={(e) => setFilter(e.target.value)} />
         </label>
         <label className="sort-select" title="Sort">
           <ArrowDownUp size={13} />
@@ -200,7 +200,7 @@ export function Inbox(p: Props) {
                   const crit = findings.filter((f) => f.severity === "critical").length;
                   const cls = ["pr", p.selected === key && "sel", p.selected === key && p.focused && "focused"].filter(Boolean).join(" ");
                   return (
-                    <button key={key} type="button" className={cls} onClick={() => p.onSelect(pr)} title={pr.title}>
+                    <button key={key} type="button" data-nav className={cls} onClick={() => p.onSelect(pr)} title={pr.title}>
                       <span className="t1 ellipsis" style={{ width: "100%" }}>{pr.title}</span>
                       <span className="t2">
                         <span className="ellipsis" style={{ flex: 1 }}>

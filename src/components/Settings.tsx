@@ -209,6 +209,7 @@ export function Settings(p: Props) {
                   {[1, 2, 5, 10, 15, 30, 60].map((m) => <option key={m} value={m}>Every {m} {m === 1 ? "minute" : "minutes"}</option>)}
                 </select>
               </Row>
+              <Check label="Vim-style keys" hint="j/k to move, h/l to switch panes, gg/G, n/N for findings and more. Press ? for the full list." checked={s.vimKeys} onChange={(v) => p.update({ vimKeys: v })} />
               <Check label="Check for app updates automatically" hint="New versions download only when you choose Install" checked={s.autoUpdate} onChange={(v) => p.update({ autoUpdate: v })} />
             </div>
           </>

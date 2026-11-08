@@ -408,3 +408,12 @@ textarea.set-input { height: auto; min-height: 90px; padding: 6px 8px; width: 10
 .risk-medium { color: var(--high); background: var(--high-bg); }
 .sort-select { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: var(--bg); }
 .sort-select select { border: 0; background: transparent; color: var(--text); font-size: 12px; max-width: 120px; outline: none; }
+/* Only the pane the keys act on shows its selection in full colour; the others go soft, like the inbox. */
+[data-pane="outline"]:not([data-focused]) .row.sel,
+[data-pane="outline"]:not([data-focused]) .file.cur,
+[data-pane="outline"]:not([data-focused]) .step-row.cur { background: var(--sel-soft); color: var(--text); }
+[data-pane="outline"]:not([data-focused]) .row.sel .rm,
+[data-pane="outline"]:not([data-focused]) .file.cur .rm,
+[data-pane="outline"]:not([data-focused]) .step-row.cur .step-meta { color: var(--muted) !important; }
+[data-pane="outline"]:not([data-focused]) .row.sel svg { color: inherit !important; }
+[data-pane="content"][data-focused] { box-shadow: inset 0 2px 0 var(--accent); }

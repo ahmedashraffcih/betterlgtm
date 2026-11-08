@@ -7,6 +7,8 @@ export interface Settings {
   theme: Theme;
   refreshMinutes: number;
   autoUpdate: boolean;
+  /** Single-letter, vim-style keys (j/k, h/l, gg, …) when no text field has focus. */
+  vimKeys: boolean;
   // Organizations and review requests
   orgMode: "all" | "selected";
   /** Used in "all" mode: organizations left out of the inbox. */
@@ -34,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   refreshMinutes: 5,
   autoUpdate: true,
+  vimKeys: true,
   orgMode: "all",
   hiddenOrgs: [],
   selectedOrgs: [],

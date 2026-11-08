@@ -89,7 +89,7 @@ export function AnalysisView(p: Props) {
   const high = a.findings.filter((f) => f.severity === "high").length;
 
   const Row = ({ k, sub, Icon, tone, text, meta, check }: { k: OutlineKey; sub?: boolean; Icon: LucideIcon; tone: string; text: string; meta?: string; check?: FindingCheck }) => (
-    <button type="button" className={["row", sub && "sub", p.selected === k && "sel", check?.status === "fixed" && "fixed"].filter(Boolean).join(" ")} onClick={() => select(k)} title={text}>
+    <button type="button" data-nav className={["row", sub && "sub", p.selected === k && "sel", check?.status === "fixed" && "fixed"].filter(Boolean).join(" ")} onClick={() => select(k)} title={text}>
       <Icon size={14} className={tone} />
       <span className="ellipsis" style={{ flex: 1 }}>{text}</span>
       <CheckBadge check={check} />
@@ -119,7 +119,7 @@ export function AnalysisView(p: Props) {
           <RefreshCw size={14} />
         </button>
       </div>
-      <nav aria-label="Analysis outline" className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
+      <nav aria-label="Analysis outline" data-pane="outline" className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
         <div style={{ height: 6 }} />
         <Row k="s0" Icon={LayoutDashboard} tone="tone-muted" text="Overview" />
         <Row k="d0" Icon={FileText} tone="tone-muted" text="PR description" />
@@ -146,7 +146,7 @@ export function AnalysisView(p: Props) {
     </div>
   );
   const detail = (
-    <article className="scroll selectable" style={{ padding: single ? "14px 16px 24px" : "20px 28px 32px" }} aria-label="Details">
+    <article data-pane="content" className="scroll selectable" style={{ padding: single ? "14px 16px 24px" : "20px 28px 32px" }} aria-label="Details">
       <div style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 16 }}>
         <Detail {...p} analysis={a} onSelect={select} />
       </div>
@@ -351,7 +351,7 @@ function Detail(p: Props & { analysis: Analysis }) {
           </div>
         )}
         <div style={{ display: "flex", gap: 8, paddingTop: 8, borderTop: "1px solid var(--line2)" }}>
-          <button type="button" className={inReview ? "btn in-review" : "btn"} aria-pressed={inReview} onClick={() => p.onToggleReview(idx)}>
+          <button type="button" data-key="add-review" className={inReview ? "btn in-review" : "btn"} aria-pressed={inReview} onClick={() => p.onToggleReview(idx)}>
             {inReview ? <CircleCheck size={14} /> : <MessageSquarePlus size={14} />}{inReview ? "In review" : "Add to review"}
           </button>
           <button type="button" className="btn" onClick={() => p.onAsk(`About finding ${idx + 1} ("${f.title}"): `)}><MessageSquare size={14} />Ask Claude</button>

@@ -231,7 +231,7 @@ export function GuidedReview(p: Props) {
   return (
     <div ref={rootRef} style={{ display: "flex", height: "100%", minHeight: 0 }}>
       {!narrow && (
-        <nav aria-label="Review sections" className="side" style={{ width: width < 1000 ? 240 : 280, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
+        <nav aria-label="Review sections" data-pane="outline" className="side" style={{ width: width < 1000 ? 240 : 280, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
           <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6, borderBottom: "1px solid var(--line)" }}>
             <div style={{ display: "flex", fontSize: 12, fontWeight: 600 }} className="muted">
               <span style={{ flex: 1 }}>{doneSteps} of {steps.length} sections reviewed</span>
@@ -251,7 +251,7 @@ export function GuidedReview(p: Props) {
                     <input type="checkbox" checked={d} aria-label={`Section ${i + 1} reviewed`} onChange={(e) => p.onReviewed(s.keys, e.target.checked)} />
                     <span className={d ? "step-num done" : pd > 0 ? "step-num partial" : "step-num"}>{d ? <Check size={11} strokeWidth={3} /> : i + 1}</span>
                   </label>
-                  <button type="button" className="step-go" onClick={() => jumpTo(i)}>
+                  <button type="button" data-nav aria-current={i === active} className="step-go" onClick={() => jumpTo(i)}>
                     <span className="step-title">{s.title}</span>
                     <span className="step-meta">
                       {d ? "Reviewed" : pd > 0 ? `${pd} of ${s.parts.length} files reviewed` : `${s.parts.length} ${s.parts.length === 1 ? "file" : "files"}`}
@@ -265,7 +265,7 @@ export function GuidedReview(p: Props) {
       )}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {toolbar}
-        <div ref={scroller} className={narrow ? "scroll g-scroll g-narrow" : "scroll g-scroll"} onScroll={onScroll}>
+        <div ref={scroller} data-pane="content" className={narrow ? "scroll g-scroll g-narrow" : "scroll g-scroll"} onScroll={onScroll}>
           {steps.map((step, si) => {
             const done = stepDone(step);
             const filesDone = partsDone(step);
@@ -276,7 +276,7 @@ export function GuidedReview(p: Props) {
                   <h2 className="ellipsis" title={step.title}>{step.title}</h2>
                   <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{done ? "Reviewed" : `${filesDone}/${step.parts.length} files`}</span>
                   <label className={done ? "review-check on" : "review-check"}>
-                    <input type="checkbox" checked={done} onChange={(e) => p.onReviewed(step.keys, e.target.checked)} />
+                    <input type="checkbox" checked={done} data-review-toggle={si === active ? "" : undefined} onChange={(e) => p.onReviewed(step.keys, e.target.checked)} />
                     {!narrow && "Section reviewed"}
                   </label>
                 </div>

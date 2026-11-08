@@ -103,7 +103,7 @@ export function DiffView(p: Props) {
   return (
     <div ref={rootRef} style={{ display: "flex", height: "100%", minHeight: 0 }}>
       {!narrow && (
-      <nav aria-label="Changed files" className="side" style={{ width: width < 1000 ? 220 : 260, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
+      <nav aria-label="Changed files" data-pane="outline" className="side" style={{ width: width < 1000 ? 220 : 260, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
         <div className="ph"><span style={{ flex: 1 }}>Changed files</span><span style={{ fontWeight: 400 }}>{reviewedFiles} of {p.files.length} reviewed</span></div>
         <div className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
           {p.files.map((f) => {
@@ -113,7 +113,7 @@ export function DiffView(p: Props) {
             const n = counts.get(path);
             const done = isReviewed(f);
             return (
-              <button key={path} type="button" className={file === f ? "file cur" : "file"} title={done ? `${path} (reviewed)` : path} onClick={() => p.onPickFile(path)}>
+              <button key={path} type="button" data-nav className={file === f ? "file cur" : "file"} title={done ? `${path} (reviewed)` : path} onClick={() => p.onPickFile(path)}>
                 {done ? <Check size={14} className={file === f ? undefined : "tone-ok"} strokeWidth={2.5} /> : <Icon size={14} />}
                 <span className="mono ellipsis" style={{ flex: 1, opacity: isGenerated(f) && file !== f ? 0.6 : 1 }}>{path}</span>
                 {n ?<span className="rm" style={{ display: "inline-flex", alignItems: "center", gap: 2 }}><Flag size={11} />{n}</span> : null}
@@ -146,7 +146,7 @@ export function DiffView(p: Props) {
           )}
           {file && (
             <label className={isReviewed(file) ? "review-check on" : "review-check"} title="Mark this file as reviewed">
-              <input type="checkbox" checked={isReviewed(file)} onChange={(e) => p.onReviewed(file.hunks.map((h) => hunkKey(file, h)), e.target.checked)} />
+              <input type="checkbox" data-review-toggle checked={isReviewed(file)} onChange={(e) => p.onReviewed(file.hunks.map((h) => hunkKey(file, h)), e.target.checked)} />
               {!narrow && "Reviewed"}
             </label>
           )}
@@ -173,7 +173,7 @@ export function DiffView(p: Props) {
             <button type="button" className="tb" aria-label="Next finding (J)" onClick={() => p.onStepFinding(1)}><ChevronDown size={16} /></button>
           </div>
         )}
-        <div ref={scroller} className="scroll" style={{ overflow: "auto" }}>
+        <div ref={scroller} data-pane="content" className="scroll" style={{ overflow: "auto" }}>
           {file && hideDiff && (
             <div className="empty" style={{ height: "auto", padding: "40px 24px" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
