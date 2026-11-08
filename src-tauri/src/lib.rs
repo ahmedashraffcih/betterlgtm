@@ -17,6 +17,8 @@ pub fn run() {
             config::tool_status,
             gh::list_review_requests,
             gh::list_orgs,
+            gh::list_my_prs,
+            gh::submit_review,
             gh::pr_details,
             gh::pr_diff,
             gh::pr_body_html,

@@ -25,6 +25,18 @@ const requests: ReviewRequest[] = [
   },
 ];
 
+const mine: ReviewRequest[] = [
+  {
+    number: 1290,
+    title: "Move invoices to the new queue",
+    url: "https://github.com/acme/billing/pull/1290",
+    isDraft: false,
+    updatedAt: new Date(Date.now() - 5 * 3600e3).toISOString(),
+    author: { login: "you" },
+    repository: { name: "billing", nameWithOwner: "acme/billing" },
+  },
+];
+
 const details: PrDetails = {
   number: 482,
   title: "Add idempotency keys to charge endpoint",
@@ -140,6 +152,10 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
   switch (cmd) {
     case "list_review_requests":
       return requests;
+    case "list_my_prs":
+      return mine;
+    case "submit_review":
+      return "https://github.com/acme/payments-api/pull/482#pullrequestreview-1";
     case "list_orgs":
       return { login: "you", orgs: ["acme", "globex-labs", "oss-collective"] };
     case "tool_status":

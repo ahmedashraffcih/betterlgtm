@@ -15,6 +15,16 @@ export interface ReviewRequest {
   repository: { name: string; nameWithOwner: string };
 }
 
+export type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+
+/** A review comment on the new version of a file; `line` (and `start_line`) must be inside the diff. */
+export interface ReviewComment {
+  path: string;
+  line: number;
+  start_line?: number;
+  body: string;
+}
+
 export interface CheckRun {
   conclusion?: string;
   status?: string;
@@ -52,6 +62,7 @@ export interface ClaudeEvent {
 
 export const api = {
   listReviewRequests: (includeTeams: boolean) => invoke<ReviewRequest[]>("list_review_requests", { includeTeams }),
+  listMyPrs: () => invoke<ReviewRequest[]>("list_my_prs"),
   listOrgs: () => invoke<{ login: string; orgs: string[] }>("list_orgs"),
   setConfig: (config: { ghPath: string; claudePath: string; dataDir: string; model: string; effort: string }) => invoke<void>("set_config", { config }),
   toolStatus: () =>
@@ -59,6 +70,8 @@ export const api = {
   prDetails: (repo: string, number: number) => invoke<PrDetails>("pr_details", { repo, number }),
   prDiff: (repo: string, number: number) => invoke<string>("pr_diff", { repo, number }),
   prBodyHtml: (repo: string, number: number) => invoke<string>("pr_body_html", { repo, number }),
+  submitReview: (repo: string, number: number, review: { commitId: string; event: ReviewEvent; body: string; comments: ReviewComment[] }) =>
+    invoke<string>("submit_review", { repo, number, ...review }),
   prepareWorktree: (repo: string, number: number, baseRef: string) =>
     invoke<string>("prepare_worktree", { repo, number, baseRef }),
   claudeRun: (

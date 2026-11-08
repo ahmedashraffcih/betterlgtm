@@ -2,6 +2,12 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+- **Mine:** the inbox can switch to your own open pull requests.
+- **Submit review:** post a review to GitHub from the app, with the findings you choose as comments on their diff lines. Findings outside the diff go in the review summary.
+- Update checks retry when GitHub's downloads fail, and use a copy of the update feed on the website first.
+
 ## 0.2.2 — 2026-11-08
 
 - Fixed pull requests over 20,000 changed lines failing to load; their diff is now built from the local clone.

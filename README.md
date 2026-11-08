@@ -24,13 +24,14 @@ It runs on your machine with the `gh` and `claude` command-line tools you alread
 
 ## Features
 
-- **Review inbox.** Pull requests where your review is requested, directly or through a team, grouped by organization and refreshed on a timer. Hide the organizations you don't care about.
+- **Review inbox.** Pull requests where your review is requested, directly or through a team, grouped by organization and refreshed on a timer. Switch to **Mine** for your own open pull requests. Hide the organizations you don't care about.
 - **A worktree per PR.** Each pull request is checked out next to a shared clone, so Claude reads real files, not just the diff, and your own working copy is never touched.
 - **Description check.** Each claim in the PR description is marked as matching, partly implemented, or contradicted by the code.
 - **Findings.** Bugs, risks and gaps, ranked by severity and linked to the exact diff lines.
 - **Guided review.** Related edits grouped into sections with a line on what each does, in one continuous scroll. Mark a change, a file or a whole section as reviewed and see your progress.
 - **Diff view.** File-by-file unified or split diff with search, reviewed checkboxes, and generated files folded away until you open them.
 - **Chat.** Ask follow-up questions; Claude knows which finding, section or file you're looking at.
+- **Submit review.** Post your review to GitHub with the findings you pick as comments on their lines. Edit each comment, add a summary, and choose Comment, Approve or Request changes.
 - **Desktop ergonomics.** Menu bar, command palette, keyboard shortcuts, light and dark themes, and layouts that work in narrow windows.
 
 <picture>
@@ -69,8 +70,7 @@ If the app can't find `gh` or `claude` (common when it's started from a launcher
 3. Read the **Analysis** tab: the verdict, "In short", and "Needs your attention".
 4. Switch to **Diff** for the guided review, and tick sections off as you go.
 5. Ask questions in the Claude panel at the bottom.
-
-Submitting the review itself still happens on GitHub for now.
+6. Choose **Submit review…**. Findings you added with **Add to review** (or, if you added none, the critical and high ones) become line comments you can edit before posting.
 
 | Shortcut | Action |
 |---|---|
@@ -78,6 +78,7 @@ Submitting the review itself still happens on GitHub for now.
 | <kbd>Ctrl</kbd> <kbd>1</kbd> / <kbd>Ctrl</kbd> <kbd>2</kbd> | Analysis / Diff |
 | <kbd>J</kbd> / <kbd>K</kbd> | Next / previous finding |
 | <kbd>Ctrl</kbd> <kbd>L</kbd> | Ask Claude |
+| <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>Enter</kbd> | Submit review |
 | <kbd>Ctrl</kbd> <kbd>B</kbd> / <kbd>Ctrl</kbd> <kbd>J</kbd> | Show or hide the inbox / Claude panel |
 | <kbd>F5</kbd> | Refresh review requests |
 | <kbd>Ctrl</kbd> <kbd>,</kbd> | Settings |
@@ -88,7 +89,7 @@ On macOS, use <kbd>Cmd</kbd> in place of <kbd>Ctrl</kbd>.
 ## Privacy and safety
 
 - **Local only.** GitHub is reached through your `gh` and Claude through your `claude`. BetterLGTM has no backend and never sees your tokens.
-- **Read-only Claude.** Claude Code runs with only these tools allowed: `Read`, `Grep`, `Glob`, `LS`, and `git log`, `git show`, `git diff`, `git blame`, `git merge-base` and `rg` through Bash. It can't edit files, run other commands, or post anything to GitHub.
+- **Read-only Claude.** Claude Code runs with only these tools allowed: `Read`, `Grep`, `Glob`, `LS`, and `git log`, `git show`, `git diff`, `git blame`, `git merge-base` and `rg` through Bash. It can't edit files, run other commands, or post anything to GitHub. Reviews are posted by the app, through your `gh`, only when you press the submit button.
 - **Costs.** Analyses use your Claude Code plan or API usage. The status bar shows the tokens used per PR.
 
 ### Where things are stored

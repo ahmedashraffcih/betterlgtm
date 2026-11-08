@@ -79,3 +79,21 @@ export function lineNumbers(c: ChangeData) {
   const n = computeNewLineNumber(c);
   return { old: o > 0 ? String(o) : "", new: n > 0 ? String(n) : "" };
 }
+
+/**
+ * Where a GitHub review comment for the anchor can go: a line (and optionally a start line) of the
+ * new file inside one hunk, since GitHub only accepts comments on lines that are part of the diff.
+ * Null when the anchor doesn't touch the diff.
+ */
+export function commentLines(files: FileData[], a: Anchor): { path: string; line: number; start_line?: number } | null {
+  const file = findFile(files, a.path);
+  if (!file || file.type === "delete" || a.startLine <= 0) return null;
+  const hunkOf = (line: number) => file.hunks.find((h) => line >= h.newStart && line < h.newStart + h.newLines);
+  const path = filePath(file);
+  const endHunk = hunkOf(a.endLine);
+  if (endHunk) {
+    const multi = a.startLine < a.endLine && hunkOf(a.startLine) === endHunk;
+    return { path, line: a.endLine, ...(multi ? { start_line: a.startLine } : {}) };
+  }
+  return hunkOf(a.startLine) ? { path, line: a.startLine } : null;
+}

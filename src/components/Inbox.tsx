@@ -3,7 +3,12 @@ import { useMemo, useState } from "react";
 import type { ReviewRequest } from "../api";
 import type { PrSession } from "../sessions";
 
+export type InboxView = "review" | "mine";
+
 interface Props {
+  view: InboxView;
+  counts: Record<InboxView, number>;
+  onViewChange: (view: InboxView) => void;
   /** Already filtered by the organization and draft settings. */
   requests: ReviewRequest[] | null;
   /** Requests left out by those settings. */
@@ -81,10 +86,16 @@ export function Inbox(p: Props) {
   const visibleCount = groups.reduce((n, [, prs]) => n + prs.length, 0);
 
   return (
-    <aside className="side" aria-label="Review requests">
+    <aside className="side" aria-label={p.view === "mine" ? "Your pull requests" : "Review requests"}>
       <div className="ph">
-        <span style={{ flex: 1 }}>Review requests</span>
-        <span style={{ fontWeight: 400 }}>{visibleCount}</span>
+        <div className="seg" role="group" aria-label="Show" style={{ flex: 1, minWidth: 0 }}>
+          <button type="button" className={p.view === "review" ? "on" : ""} aria-pressed={p.view === "review"} onClick={() => p.onViewChange("review")} title="Pull requests waiting for your review">
+            To review<span className="cnt">{p.counts.review}</span>
+          </button>
+          <button type="button" className={p.view === "mine" ? "on" : ""} aria-pressed={p.view === "mine"} onClick={() => p.onViewChange("mine")} title="Your open pull requests">
+            Mine<span className="cnt">{p.counts.mine}</span>
+          </button>
+        </div>
         <button type="button" className="tb" aria-label="Refresh" title="Refresh" onClick={p.onRefresh}>
           <RefreshCw size={14} className={p.loading ? "spin" : undefined} />
         </button>
@@ -97,13 +108,13 @@ export function Inbox(p: Props) {
       <div style={{ padding: "0 8px 8px" }}>
         <label className="field">
           <Funnel size={14} />
-          <input placeholder="Filter" aria-label="Filter review requests" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <input placeholder="Filter" aria-label="Filter pull requests" value={filter} onChange={(e) => setFilter(e.target.value)} />
         </label>
       </div>
       <div className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
         {p.error && <p className="selectable" style={{ margin: 8, color: "var(--crit)", fontSize: 12 }}>{p.error}</p>}
         {!p.error && p.requests && visibleCount === 0 && (
-          <p style={{ margin: "12px 8px", fontSize: 12 }} className="muted">No review requests in the organizations you show.</p>
+          <p style={{ margin: "12px 8px", fontSize: 12 }} className="muted">{p.view === "mine" ? "You have no open pull requests in the organizations you show." : "No review requests in the organizations you show."}</p>
         )}
         {groups.map(([org, prs]) => {
           const isCollapsed = collapsed.includes(org);
@@ -136,7 +147,7 @@ export function Inbox(p: Props) {
                       <span className="t1 ellipsis" style={{ width: "100%" }}>{pr.title}</span>
                       <span className="t2">
                         <span className="ellipsis" style={{ flex: 1 }}>
-                          {pr.repository.name} #{pr.number} · {pr.author.login} · {age(pr.updatedAt)}
+                          {pr.repository.name} #{pr.number} · {p.view === "mine" ? "" : `${pr.author.login} · `}{age(pr.updatedAt)}
                         </span>
                         {p.analyzing.has(key) ? (
                           <span className="st" title="Analysis running"><Loader size={12} className="spin" />Analyzing</span>

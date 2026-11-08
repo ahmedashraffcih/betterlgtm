@@ -25,6 +25,63 @@ pub async fn list_review_requests(config: State<'_, ConfigState>, include_teams:
     parse(&out)
 }
 
+/// The user's own open PRs.
+#[tauri::command]
+pub async fn list_my_prs(config: State<'_, ConfigState>) -> Result<Value, String> {
+    let out = run(
+        &config.get().gh_path,
+        &["search", "prs", "--author=@me", "--state=open", "--limit", "100", "--json", "number,title,repository,author,updatedAt,url,isDraft"],
+        None,
+    )
+    .await?;
+    parse(&out)
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct ReviewComment {
+    path: String,
+    line: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_line: Option<u64>,
+    body: String,
+}
+
+/// Posts a review: `event` is COMMENT, APPROVE or REQUEST_CHANGES, and each comment sits on a line
+/// of the new version of a file that is part of the diff. Returns the review's URL.
+#[tauri::command]
+pub async fn submit_review(
+    config: State<'_, ConfigState>,
+    repo: String,
+    number: u64,
+    commit_id: String,
+    event: String,
+    body: String,
+    comments: Vec<ReviewComment>,
+) -> Result<String, String> {
+    if !matches!(event.as_str(), "COMMENT" | "APPROVE" | "REQUEST_CHANGES") {
+        return Err(format!("Unknown review type: {event}"));
+    }
+    let comments: Vec<Value> = comments
+        .into_iter()
+        .map(|c| {
+            let mut v = serde_json::to_value(&c).unwrap_or_default();
+            v["side"] = "RIGHT".into();
+            if c.start_line.is_some() {
+                v["start_side"] = "RIGHT".into();
+            }
+            v
+        })
+        .collect();
+    let payload = serde_json::json!({ "commit_id": commit_id, "event": event, "body": body, "comments": comments });
+    let file = std::env::temp_dir().join(format!("betterlgtm-review-{}-{number}.json", std::process::id()));
+    std::fs::write(&file, payload.to_string()).map_err(|e| e.to_string())?;
+    let path = format!("repos/{repo}/pulls/{number}/reviews");
+    let file_arg = file.to_string_lossy().into_owned();
+    let out = run(&config.get().gh_path, &["api", "-X", "POST", &path, "--input", &file_arg, "--jq", ".html_url"], None).await;
+    let _ = std::fs::remove_file(&file);
+    Ok(out?.trim().to_string())
+}
+
 /// The user's login and the organizations they belong to, for the organization settings.
 #[tauri::command]
 pub async fn list_orgs(config: State<'_, ConfigState>) -> Result<Value, String> {

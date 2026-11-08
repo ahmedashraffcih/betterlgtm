@@ -10,12 +10,13 @@ import { AnalysisView, type OutlineKey, type RunState } from "./components/Analy
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import { DiffView, type DiffMode } from "./components/DiffView";
 import { GuidedReview } from "./components/GuidedReview";
-import { Inbox, InboxRail, prKey } from "./components/Inbox";
+import { Inbox, InboxRail, prKey, type InboxView } from "./components/Inbox";
 import { TitleBar } from "./components/TitleBar";
 import { useElementWidth } from "./hooks";
 import { matches, shortcutLabel, type Command } from "./commands";
 import { CommandPalette, type PaletteItem } from "./components/CommandPalette";
 import { InfoDialog } from "./components/InfoDialog";
+import { SubmitReview } from "./components/SubmitReview";
 import { filePath } from "./diffUtils";
 import { fileIcon, SEVERITY } from "./icons";
 import { emptySession, useSessions, useStoredState, type ChatItem } from "./sessions";
@@ -36,6 +37,8 @@ const tokensOf = (e: ClaudeUsage) =>
 
 export default function App() {
   const [requests, setRequests] = useState<ReviewRequest[] | null>(null);
+  const [myPrs, setMyPrs] = useState<ReviewRequest[] | null>(null);
+  const [inboxView, setInboxView] = useStoredState<InboxView>("better-lgtm.inboxView", "review");
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
@@ -44,6 +47,9 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [infoDialog, setInfoDialog] = useState<"shortcuts" | "about" | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  /** The last review posted from the app, per PR, so the status bar can link to it. */
+  const [postedReviews, setPostedReviews] = useState<Record<string, string>>({});
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [orgs, setOrgs] = useState<{ login: string; orgs: string[] } | null>(null);
   const [orgsError, setOrgsError] = useState<string | null>(null);
@@ -105,7 +111,9 @@ export default function App() {
   const refresh = useCallback(async () => {
     setInboxLoading(true);
     try {
-      setRequests(await api.listReviewRequests(settings.includeTeams));
+      const [review, mine] = await Promise.all([api.listReviewRequests(settings.includeTeams), api.listMyPrs()]);
+      setRequests(review);
+      setMyPrs(mine);
       setInboxError(null);
       setSyncedAt(Date.now());
     } catch (e) {
@@ -145,12 +153,16 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [settingsOpen, paletteOpen, infoDialog]);
 
-  /** Review requests that pass the organization and draft settings. */
-  const visibleRequests = useMemo(
-    () => requests?.filter((r) => (settings.showDrafts || !r.isDraft) && ownerVisible(settings, r.repository.nameWithOwner.split("/")[0], orgs?.orgs ?? null)) ?? null,
-    [requests, settings, orgs],
+  /** PRs that pass the organization and draft settings. */
+  const visibleOf = useCallback(
+    (list: ReviewRequest[] | null) =>
+      list?.filter((r) => (settings.showDrafts || !r.isDraft) && ownerVisible(settings, r.repository.nameWithOwner.split("/")[0], orgs?.orgs ?? null)) ?? null,
+    [settings, orgs],
   );
-  const hiddenCount = (requests?.length ?? 0) - (visibleRequests?.length ?? 0);
+  const visibleRequests = useMemo(() => visibleOf(requests), [visibleOf, requests]);
+  const visibleMine = useMemo(() => visibleOf(myPrs), [visibleOf, myPrs]);
+  const inboxList = inboxView === "mine" ? visibleMine : visibleRequests;
+  const hiddenCount = inboxView === "mine" ? (myPrs?.length ?? 0) - (visibleMine?.length ?? 0) : (requests?.length ?? 0) - (visibleRequests?.length ?? 0);
   /** The inbox's "hide" button: drops an organization, or personal repositories, from the inbox. */
   const hideOwner = (owner: string) => {
     if (orgs && !orgs.orgs.includes(owner)) updateSettings({ includePersonal: false });
@@ -422,7 +434,7 @@ export default function App() {
   const openInEditor = () => session?.worktree && openUrl(`vscode://file${session.worktree}`);
   const canAnalyze = !!(details && !run?.running);
   const commands: Command[] = [
-    { id: "refresh", menu: "File", label: "Refresh review requests", keys: { key: "F5" }, run: refresh },
+    { id: "refresh", menu: "File", label: "Refresh pull requests", keys: { key: "F5" }, run: refresh },
     { id: "github", menu: "File", label: "Open pull request on GitHub", enabled: !!selected, run: () => selected && openUrl(selected.url), separatorBefore: true },
     { id: "editor", menu: "File", label: "Open worktree in VS Code", enabled: !!session?.worktree, run: openInEditor },
     { id: "settings", menu: "File", label: "Settings…", keys: { key: ",", ctrl: true }, run: () => openSettings("general"), separatorBefore: true },
@@ -444,6 +456,7 @@ export default function App() {
     { id: "guide", menu: "Review", label: "Create guided review", enabled: !!(analysis && !analysis.walkthrough && session?.sessionId && !(key && guideRuns[key]?.running)), run: () => { setDiffMode("guided"); setTab("diff"); generateWalkthrough(); } },
     { id: "next", menu: "Review", label: "Next finding", hint: "J", enabled: !!analysis?.findings.length, run: () => stepFinding(1), separatorBefore: true },
     { id: "prev", menu: "Review", label: "Previous finding", hint: "K", enabled: !!analysis?.findings.length, run: () => stepFinding(-1) },
+    { id: "submit", menu: "Review", label: "Submit review…", keys: { key: "Enter", ctrl: true, shift: true }, enabled: !!details, run: () => setReviewOpen(true), separatorBefore: true },
     { id: "ask", menu: "Review", label: "Ask Claude", keys: { key: "l", ctrl: true }, enabled: !!selected, run: () => { setChatOpen(true); setChatFocus((n) => n + 1); }, separatorBefore: true },
     { id: "clear-chat", menu: "Review", label: "Clear conversation", enabled: !!session?.chat.length, run: () => key && update(key, (s) => ({ ...s, chat: [] })) },
 
@@ -456,7 +469,7 @@ export default function App() {
   // Everything the Ctrl+K palette can jump to.
   const paletteItems: PaletteItem[] = paletteOpen
     ? [
-        ...(visibleRequests ?? []).map((pr) => ({
+        ...[...(visibleRequests ?? []), ...(visibleMine ?? []).filter((m) => !visibleRequests?.some((r) => prKey(r) === prKey(m)))].map((pr) => ({
           id: `pr-${prKey(pr)}`,
           group: "Pull requests",
           label: pr.title,
@@ -530,7 +543,7 @@ export default function App() {
           <button type="button" className="btn" disabled={!session?.worktree} aria-label="Open in editor" title={session?.worktree ?? "The worktree is created when the review starts"} onClick={() => session?.worktree && openUrl(`vscode://file${session.worktree}`)}>
             <Code size={14} /><span className="lbl-text">Open in editor</span>
           </button>
-          <button type="button" className="btn primary" disabled aria-label="Submit review" title="Submit review">
+          <button type="button" className="btn primary" disabled={!details} aria-label="Submit review" title="Submit review on GitHub" onClick={() => setReviewOpen(true)}>
             <Send size={14} /><span className="lbl-text">Submit review…</span>{(session?.inReview.length ?? 0) > 0 && <span className="cnt on-primary">{session?.inReview.length}</span>}
           </button>
         </div>
@@ -638,7 +651,7 @@ export default function App() {
         {inboxMode === "rail" && (
           <div style={{ width: 52, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
             <InboxRail
-              requests={visibleRequests}
+              requests={inboxList}
               selected={key}
               sessions={sessions}
               analyzing={analyzing}
@@ -653,7 +666,10 @@ export default function App() {
             <>
               <Panel id="inbox" defaultSize={compact ? 260 : 280} minSize={220} maxSize={420}>
                 <Inbox
-                  requests={visibleRequests}
+                  view={inboxView}
+                  counts={{ review: visibleRequests?.length ?? 0, mine: visibleMine?.length ?? 0 }}
+                  onViewChange={setInboxView}
+                  requests={inboxList}
                   hiddenCount={hiddenCount}
                   error={inboxError}
                   loading={inboxLoading}
@@ -696,6 +712,9 @@ export default function App() {
         <span className="sb"><RefreshCw size={13} className={inboxLoading ? "spin" : undefined} />{syncedAt ? `Synced ${new Date(syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Syncing…"}</span>
         <span className="sb opt"><InboxIcon size={13} />{visibleRequests?.length ?? 0} to review</span>
         <span style={{ flex: 1 }} />
+        {key && postedReviews[key] && (
+          <button type="button" className="sb sb-btn" onClick={() => openUrl(postedReviews[key])}><Check size={13} />Review posted · View on GitHub</button>
+        )}
         <UpdateStatus {...updater} />
         {key && (
           <span className="sb">
@@ -707,6 +726,22 @@ export default function App() {
         <span className="sb opt"><Lock size={13} />Read-only</span>
       </footer>
       {paletteOpen && <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
+      {reviewOpen && selected && details && key && (
+        <SubmitReview
+          repo={selected.repository.nameWithOwner}
+          details={details}
+          analysis={analysis}
+          files={files}
+          inReview={session?.inReview ?? []}
+          ownPr={!!orgs?.login && details.author.login === orgs.login}
+          onClose={() => setReviewOpen(false)}
+          onSubmitted={(url) => {
+            setReviewOpen(false);
+            setPostedReviews((all) => ({ ...all, [key]: url }));
+            update(key, (s) => ({ ...s, inReview: [] }));
+          }}
+        />
+      )}
       {infoDialog && <InfoDialog kind={infoDialog} commands={commands} onClose={() => setInfoDialog(null)} />}
     </div>
   );
