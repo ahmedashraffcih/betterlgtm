@@ -162,6 +162,12 @@ const bodyHtml = `<h2 dir="auto">Summary</h2>
 
 const analysis = {
   guidelines: ["CONTRIBUTING.md"],
+  risks: [{ area: "Payments", why: "Decides whether a card is charged twice.", anchors: [{ path: "src/http/charges.ts", startLine: 39, endLine: 45 }] }],
+  tests: [
+    { change: "Repeat requests return the cached response", covered: "yes", tests: ["test/charges.idempotency.test.ts"] },
+    { change: "Two requests with the same key at once", covered: "no", tests: [], note: "No test sends concurrent requests." },
+    { change: "Keys expire after 24 hours", covered: "partly", tests: ["test/store.test.ts"], note: "Checks the TTL is set, not that keys expire." },
+  ],
   summary: ["Adds `Idempotency-Key` support to `POST /v1/charges`", "Caches the first response in Redis for 24 h", "Repeats with the same key get the cached response"],
   recommendation: { decision: "request_changes", reason: "Concurrent retries can still double-charge." },
   claims: [

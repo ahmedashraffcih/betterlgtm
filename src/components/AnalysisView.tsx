@@ -1,7 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ArrowLeft, ChevronDown, ChevronRight, ChevronUp, CircleCheck, ExternalLink, FileDiff, FileText, FileX, Flag, Funnel,
-  BadgeCheck, CircleSlash, LayoutDashboard, Loader, MessageSquare, MessageSquarePlus, OctagonExclamationPoint, Play, RefreshCw, RotateCcw, Wrench,
+  BadgeCheck, CircleDashed, CircleSlash, CircleX, ShieldAlert, LayoutDashboard, Loader, MessageSquare, MessageSquarePlus, OctagonExclamationPoint, Play, RefreshCw, RotateCcw, Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -9,7 +9,8 @@ import type { FileData } from "react-diff-view";
 import { anchorLabel, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck, type FindingState } from "../analysis";
 import type { PrDetails } from "../api";
 import { categoryIcon, SEVERITY, VERDICT } from "../icons";
-import { changesInRange, findFile, lineNumbers } from "../diffUtils";
+import { changesInRange, findFile, lineNumbers, testCodeLines } from "../diffUtils";
+import { prRisk } from "../risk";
 import { useElementWidth } from "../hooks";
 import { GithubHtml, Markdown } from "./Markdown";
 
@@ -265,6 +266,83 @@ const DECISION: Record<Decision, { label: string; cls: string; icon: LucideIcon;
   approve: { label: "Looks ready to approve", cls: "verdict ok", icon: CircleCheck, tone: "tone-ok" },
 };
 
+const COVERED = {
+  yes: { label: "Tested", tone: "tone-ok", Icon: CircleCheck },
+  partly: { label: "Partly tested", tone: "tone-high", Icon: CircleDashed },
+  no: { label: "Not tested", tone: "tone-crit", Icon: CircleX },
+} as const;
+
+/** How risky the change is (size, CI, sensitive areas) and whether its changes are tested. */
+function RiskAndTests(p: Props & { analysis: Analysis }) {
+  const a = p.analysis;
+  const ci = p.pr.statusCheckRollup ?? [];
+  const failing = ci.some((c) => ["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED"].includes(c.conclusion ?? c.state ?? ""));
+  const risk = prRisk({
+    additions: p.pr.additions,
+    deletions: p.pr.deletions,
+    ci: failing ? "FAILURE" : "SUCCESS",
+    files: p.files.map((f) => (f.type === "delete" ? f.oldPath : f.newPath)),
+  } as Parameters<typeof prRisk>[0]);
+  const { test, code } = testCodeLines(p.files);
+  const ratio = code ? test / code : 0;
+  const tests = a.tests ?? [];
+  const untested = tests.filter((t) => t.covered !== "yes").length;
+  if (!a.risks?.length && !tests.length && risk.level === "low" && !code) return null;
+  return (
+    <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <h2 className="section-title">Risk and tests</h2>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <span className={`risk risk-${risk.level}`} style={risk.level === "low" ? { color: "var(--ok)", background: "var(--ok-bg)" } : undefined}>
+          {risk.level === "high" ? "High risk" : risk.level === "medium" ? "Medium risk" : "Low risk"}
+        </span>
+        {risk.reasons.length > 0 && <span className="muted" style={{ fontSize: 12 }}>{risk.reasons.join(" · ")}</span>}
+        {code > 0 && (
+          <span className="muted" style={{ fontSize: 12 }} title={`${test} added test lines for ${code} added code lines`}>
+            · {test === 0 ? "no test changes" : `${test.toLocaleString()} test lines for ${code.toLocaleString()} code lines (${ratio.toFixed(2)})`}
+          </span>
+        )}
+      </div>
+      {(a.risks ?? []).length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", margin: "0 -10px" }}>
+          {a.risks!.map((r, i) => (
+            <button key={i} type="button" className="attn" disabled={!r.anchors[0]} onClick={() => r.anchors[0] && p.onOpenAnchor(r.anchors[0], null)}>
+              <ShieldAlert size={16} className="tone-high" />
+              <span style={{ flex: 1, minWidth: 0 }}><span style={{ fontWeight: 600 }}>{r.area}:</span> {r.why}</span>
+              {r.anchors[0] && <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{anchorLabel(r.anchors[0])}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {tests.length > 0 && (
+        <details className="tests-fold" open={untested > 0}>
+          <summary className="muted" style={{ fontSize: 12, cursor: "default" }}>
+            {untested ? `${untested} of ${tests.length} changes not fully tested` : `All ${tests.length} changes are tested`}
+          </summary>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+            {tests.map((t, i) => {
+              const c = COVERED[t.covered];
+              return (
+                <div key={i} className="test-row">
+                  <c.Icon size={15} className={c.tone} aria-label={c.label} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div>{t.change}</div>
+                    {(t.note || t.tests.length > 0) && (
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {t.note}
+                        {t.tests.length > 0 && <> {t.note ? "· " : ""}<code>{t.tests.join(", ")}</code></>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+    </section>
+  );
+}
+
 function Overview(p: Props & { analysis: Analysis }) {
   const a = p.analysis;
   const problems = a.claims.map((c, i) => ({ c, i })).filter(({ c }) => c.verdict !== "implemented");
@@ -336,6 +414,8 @@ function Overview(p: Props & { analysis: Analysis }) {
           })}
         </div>
       </section>
+
+      <RiskAndTests {...p} />
 
       {/* The full description is one click away, so it stays folded here to keep the page short. */}
       <details className="excerpt fold">

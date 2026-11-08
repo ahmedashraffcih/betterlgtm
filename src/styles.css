@@ -454,3 +454,6 @@ button.link { padding: 0; color: var(--accent); text-decoration: underline; font
 .suggestion-code { margin: 4px 0 0; padding: 8px 10px; border-radius: 6px; background: var(--add-bg, var(--ok-bg)); border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre; overflow-x: auto; }
 .review-suggest { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: default; }
 .review-suggest input { margin: 0; accent-color: var(--accent); }
+.test-row { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; }
+.test-row svg { flex-shrink: 0; margin-top: 2px; }
+.tests-fold summary { list-style: revert; }

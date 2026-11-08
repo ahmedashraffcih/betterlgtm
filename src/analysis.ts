@@ -53,6 +53,23 @@ export interface Analysis {
   walkthrough?: WalkStep[];
   /** Repository guideline files Claude followed, such as REVIEW.md. */
   guidelines?: string[];
+  /** Sensitive areas the PR touches. */
+  risks?: Risk[];
+  /** Whether the main changes are covered by tests. */
+  tests?: TestCheck[];
+}
+
+export interface Risk {
+  area: string;
+  why: string;
+  anchors: Anchor[];
+}
+
+export interface TestCheck {
+  change: string;
+  covered: "yes" | "partly" | "no";
+  tests: string[];
+  note?: string;
 }
 
 const WALKTHROUGH_RULES = `Group the changes into review steps for a guided review:
@@ -107,6 +124,10 @@ Do this, using only read-only commands:
    missing tests, risky data handling. Also report changes the description doesn't mention (set notInDescription).
    Rank them by severity: critical, high, medium, low. Skip style nits.
 3. Summarize what the PR does and recommend a decision: approve, comment, or request_changes.
+3a. In "risks", list the sensitive areas the PR touches: authentication or permissions, database migrations or schema,
+   CI or deployment config, dependencies, public APIs, money or personal data. One line on why it matters here.
+3b. In "tests", for each significant behavior change, say whether changed or existing tests exercise it
+   (yes, partly, no) and name the test files. Read the tests; don't run anything.
 4. ${WALKTHROUGH_RULES.replace(/\n/g, "\n   ")}
 
 Don't read generated files (lockfiles, build output, snapshots, generated code) line by line;
@@ -128,6 +149,8 @@ When you are done, reply with only one JSON block in this shape:
 {
   "summary": ["...", "..."],
   "guidelines": ["REVIEW.md"],
+  "risks": [{ "area": "Database migration", "why": "...", "anchors": [{ "path": "db/migrate/x.rb", "startLine": 1, "endLine": 20 }] }],
+  "tests": [{ "change": "...", "covered": "yes|partly|no", "tests": ["spec/x_spec.rb"], "note": "..." }],
   "recommendation": { "decision": "approve|comment|request_changes", "reason": "..." },
   "claims": [{ "text": "...", "verdict": "implemented|partial|contradicted|missing", "note": "...", "finding": 0, "source": "#12 (only for claims from an issue)",
                "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
@@ -194,6 +217,12 @@ export function parseAnalysis(text: string): Analysis | null {
       return {
         summary: asText(data.summary) || undefined,
         guidelines: asArray<string>(data.guidelines).filter((g) => typeof g === "string" && g.trim()),
+        risks: asArray<Risk>(data.risks)
+          .filter((r) => r && typeof r.area === "string")
+          .map((r) => ({ area: r.area, why: asText(r.why), anchors: asArray<Anchor>(r.anchors) })),
+        tests: asArray<TestCheck>(data.tests)
+          .filter((t) => t && typeof t.change === "string" && ["yes", "partly", "no"].includes(t.covered))
+          .map((t) => ({ change: t.change, covered: t.covered, tests: asArray<string>(t.tests).filter((x) => typeof x === "string"), note: t.note ? asText(t.note) : undefined })),
         recommendation:
           rec && ["approve", "comment", "request_changes"].includes(rec.decision) ? { decision: rec.decision, reason: String(rec.reason ?? "") } : undefined,
         findings: order.map((i) => findings[i]),

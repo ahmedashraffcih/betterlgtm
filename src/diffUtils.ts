@@ -97,3 +97,20 @@ export function commentLines(files: FileData[], a: Anchor): { path: string; line
   }
   return hunkOf(a.startLine) ? { path, line: a.startLine } : null;
 }
+
+const TEST_PATH = /(^|\/)(__tests__|tests?|spec|specs)\/|\.(test|spec)\.[cm]?[jt]sx?$|_test\.(go|py|rb|rs)$|(^|\/)test_[^/]+\.py$|_spec\.rb$|Tests?\.(cs|java|kt|swift)$/;
+
+export const isTestFile = (path: string) => TEST_PATH.test(path);
+
+/** Added lines in test files and in other non-generated files. */
+export function testCodeLines(files: FileData[]): { test: number; code: number } {
+  let test = 0;
+  let code = 0;
+  for (const f of files) {
+    if (isGenerated(f)) continue;
+    const add = fileStats(f).add;
+    if (isTestFile(filePath(f))) test += add;
+    else code += add;
+  }
+  return { test, code };
+}
