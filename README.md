@@ -119,7 +119,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout and how releases a
 
 ## Contributing
 
-Bug reports, ideas and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Please report security problems privately as described in [SECURITY.md](SECURITY.md).
+Bug reports, ideas and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), and see the [roadmap](ROADMAP.md) for what is planned. Please report security problems privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
