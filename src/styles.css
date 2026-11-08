@@ -385,3 +385,4 @@ textarea.set-input { height: auto; min-height: 90px; padding: 6px 8px; width: 10
 .rs-you { color: var(--text); font-weight: 600; }
 .rs-you.rs-asked { color: var(--accent); }
 .rs-person { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.since-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 16px; border-bottom: 1px solid var(--line); background: var(--accent-bg); font-size: 12.5px; }

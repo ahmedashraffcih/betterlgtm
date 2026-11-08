@@ -69,9 +69,13 @@ Reply with only one JSON block: \`\`\`json { ${WALKTHROUGH_SHAPE} } \`\`\``;
 
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
-export function buildAnalysisPrompt(pr: PrDetails, extraInstructions = ""): string {
+/** With `since`, a re-review: focus on what changed after the commit the reviewer last reviewed. */
+export function buildAnalysisPrompt(pr: PrDetails, extraInstructions = "", since?: string): string {
   const extra = extraInstructions.trim() ? `\n\nThe reviewer's own instructions (follow them):\n${extraInstructions.trim()}` : "";
-  return baseAnalysisPrompt(pr) + extra;
+  const focus = since
+    ? `\n\nThis is a re-review. The reviewer last reviewed commit ${since}. Focus on what changed since then: git diff ${since} HEAD (and git log ${since}..HEAD). Use the full PR diff only for context. Report findings only for code changed since ${since}, and check description claims only where the new commits affect them. Mention in the summary that this covers the changes since the last review.`
+    : "";
+  return baseAnalysisPrompt(pr) + focus + extra;
 }
 
 function baseAnalysisPrompt(pr: PrDetails): string {

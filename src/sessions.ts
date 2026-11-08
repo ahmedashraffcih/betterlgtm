@@ -15,6 +15,8 @@ export interface PrSession {
   analysis?: Analysis;
   analysisRaw?: string;
   analyzedAt?: number;
+  /** Set when the last analysis covered only the changes after this commit (a re-review). */
+  analysisSince?: string;
   headOid?: string;
   chat: ChatItem[];
   tokens?: number;

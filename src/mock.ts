@@ -25,6 +25,19 @@ const requests: ReviewRequest[] = [
   },
 ];
 
+const sinceDiff = `diff --git a/src/idempotency/store.ts b/src/idempotency/store.ts
+index 2222222..5555555 100644
+--- a/src/idempotency/store.ts
++++ b/src/idempotency/store.ts
+@@ -17,4 +17,6 @@
+ // key comes straight from the request header
+ export async function save(key: string, res: CachedResponse) {
++  const locked = await redis.set(\`idem:lock:\${key}\`, "1", "NX", "EX", 30);
++  if (!locked) return waitForResponse(key);
+   const existing = await redis.get(\`idem:\${key}\`);
+   if (existing) return JSON.parse(existing);
+`;
+
 const mine: ReviewRequest[] = [
   {
     number: 1290,
@@ -158,6 +171,10 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
   switch (cmd) {
     case "list_review_requests":
       return requests;
+    case "last_review":
+      return { commitId: "9f2c41ab", state: "COMMENTED", submittedAt: new Date(Date.now() - 20 * 3600e3).toISOString() };
+    case "diff_since":
+      return { diff: sinceDiff, commits: [{ oid: "4e1b07c9a1b2c3d4", subject: "Lock the idempotency key while charging" }] };
     case "list_my_prs":
       return mine;
     case "submit_review":

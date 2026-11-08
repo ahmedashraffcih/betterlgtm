@@ -1,10 +1,10 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Check, Code, Download, ExternalLink, FileDiff, GitBranch, GitPullRequestArrow, Inbox as InboxIcon, ListChecks, ListOrdered, Loader, Lock, MessageSquare, RefreshCw, RotateCw, Send, Terminal, TriangleAlert } from "lucide-react";
+import { Check, Code, Download, ExternalLink, History, FileDiff, GitBranch, GitPullRequestArrow, Inbox as InboxIcon, ListChecks, ListOrdered, Loader, Lock, MessageSquare, RefreshCw, RotateCw, Send, Terminal, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
-import { api, describeToolUse, errorText, type ClaudeEvent, type PrDetails, type ReviewRequest } from "./api";
+import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type PrDetails, type ReviewRequest } from "./api";
 import { anchorLabel, buildAnalysisPrompt, buildWalkthroughPrompt, parseAnalysis, parseWalkthrough, type Anchor } from "./analysis";
 import { AnalysisView, type OutlineKey, type RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
@@ -32,6 +32,24 @@ interface Loaded {
   files: FileData[];
 }
 
+/** Your last review of a PR and, once loaded, what changed after it. */
+interface SinceReview {
+  review: LastReview | null;
+  commits?: { oid: string; subject: string }[];
+  files?: FileData[];
+  loading?: boolean;
+  error?: string;
+}
+
+const REVIEW_VERB: Record<string, string> = { APPROVED: "approved", CHANGES_REQUESTED: "requested changes", COMMENTED: "commented", DISMISSED: "reviewed" };
+
+function ago(iso: string): string {
+  const mins = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const h = Math.round(mins / 60);
+  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+}
+
 type ClaudeUsage = Pick<ClaudeEvent, "usage" | "total_cost_usd">;
 const tokensOf = (e: ClaudeUsage) =>
   (e.usage?.input_tokens ?? 0) + (e.usage?.output_tokens ?? 0) + (e.usage?.cache_read_input_tokens ?? 0) + (e.usage?.cache_creation_input_tokens ?? 0);
@@ -49,6 +67,9 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [infoDialog, setInfoDialog] = useState<"shortcuts" | "about" | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [sinceReviews, setSinceReviews] = useState<Record<string, SinceReview>>({});
+  /** Diff tab: the whole PR, or only what changed since your last review. */
+  const [diffRange, setDiffRange] = useState<"all" | "since">("all");
   /** The last review posted from the app, per PR, so the status bar can link to it. */
   const [postedReviews, setPostedReviews] = useState<Record<string, string>>({});
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
@@ -205,7 +226,7 @@ export default function App() {
     return wt;
   };
 
-  const startAnalysis = async () => {
+  const startAnalysis = async (opts: { since?: string } = {}) => {
     if (!selected || !loaded || loaded.key !== key || !key) return;
     const k = key;
     const pr = selected;
@@ -219,7 +240,7 @@ export default function App() {
       let finalText = "";
       let sessionId: string | undefined;
       let usage: ClaudeUsage = {};
-      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, settings.reviewInstructions), undefined, (e) => {
+      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, settings.reviewInstructions, opts.since), undefined, (e) => {
         if (e.session_id) sessionId = e.session_id;
         if (e.type === "assistant") {
           for (const block of e.message?.content ?? []) {
@@ -241,6 +262,7 @@ export default function App() {
         analysis: parsed ?? s.analysis,
         analysisRaw: parsed ? undefined : finalText,
         analyzedAt: parsed ? Date.now() : s.analyzedAt,
+        analysisSince: parsed ? opts.since : s.analysisSince,
         tokens: (s.tokens ?? 0) + tokensOf(usage),
         costUsd: (s.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
@@ -362,6 +384,38 @@ export default function App() {
 
   const details = loaded && loaded.key === key ? loaded.details : null;
   const files = loaded && loaded.key === key ? loaded.files : [];
+  const since = key ? sinceReviews[key] : undefined;
+  const lastReview = since?.review ?? null;
+  const hasNewCommits = !!(details && lastReview && lastReview.commitId !== details.headRefOid);
+  const diffFiles = diffRange === "since" && since?.files ? since.files : files;
+
+  // Your last review of the selected PR, to offer "since your review" when new commits arrived.
+  const login = orgs?.login;
+  useEffect(() => {
+    if (!key || !details || !selected || !login || sinceReviews[key]) return;
+    const k = key;
+    api
+      .lastReview(selected.repository.nameWithOwner, details.number, login)
+      .then((review) => setSinceReviews((all) => ({ ...all, [k]: { review } })))
+      .catch(() => setSinceReviews((all) => ({ ...all, [k]: { review: null } })));
+  }, [key, details, login]);
+  useEffect(() => setDiffRange("all"), [key]);
+
+  const showSinceReview = () => {
+    if (!key || !details || !selected || !lastReview) return;
+    setTab("diff");
+    setDiffRange("since");
+    if (since?.files || since?.loading) return;
+    const k = key;
+    setSinceReviews((all) => ({ ...all, [k]: { ...all[k], loading: true, error: undefined } }));
+    api
+      .diffSince(selected.repository.nameWithOwner, details.number, details.baseRefName, lastReview.commitId)
+      .then((r) => setSinceReviews((all) => ({ ...all, [k]: { ...all[k], loading: false, commits: r.commits, files: parseDiff(r.diff, { nearbySequences: "zip" }) } })))
+      .catch((e) => {
+        setSinceReviews((all) => ({ ...all, [k]: { ...all[k], loading: false, error: errorText(e) } }));
+        setDiffRange("all");
+      });
+  };
   const run = key ? runs[key] : undefined;
   const analyzing = useMemo(() => new Set(Object.entries(runs).filter(([, r]) => r.running).map(([k]) => k)), [runs]);
   const critHigh = analysis?.findings.filter((f) => f.severity === "critical" || f.severity === "high").length ?? 0;
@@ -559,6 +613,25 @@ export default function App() {
         )}
         {details && <ReviewStatus details={details} me={orgs?.login} />}
       </section>
+      {hasNewCommits && lastReview && (
+        <div className="since-bar" role="status" title={since?.commits?.map((c) => `${c.oid.slice(0, 7)} ${c.subject}`).join("\n")}>
+          {since?.loading ? <Loader size={14} className="spin" /> : <History size={14} className="tone-accent" />}
+          <span className="ellipsis" style={{ minWidth: 0 }}>
+            <strong>{since?.commits ? `${since.commits.length} new ${since.commits.length === 1 ? "commit" : "commits"}` : "New commits"}</strong>
+            {` since you ${REVIEW_VERB[lastReview.state] ?? "reviewed"} ${ago(lastReview.submittedAt)}`}
+            {session?.analysisSince === lastReview.commitId && <span className="muted"> · analysis covers them</span>}
+          </span>
+          <span style={{ flex: 1 }} />
+          <div className="seg" role="group" aria-label="Changes to show">
+            <button type="button" className={tab === "diff" && diffRange === "since" ? "" : "on"} aria-pressed={!(tab === "diff" && diffRange === "since")} onClick={() => setDiffRange("all")}>All changes</button>
+            <button type="button" className={tab === "diff" && diffRange === "since" ? "on" : ""} aria-pressed={tab === "diff" && diffRange === "since"} onClick={showSinceReview}>Since your review</button>
+          </div>
+          <button type="button" className="btn sm" disabled={!canAnalyze} onClick={() => { setTab("analysis"); startAnalysis({ since: lastReview.commitId }); }}>
+            Analyze new changes
+          </button>
+        </div>
+      )}
+      {since?.error && <div className="since-bar tone-high" role="alert">{since.error}</div>}
       <div style={{ flex: 1, minHeight: 0 }}>
         {loadError && <p className="selectable" style={{ margin: 16, color: "var(--crit)" }}>{loadError}</p>}
         {!loadError && !details && <div className="empty"><Loader size={18} className="spin" /></div>}
@@ -575,15 +648,16 @@ export default function App() {
             inReview={session?.inReview ?? []}
             onSelect={(k) => { setOutlineKey(k); setFocusPane("outline"); }}
             onOpenAnchor={openAnchor}
-            onStart={startAnalysis}
+            onStart={() => startAnalysis()}
             onCancel={cancelAnalysis}
             onToggleReview={(i) => key && update(key, (s) => ({ ...s, inReview: s.inReview.includes(i) ? s.inReview.filter((x) => x !== i) : [...s.inReview, i] }))}
             onAsk={() => { setChatOpen(true); setChatFocus((n) => n + 1); }}
           />
         )}
-        {details && tab === "diff" && diffMode === "guided" && (
+        {/* Guided review covers the whole PR, so "since your review" always uses the file diff. */}
+        {details && tab === "diff" && diffMode === "guided" && diffRange === "all" && (
           <GuidedReview
-            files={files}
+            files={diffFiles}
             steps={analysis?.walkthrough}
             findings={analysis?.findings ?? []}
             current={guideStep}
@@ -599,13 +673,13 @@ export default function App() {
             hideGenerated={settings.hideGenerated}
           />
         )}
-        {details && tab === "diff" && diffMode === "files" && (
+        {details && tab === "diff" && (diffMode === "files" || diffRange === "since") && (
           <DiffView
-            onMode={setDiffMode}
+            onMode={(m) => { if (m === "guided") setDiffRange("all"); setDiffMode(m); }}
             reviewed={reviewedHunks}
             onReviewed={setReviewed}
             hideGenerated={settings.hideGenerated}
-            files={files}
+            files={diffFiles}
             current={diffTarget.path}
             range={diffTarget.range}
             findings={analysis?.findings ?? []}

@@ -54,6 +54,37 @@ pub async fn local_diff(app: &AppHandle, config: &Config, repo: &str, number: u6
     run("git", &["diff", "--no-color", "--no-ext-diff", "-M", &range], Some(&clone)).await
 }
 
+/// What changed on the PR since `since` (the commit the user last reviewed): the diff from that
+/// commit to the PR head, and the commits in between, newest first.
+#[tauri::command]
+pub async fn diff_since(
+    app: AppHandle,
+    config: State<'_, ConfigState>,
+    repo: String,
+    number: u64,
+    base_ref: String,
+    since: String,
+) -> Result<serde_json::Value, String> {
+    if since.is_empty() || !since.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("Unexpected commit: {since}"));
+    }
+    let config = config.get();
+    let (_, clone, pr_ref) = fetch_pr(&app, &config, &repo, number, &base_ref).await?;
+    let reachable = run("git", &["merge-base", "--is-ancestor", &since, &pr_ref], Some(&clone)).await.is_ok();
+    if !reachable {
+        return Err("The commit you reviewed is no longer part of this PR, probably because the branch was force-pushed. Showing all changes instead.".into());
+    }
+    let range = format!("{since}..{pr_ref}");
+    let diff = run("git", &["diff", "--no-color", "--no-ext-diff", "-M", &since, &pr_ref], Some(&clone)).await?;
+    let log = run("git", &["log", "--no-color", "--format=%H%x09%s", &range], Some(&clone)).await?;
+    let commits: Vec<serde_json::Value> = log
+        .lines()
+        .filter_map(|l| l.split_once('\t'))
+        .map(|(oid, subject)| serde_json::json!({ "oid": oid, "subject": subject }))
+        .collect();
+    Ok(serde_json::json!({ "diff": diff, "commits": commits }))
+}
+
 /// Makes sure there is a worktree checked out at the PR head and returns its path.
 #[tauri::command]
 pub async fn prepare_worktree(

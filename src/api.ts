@@ -15,6 +15,13 @@ export interface ReviewRequest {
   repository: { name: string; nameWithOwner: string };
 }
 
+/** Your most recent submitted review on a PR, and the commit it was made on. */
+export interface LastReview {
+  commitId: string;
+  state: Review["state"];
+  submittedAt: string;
+}
+
 export type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 
 /** A review comment on the new version of a file; `line` (and `start_line`) must be inside the diff. */
@@ -75,6 +82,9 @@ export interface ClaudeEvent {
 export const api = {
   listReviewRequests: (includeTeams: boolean) => invoke<ReviewRequest[]>("list_review_requests", { includeTeams }),
   listMyPrs: () => invoke<ReviewRequest[]>("list_my_prs"),
+  lastReview: (repo: string, number: number, login: string) => invoke<LastReview | null>("last_review", { repo, number, login }),
+  diffSince: (repo: string, number: number, baseRef: string, since: string) =>
+    invoke<{ diff: string; commits: { oid: string; subject: string }[] }>("diff_since", { repo, number, baseRef, since }),
   listOrgs: () => invoke<{ login: string; orgs: string[] }>("list_orgs"),
   setConfig: (config: { ghPath: string; claudePath: string; dataDir: string; model: string; effort: string }) => invoke<void>("set_config", { config }),
   toolStatus: () =>

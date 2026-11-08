@@ -24,10 +24,12 @@ pub fn run() {
             gh::list_orgs,
             gh::list_my_prs,
             gh::submit_review,
+            gh::last_review,
             gh::pr_details,
             gh::pr_diff,
             gh::pr_body_html,
             worktree::prepare_worktree,
+            worktree::diff_since,
             claude::claude_run,
             claude::claude_cancel,
         ])

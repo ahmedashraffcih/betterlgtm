@@ -2,6 +2,10 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+- **Since your last review** ([#2](https://github.com/drmas/betterlgtm/issues/2)): when commits land after your last review, a bar shows how many and when you reviewed. Switch the diff to just those changes, or analyze only them.
+
 ## [0.2.4] — 2026-11-08
 
 - Fixed "Could not run `gh`" when the app is opened from the Dock, Finder, Spotlight or a desktop launcher. The app now uses your login shell's PATH plus the usual Homebrew, npm and Claude Code folders. ([#1](https://github.com/drmas/betterlgtm/issues/1))

@@ -25,6 +25,24 @@ pub async fn list_review_requests(config: State<'_, ConfigState>, include_teams:
     parse(&out)
 }
 
+/// The commit and time of `login`'s most recent submitted review on the PR, if any.
+#[tauri::command]
+pub async fn last_review(config: State<'_, ConfigState>, repo: String, number: u64, login: String) -> Result<Value, String> {
+    let path = format!("repos/{repo}/pulls/{number}/reviews?per_page=100");
+    let out = run(
+        &config.get().gh_path,
+        &["api", "--paginate", &path, "--jq", ".[] | {login: .user.login, commitId: .commit_id, state, submittedAt: .submitted_at}"],
+        None,
+    )
+    .await?;
+    let latest = out
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .filter(|r| r["login"] == login.as_str() && r["state"] != "PENDING" && r["commitId"].is_string())
+        .max_by(|a, b| a["submittedAt"].as_str().cmp(&b["submittedAt"].as_str()));
+    Ok(latest.unwrap_or(Value::Null))
+}
+
 /// The user's own open PRs.
 #[tauri::command]
 pub async fn list_my_prs(config: State<'_, ConfigState>) -> Result<Value, String> {
