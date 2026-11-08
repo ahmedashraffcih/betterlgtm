@@ -85,6 +85,37 @@ pub async fn diff_since(
     Ok(serde_json::json!({ "diff": diff, "commits": commits }))
 }
 
+/// Searches the PR's worktree with ripgrep: `path:line:text` per match, at most 300.
+#[tauri::command]
+pub async fn search_worktree(cwd: String, pattern: String, regex: bool, case_sensitive: bool) -> Result<Vec<serde_json::Value>, String> {
+    if pattern.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut cmd = crate::process::command("rg");
+    cmd.current_dir(&cwd).args(["--line-number", "--no-heading", "--color", "never", "--max-count", "20", "--max-columns", "300"]);
+    if !regex {
+        cmd.arg("--fixed-strings");
+    }
+    if !case_sensitive {
+        cmd.arg("--ignore-case");
+    }
+    cmd.arg("--").arg(&pattern).arg(".");
+    let out = cmd.output().await.map_err(|e| format!("Could not run ripgrep (rg): {e}. Is it installed?"))?;
+    // ripgrep exits with 1 when nothing matches.
+    if !out.status.success() && out.status.code() != Some(1) {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .take(300)
+        .filter_map(|l| {
+            let (path, rest) = l.split_once(':')?;
+            let (line, text) = rest.split_once(':')?;
+            Some(serde_json::json!({ "path": path.trim_start_matches("./"), "line": line.parse::<u64>().ok()?, "text": text }))
+        })
+        .collect())
+}
+
 /// Makes sure there is a worktree checked out at the PR head and returns its path.
 #[tauri::command]
 pub async fn prepare_worktree(

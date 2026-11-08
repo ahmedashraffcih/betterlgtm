@@ -127,6 +127,9 @@ export const api = {
   updatePrBody: (repo: string, number: number, body: string) => invoke<void>("update_pr_body", { repo, number, body }),
   replyToThread: (repo: string, number: number, commentId: number, body: string) => invoke<void>("reply_to_thread", { repo, number, commentId, body }),
   resolveThread: (threadId: string, resolve: boolean) => invoke<void>("resolve_thread", { threadId, resolve }),
+  fileAt: (repo: string, sha: string, path: string) => invoke<string>("file_at", { repo, sha, path }),
+  searchWorktree: (cwd: string, pattern: string, regex: boolean, caseSensitive: boolean) =>
+    invoke<{ path: string; line: number; text: string }[]>("search_worktree", { cwd, pattern, regex, caseSensitive }),
   listOrgs: () => invoke<{ login: string; orgs: string[] }>("list_orgs"),
   setConfig: (config: { ghPath: string; claudePath: string; dataDir: string; model: string; effort: string }) => invoke<void>("set_config", { config }),
   toolStatus: () =>

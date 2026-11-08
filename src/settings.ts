@@ -26,6 +26,8 @@ export interface Settings {
   diffMode: "guided" | "files";
   diffLayout: "unified" | "split";
   hideGenerated: boolean;
+  /** Treat lines that differ only in whitespace as unchanged. */
+  hideWhitespace: boolean;
   // Claude
   model: string;
   effort: string;
@@ -61,6 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
   diffMode: "guided",
   diffLayout: "unified",
   hideGenerated: true,
+  hideWhitespace: false,
   model: "",
   effort: "",
   reviewInstructions: "",

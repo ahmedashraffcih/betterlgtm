@@ -21,6 +21,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-updater": "^2.14.1",
+    "@types/refractor": "^3.4.1",
     "dompurify": "^3.4.17",
     "lucide-react": "^1.70.0",
     "react": "^19.1.0",
@@ -28,6 +29,7 @@
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.19.1",
+    "refractor": "^3.6.0",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {

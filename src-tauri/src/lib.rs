@@ -31,11 +31,13 @@ pub fn run() {
             gh::update_pr_body,
             gh::reply_to_thread,
             gh::resolve_thread,
+            gh::file_at,
             gh::pr_details,
             gh::pr_diff,
             gh::pr_body_html,
             worktree::prepare_worktree,
             worktree::diff_since,
+            worktree::search_worktree,
             claude::claude_run,
             claude::claude_cancel,
         ])

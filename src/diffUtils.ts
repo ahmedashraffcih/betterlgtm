@@ -114,3 +114,43 @@ export function testCodeLines(files: FileData[]): { test: number; code: number }
   }
   return { test, code };
 }
+
+/**
+ * Hides whitespace-only changes: a deleted line followed by an added line that differs only in
+ * whitespace becomes an unchanged line. Hunk headers stay the same, so review progress still matches.
+ */
+export function ignoreWhitespace(files: FileData[]): FileData[] {
+  const same = (a: string, b: string) => a.replace(/\s+/g, "") === b.replace(/\s+/g, "");
+  return files.map((f) => ({
+    ...f,
+    hunks: f.hunks.map((h) => {
+      const out: ChangeData[] = [];
+      const cs = h.changes;
+      for (let i = 0; i < cs.length; ) {
+        if (cs[i].type !== "delete") {
+          out.push(cs[i++]);
+          continue;
+        }
+        const dels: ChangeData[] = [];
+        while (i < cs.length && cs[i].type === "delete") dels.push(cs[i++]);
+        const ins: ChangeData[] = [];
+        while (i < cs.length && cs[i].type === "insert") ins.push(cs[i++]);
+        const n = Math.min(dels.length, ins.length);
+        const kept: ChangeData[] = [];
+        const added: ChangeData[] = [];
+        for (let k = 0; k < n; k++) {
+          const d = dels[k] as { lineNumber: number; content: string };
+          const a = ins[k] as { lineNumber: number; content: string };
+          if (same(d.content, a.content)) {
+            out.push({ type: "normal", isNormal: true, oldLineNumber: d.lineNumber, newLineNumber: a.lineNumber, content: a.content } as ChangeData);
+          } else {
+            kept.push(dels[k]);
+            added.push(ins[k]);
+          }
+        }
+        out.push(...kept, ...dels.slice(n), ...added, ...ins.slice(n));
+      }
+      return { ...h, changes: out };
+    }),
+  }));
+}

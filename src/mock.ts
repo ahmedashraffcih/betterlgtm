@@ -194,6 +194,13 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
   switch (cmd) {
     case "list_review_requests":
       return requests;
+    case "file_at":
+      return Array.from({ length: 40 }, (_, i) => (i === 9 ? 'import { redis } from "../infra/redis";' : `// line ${i + 1}`)).join("\n");
+    case "search_worktree":
+      return [
+        { path: "src/idempotency/store.ts", line: 13, text: "  const raw = await redis.get(`idem:${key}`);" },
+        { path: "src/infra/redis.ts", line: 4, text: "export const redis = createClient({ url: process.env.REDIS_URL });" },
+      ];
     case "reply_to_thread":
     case "resolve_thread":
     case "update_pr_body":

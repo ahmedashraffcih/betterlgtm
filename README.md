@@ -34,7 +34,7 @@ It runs on your machine with the `gh` and `claude` command-line tools you alread
 - **Guided review.** Related edits grouped into sections with a line on what each does, in one continuous scroll. Mark a change, a file or a whole section as reviewed and see your progress.
 - **Since your last review.** When new commits land after you reviewed, see just those changes and analyze only them.
 - **Re-check findings.** After the author pushes, Claude checks which findings are fixed and which are still open.
-- **Diff view.** File-by-file unified or split diff with search, reviewed checkboxes, and generated files folded away until you open them.
+- **Diff view.** File-by-file unified or split diff with syntax highlighting, hidden lines on demand, whitespace hiding, regex search across the diff and the repository, line comments, and generated files folded away until you open them.
 - **Your own PRs.** See what's blocking merge, self-review before asking for reviews, have Claude write the description, and reply to feedback.
 - **Chat.** Ask follow-up questions; Claude knows which finding, section or file you're looking at.
 - **Submit review.** Post your review to GitHub with the findings you pick as comments on their lines. Edit each comment, add a summary, and choose Comment, Approve or Request changes.

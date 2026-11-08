@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { Analysis, FindingChecks, FindingState } from "./analysis";
+import type { DraftComment } from "./components/DiffView";
 
 export interface ChatItem {
   role: "user" | "assistant" | "tool" | "error";
@@ -23,6 +24,8 @@ export interface PrSession {
   findingChecks?: FindingChecks;
   /** Dismissed, resolved or commented findings, keyed by `findingId`. */
   findingStates?: Record<string, FindingState>;
+  /** Comments written on selected diff lines, waiting for Submit review. */
+  draftComments?: DraftComment[];
   headOid?: string;
   chat: ChatItem[];
   tokens?: number;

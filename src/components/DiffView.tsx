@@ -1,9 +1,13 @@
-import { ArrowLeft, Check, ChevronDown, ChevronUp, Columns2, Eye, Files, Flag, ListOrdered, Rows3 } from "lucide-react";
+import { ArrowLeft, CaseSensitive, Check, ChevronDown, ChevronUp, Columns2, Eye, Files, Flag, FolderSearch, ListOrdered, MessageSquare, MessageSquarePlus, Regex, Rows3, Search, Space, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Decoration, Diff, Hunk, getChangeKey, type FileData, type RenderGutter } from "react-diff-view";
+import {
+  Decoration, Diff, Hunk, expandFromRawCode, getChangeKey, getCollapsedLinesCountBetween,
+  type ChangeData, type FileData, type HunkData, type RenderGutter,
+} from "react-diff-view";
 import type { Anchor, Finding } from "../analysis";
 import { SEVERITY, fileIcon } from "../icons";
 import { allReviewed, changeKeys, changesInRange, filePath, fileStats, findFile, hunkKey, isGenerated } from "../diffUtils";
+import { highlightHunks } from "../highlight";
 import { useElementWidth } from "../hooks";
 
 export type DiffMode = "guided" | "files";
@@ -22,6 +26,14 @@ export function DiffModeSwitch({ mode, onMode, compact }: { mode: DiffMode; onMo
   );
 }
 
+/** A comment written on selected diff lines; it goes into Submit review. */
+export interface DraftComment {
+  path: string;
+  line: number;
+  start_line?: number;
+  body: string;
+}
+
 interface Props {
   onMode: (m: DiffMode) => void;
   reviewed: Set<string>;
@@ -34,16 +46,77 @@ interface Props {
   activeFinding: number | null;
   split: boolean;
   onSplit: (split: boolean) => void;
-  onPickFile: (path: string) => void;
+  onPickFile: (path: string, range?: Anchor) => void;
   onBack: () => void;
   onStepFinding: (delta: number) => void;
+  hideWhitespace: boolean;
+  onHideWhitespace: (v: boolean) => void;
+  /** The file at the PR head, for showing hidden lines between hunks. */
+  onLoadSource?: (path: string) => Promise<string>;
+  onAskLines?: (path: string, start: number, end: number, code: string) => void;
+  onAddComment?: (c: DraftComment) => void;
+  /** Searches the whole worktree; absent until the PR has one. */
+  onSearchRepo?: (pattern: string, regex: boolean, caseSensitive: boolean) => Promise<{ path: string; line: number; text: string }[]>;
+  onOpenInEditor?: (path: string, line: number) => void;
+}
+
+type Scope = "all" | "added" | "removed" | "paths";
+
+interface Match {
+  path: string;
+  line: number;
+  text: string;
+  kind: "add" | "del" | "ctx" | "path";
+}
+
+const newLine = (c: ChangeData) => (c.type === "delete" ? null : c.type === "insert" ? c.lineNumber : c.newLineNumber);
+
+function searchDiff(files: FileData[], query: string, regex: boolean, cs: boolean, scope: Scope): Match[] | string {
+  if (!query) return [];
+  let re: RegExp;
+  try {
+    re = new RegExp(regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), cs ? "" : "i");
+  } catch (e) {
+    return `Invalid regular expression: ${(e as Error).message}`;
+  }
+  const out: Match[] = [];
+  for (const f of files) {
+    const path = filePath(f);
+    if (scope === "paths") {
+      if (re.test(path)) out.push({ path, line: 0, text: path, kind: "path" });
+      continue;
+    }
+    for (const h of f.hunks) {
+      for (const c of h.changes) {
+        if (scope === "added" && c.type !== "insert") continue;
+        if (scope === "removed" && c.type !== "delete") continue;
+        if (!re.test(c.content)) continue;
+        const line = c.type === "delete" ? c.lineNumber : (newLine(c) ?? 0);
+        out.push({ path, line, text: c.content.trim(), kind: c.type === "insert" ? "add" : c.type === "delete" ? "del" : "ctx" });
+        if (out.length >= 500) return out;
+      }
+    }
+  }
+  return out;
 }
 
 export function DiffView(p: Props) {
+  const [onlyFindings, setOnlyFindings] = useState(false);
+  const counts = useMemo(() => {
+    const c = new Map<string, number>();
+    p.findings.forEach((f) => {
+      const paths = new Set(f.anchors.map((a) => (findFile(p.files, a.path) ? filePath(findFile(p.files, a.path)!) : a.path)));
+      paths.forEach((path) => c.set(path, (c.get(path) ?? 0) + 1));
+    });
+    return c;
+  }, [p.findings, p.files]);
+  const listed = onlyFindings ? p.files.filter((f) => counts.has(filePath(f))) : p.files;
+
   const file = (p.current && findFile(p.files, p.current)) || p.files.find((f) => !isGenerated(f)) || p.files[0];
+  const path = file ? filePath(file) : "";
   // Generated files show a placeholder until the user asks for the diff.
   const [shownGenerated, setShownGenerated] = useState<Set<string>>(new Set());
-  const hideDiff = !!file && p.hideGenerated && isGenerated(file) && !shownGenerated.has(filePath(file));
+  const hideDiff = !!file && p.hideGenerated && isGenerated(file) && !shownGenerated.has(path);
   const scroller = useRef<HTMLDivElement>(null);
   // Narrow panes swap the file list for a dropdown; split view needs room for two columns.
   const [rootRef, width] = useElementWidth<HTMLDivElement>();
@@ -51,10 +124,44 @@ export function DiffView(p: Props) {
   const canSplit = width === 0 || width >= 900;
   const split = p.split && canSplit;
 
-  const selected = useMemo(
-    () => (file && p.range && p.range.startLine > 0 ? changeKeys(changesInRange(file, p.range)) : []),
-    [file, p.range],
-  );
+  // Lines shown between hunks after "Show hidden lines", per file.
+  const [expanded, setExpanded] = useState<{ path: string; hunks: HunkData[] } | null>(null);
+  const sources = useRef(new Map<string, string>());
+  const [expandError, setExpandError] = useState<string | null>(null);
+  const hunks = expanded && expanded.path === path ? expanded.hunks : (file?.hunks ?? []);
+  useEffect(() => setExpandError(null), [path]);
+  const expand = async (start: number, end: number) => {
+    if (!file || !p.onLoadSource) return;
+    try {
+      let source = sources.current.get(path);
+      if (source === undefined) {
+        source = await p.onLoadSource(path);
+        sources.current.set(path, source);
+      }
+      const total = source.split("\n").length;
+      setExpanded({ path, hunks: expandFromRawCode(hunks, source, start, Math.min(end, total + 1)) });
+    } catch (e) {
+      setExpandError(String(e));
+    }
+  };
+
+  const changeCount = hunks.reduce((n, h) => n + h.changes.length, 0);
+  const tokens = useMemo(() => (file && !hideDiff && changeCount < 6000 ? highlightHunks(hunks, path) : null), [hunks, path, hideDiff, changeCount, file]);
+
+  // Lines the user picked in the gutter (new-file line numbers), for asking Claude or commenting.
+  const [picked, setPicked] = useState<{ path: string; start: number; end: number } | null>(null);
+  const [commenting, setCommenting] = useState(false);
+  const [comment, setComment] = useState("");
+  useEffect(() => {
+    setPicked(null);
+    setCommenting(false);
+  }, [path]);
+  const pickedRange: Anchor | null = picked && picked.path === path ? { path, startLine: picked.start, endLine: picked.end } : null;
+
+  const selected = useMemo(() => {
+    const r = pickedRange ?? (p.range && p.range.startLine > 0 ? p.range : null);
+    return file && r ? changeKeys(changesInRange({ ...file, hunks }, r)) : [];
+  }, [file, hunks, p.range, pickedRange?.startLine, pickedRange?.endLine]);
 
   const markers = useMemo(() => {
     const m = new Map<string, number>();
@@ -70,6 +177,7 @@ export function DiffView(p: Props) {
   }, [file, p.findings]);
 
   useEffect(() => {
+    if (pickedRange) return;
     const el = scroller.current?.querySelector(".diff-code-selected");
     el?.scrollIntoView({ block: "center" });
   }, [selected]);
@@ -85,14 +193,58 @@ export function DiffView(p: Props) {
     );
   };
 
-  const counts = useMemo(() => {
-    const c = new Map<string, number>();
-    p.findings.forEach((f) => {
-      const paths = new Set(f.anchors.map((a) => (findFile(p.files, a.path) ? filePath(findFile(p.files, a.path)!) : a.path)));
-      paths.forEach((path) => c.set(path, (c.get(path) ?? 0) + 1));
-    });
-    return c;
-  }, [p.findings, p.files]);
+  const gutterEvents = {
+    onClick: ({ change }: { change: ChangeData | null }, e: React.MouseEvent) => {
+      const line = change ? newLine(change) : null;
+      if (!line) return;
+      setCommenting(false);
+      if (e.shiftKey && picked && picked.path === path) setPicked({ path, start: Math.min(picked.start, line), end: Math.max(picked.end, line) });
+      else setPicked({ path, start: line, end: line });
+    },
+  };
+
+  const pickedCode = () => {
+    if (!pickedRange || !file) return "";
+    return changesInRange({ ...file, hunks }, pickedRange)
+      .filter((c) => c.type !== "delete")
+      .map((c) => c.content)
+      .join("\n");
+  };
+
+  // Search across the diff, and optionally the whole repository.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [regex, setRegex] = useState(false);
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [scope, setScope] = useState<Scope>("all");
+  const [repoResults, setRepoResults] = useState<{ path: string; line: number; text: string }[] | null>(null);
+  const [repoBusy, setRepoBusy] = useState(false);
+  const [repoError, setRepoError] = useState<string | null>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const results = useMemo(() => searchDiff(p.files, query, regex, caseSensitive, scope), [p.files, query, regex, caseSensitive, scope]);
+  useEffect(() => setRepoResults(null), [query, regex, caseSensitive]);
+  useEffect(() => {
+    if (searchOpen) searchInput.current?.focus();
+  }, [searchOpen]);
+  const goTo = (m: { path: string; line: number }) => {
+    const inDiff = findFile(p.files, m.path);
+    if (inDiff) {
+      if (m.line > 0) p.onPickFile(filePath(inDiff), { path: filePath(inDiff), startLine: m.line, endLine: m.line });
+      else p.onPickFile(filePath(inDiff));
+    } else if (m.line > 0) p.onOpenInEditor?.(m.path, m.line);
+  };
+  const searchRepo = async () => {
+    if (!p.onSearchRepo || !query) return;
+    setRepoBusy(true);
+    setRepoError(null);
+    try {
+      setRepoResults(await p.onSearchRepo(query, regex, caseSensitive));
+    } catch (e) {
+      setRepoError(String(e));
+    } finally {
+      setRepoBusy(false);
+    }
+  };
 
   const isReviewed = (f: FileData) => allReviewed(f.hunks.map((h) => hunkKey(f, h)), p.reviewed);
   const reviewedFiles = p.files.filter(isReviewed).length;
@@ -103,26 +255,40 @@ export function DiffView(p: Props) {
   return (
     <div ref={rootRef} style={{ display: "flex", height: "100%", minHeight: 0 }}>
       {!narrow && (
-      <nav aria-label="Changed files" data-pane="outline" className="side" style={{ width: width < 1000 ? 220 : 260, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
-        <div className="ph"><span style={{ flex: 1 }}>Changed files</span><span style={{ fontWeight: 400 }}>{reviewedFiles} of {p.files.length} reviewed</span></div>
-        <div className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
-          {p.files.map((f) => {
-            const path = filePath(f);
-            const s = fileStats(f);
-            const Icon = fileIcon(path);
-            const n = counts.get(path);
-            const done = isReviewed(f);
-            return (
-              <button key={path} type="button" data-nav className={file === f ? "file cur" : "file"} title={done ? `${path} (reviewed)` : path} onClick={() => p.onPickFile(path)}>
-                {done ? <Check size={14} className={file === f ? undefined : "tone-ok"} strokeWidth={2.5} /> : <Icon size={14} />}
-                <span className="mono ellipsis" style={{ flex: 1, opacity: isGenerated(f) && file !== f ? 0.6 : 1 }}>{path}</span>
-                {n ?<span className="rm" style={{ display: "inline-flex", alignItems: "center", gap: 2 }}><Flag size={11} />{n}</span> : null}
-                <span className="mono rm">+{s.add} −{s.del}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+        <nav aria-label="Changed files" data-pane="outline" className="side" style={{ width: width < 1000 ? 220 : 260, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
+          <div className="ph">
+            <span style={{ flex: 1 }}>Changed files</span>
+            <span style={{ fontWeight: 400 }}>{reviewedFiles} of {p.files.length} reviewed</span>
+            <button
+              type="button"
+              className={onlyFindings ? "tb on" : "tb"}
+              aria-pressed={onlyFindings}
+              aria-label="Only files with findings"
+              title={onlyFindings ? "Show all files" : "Only files with findings"}
+              onClick={() => setOnlyFindings(!onlyFindings)}
+            >
+              <Flag size={13} />
+            </button>
+          </div>
+          <div className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
+            {listed.map((f) => {
+              const fp = filePath(f);
+              const s = fileStats(f);
+              const Icon = fileIcon(fp);
+              const n = counts.get(fp);
+              const done = isReviewed(f);
+              return (
+                <button key={fp} type="button" data-nav className={file === f ? "file cur" : "file"} title={done ? `${fp} (reviewed)` : fp} onClick={() => p.onPickFile(fp)}>
+                  {done ? <Check size={14} className={file === f ? undefined : "tone-ok"} strokeWidth={2.5} /> : <Icon size={14} />}
+                  <span className="mono ellipsis" style={{ flex: 1, opacity: isGenerated(f) && file !== f ? 0.6 : 1 }}>{fp}</span>
+                  {n ? <span className="rm" style={{ display: "inline-flex", alignItems: "center", gap: 2 }} title={`${n} ${n === 1 ? "finding" : "findings"}`}><Flag size={11} />{n}</span> : null}
+                  <span className="mono rm">+{s.add} −{s.del}</span>
+                </button>
+              );
+            })}
+            {listed.length === 0 && <p className="muted" style={{ margin: "8px 10px", fontSize: 12 }}>No files with findings.</p>}
+          </div>
+        </nav>
       )}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 8px 0 12px", borderBottom: "1px solid var(--line)", background: "var(--side)", flexShrink: 0 }}>
@@ -131,19 +297,32 @@ export function DiffView(p: Props) {
             <select
               aria-label="Changed file"
               className="mono"
-              value={file ? filePath(file) : ""}
+              value={path}
               onChange={(e) => p.onPickFile(e.target.value)}
               style={{ flex: 1, minWidth: 0, height: 24, fontSize: 12, background: "var(--bg)", color: "var(--text)", border: "1px solid var(--line)", borderRadius: 5 }}
             >
-              {p.files.map((f) => {
-                const path = filePath(f);
-                const n = counts.get(path);
-                return <option key={path} value={path}>{n ? `⚑${n} ` : ""}{path}</option>;
+              {listed.map((f) => {
+                const fp = filePath(f);
+                const n = counts.get(fp);
+                return <option key={fp} value={fp}>{n ? `⚑${n} ` : ""}{fp}</option>;
               })}
             </select>
           ) : (
-            <span className="mono ellipsis" style={{ flex: 1, fontSize: 12 }}>{file ? filePath(file) : "No changes"}</span>
+            <span className="mono ellipsis" style={{ flex: 1, fontSize: 12 }}>{file ? path : "No changes"}</span>
           )}
+          <button type="button" className={searchOpen ? "tb on" : "tb"} aria-pressed={searchOpen} aria-label="Search the diff" title="Search the diff" data-key="diff-search" onClick={() => setSearchOpen(!searchOpen)}>
+            <Search size={14} />
+          </button>
+          <button
+            type="button"
+            className={p.hideWhitespace ? "tb on" : "tb"}
+            aria-pressed={p.hideWhitespace}
+            aria-label="Hide whitespace changes"
+            title={p.hideWhitespace ? "Show whitespace changes" : "Hide whitespace changes"}
+            onClick={() => p.onHideWhitespace(!p.hideWhitespace)}
+          >
+            <Space size={14} />
+          </button>
           {file && (
             <label className={isReviewed(file) ? "review-check on" : "review-check"} title="Mark this file as reviewed">
               <input type="checkbox" data-review-toggle checked={isReviewed(file)} onChange={(e) => p.onReviewed(file.hunks.map((h) => hunkKey(file, h)), e.target.checked)} />
@@ -155,6 +334,64 @@ export function DiffView(p: Props) {
             <button type="button" className={split ? "on" : ""} aria-pressed={split} disabled={!canSplit} title={canSplit ? "Split" : "Make the window wider to use split view"} onClick={() => p.onSplit(true)}><Columns2 size={13} />{!narrow && "Split"}</button>
           </div>
         </div>
+
+        {searchOpen && (
+          <div className="diff-search">
+            <div className="diff-search-row">
+              <label className="field" style={{ flex: 1, minWidth: 0 }}>
+                <Search size={14} />
+                <input ref={searchInput} placeholder={scope === "paths" ? "File path" : "Search changed lines"} aria-label="Search the diff" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setSearchOpen(false)} />
+              </label>
+              <button type="button" className={regex ? "tb on" : "tb"} aria-pressed={regex} title="Regular expression" aria-label="Regular expression" onClick={() => setRegex(!regex)}><Regex size={14} /></button>
+              <button type="button" className={caseSensitive ? "tb on" : "tb"} aria-pressed={caseSensitive} title="Match case" aria-label="Match case" onClick={() => setCaseSensitive(!caseSensitive)}><CaseSensitive size={15} /></button>
+              <select className="set-input" style={{ minWidth: 0, width: "auto" }} aria-label="Search in" value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
+                <option value="all">All lines</option>
+                <option value="added">Added lines</option>
+                <option value="removed">Removed lines</option>
+                <option value="paths">File paths</option>
+              </select>
+              <button type="button" className="tb" aria-label="Close search" onClick={() => setSearchOpen(false)}><X size={14} /></button>
+            </div>
+            {query && (
+              <div className="diff-results">
+                {typeof results === "string" ? (
+                  <p className="tone-crit" style={{ margin: 0, fontSize: 12 }}>{results}</p>
+                ) : (
+                  <>
+                    <div className="muted diff-results-head">{results.length === 500 ? "500+ matches in the diff" : `${results.length} ${results.length === 1 ? "match" : "matches"} in the diff`}</div>
+                    {results.slice(0, 200).map((m, i) => (
+                      <button key={i} type="button" className="diff-result" onClick={() => goTo(m)}>
+                        <span className={`dr-kind dr-${m.kind}`}>{m.kind === "add" ? "+" : m.kind === "del" ? "−" : m.kind === "path" ? "" : " "}</span>
+                        <span className="mono ellipsis dr-path">{m.path.split("/").pop()}{m.line ? `:${m.line}` : ""}</span>
+                        <span className="mono ellipsis" style={{ flex: 1 }}>{m.text}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {p.onSearchRepo && scope !== "paths" && typeof results !== "string" && (
+                  <div style={{ paddingTop: 6 }}>
+                    {repoResults === null ? (
+                      <button type="button" className="btn sm" disabled={repoBusy} onClick={searchRepo}><FolderSearch size={13} />{repoBusy ? "Searching…" : "Search the whole repository"}</button>
+                    ) : (
+                      <>
+                        <div className="muted diff-results-head">{repoResults.length === 300 ? "300+ matches in the repository" : `${repoResults.length} ${repoResults.length === 1 ? "match" : "matches"} in the repository`}</div>
+                        {repoResults.map((m, i) => (
+                          <button key={`r${i}`} type="button" className="diff-result" onClick={() => goTo(m)} title={findFile(p.files, m.path) ? "Show in the diff" : "Open in your editor"}>
+                            <span className="dr-kind">{findFile(p.files, m.path) ? "Δ" : ""}</span>
+                            <span className="mono ellipsis dr-path">{m.path}:{m.line}</span>
+                            <span className="mono ellipsis" style={{ flex: 1 }}>{m.text.trim()}</span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {repoError && <p className="tone-crit" style={{ margin: "4px 0 0", fontSize: 12 }}>{repoError}</p>}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {banner && bannerOnFile && (
           <div
             style={{
@@ -169,38 +406,102 @@ export function DiffView(p: Props) {
             })()}
             <span className="ellipsis" style={{ flex: 1, fontWeight: 600 }}>{p.activeFinding! + 1}. {banner.title}</span>
             <button type="button" className="btn sm" onClick={p.onBack}><ArrowLeft size={13} />Back to finding</button>
-            <button type="button" className="tb" aria-label="Previous finding (K)" onClick={() => p.onStepFinding(-1)}><ChevronUp size={16} /></button>
-            <button type="button" className="tb" aria-label="Next finding (J)" onClick={() => p.onStepFinding(1)}><ChevronDown size={16} /></button>
+            <button type="button" className="tb" aria-label="Previous finding (N)" onClick={() => p.onStepFinding(-1)}><ChevronUp size={16} /></button>
+            <button type="button" className="tb" aria-label="Next finding (n)" onClick={() => p.onStepFinding(1)}><ChevronDown size={16} /></button>
           </div>
         )}
+
+        {pickedRange && (
+          <div className="pick-bar" role="toolbar" aria-label="Selected lines">
+            <span className="mono" style={{ fontSize: 12 }}>{path.split("/").pop()}:{picked!.start}{picked!.end > picked!.start ? `–${picked!.end}` : ""}</span>
+            <span className="muted" style={{ fontSize: 12 }}>Shift-click another line to extend</span>
+            <span style={{ flex: 1 }} />
+            {!commenting && p.onAskLines && (
+              <button type="button" className="btn sm" onClick={() => p.onAskLines!(path, picked!.start, picked!.end, pickedCode())}><MessageSquare size={13} />Ask Claude</button>
+            )}
+            {!commenting && p.onAddComment && (
+              <button type="button" className="btn sm" onClick={() => setCommenting(true)}><MessageSquarePlus size={13} />Add comment</button>
+            )}
+            <button type="button" className="tb" aria-label="Clear selection" onClick={() => { setPicked(null); setCommenting(false); }}><X size={14} /></button>
+            {commenting && (
+              <form
+                className="pick-comment"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!comment.trim() || !p.onAddComment) return;
+                  p.onAddComment({ path, line: picked!.end, ...(picked!.end > picked!.start ? { start_line: picked!.start } : {}), body: comment.trim() });
+                  setComment("");
+                  setCommenting(false);
+                  setPicked(null);
+                }}
+              >
+                <textarea className="set-input" rows={2} autoFocus placeholder="Your comment; it goes into Submit review" aria-label="Comment" value={comment} onChange={(e) => setComment(e.target.value)} />
+                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                  <button type="button" className="btn sm" onClick={() => setCommenting(false)}>Cancel</button>
+                  <button type="submit" className="btn sm primary" disabled={!comment.trim()}>Add to review</button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
         <div ref={scroller} data-pane="content" className="scroll" style={{ overflow: "auto" }}>
           {file && hideDiff && (
             <div className="empty" style={{ height: "auto", padding: "40px 24px" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                 <span className="tag">Generated</span>
                 <span>This file looks generated, so its diff is hidden.</span>
-                <button type="button" className="btn sm" onClick={() => setShownGenerated(new Set([...shownGenerated, filePath(file)]))}>
+                <button type="button" className="btn sm" onClick={() => setShownGenerated(new Set([...shownGenerated, path]))}>
                   <Eye size={13} />Show diff
                 </button>
               </div>
             </div>
           )}
+          {expandError && <p className="tone-crit" style={{ margin: "6px 12px", fontSize: 12 }}>Couldn't load the file: {expandError}</p>}
           {file && !hideDiff && (
             <Diff
-              key={filePath(file)}
+              key={path}
               viewType={split ? "split" : "unified"}
               diffType={file.type}
-              hunks={file.hunks}
+              hunks={hunks}
+              tokens={tokens ?? undefined}
               selectedChanges={selected}
               renderGutter={renderGutter}
+              gutterEvents={gutterEvents as never}
+              className="diff-pickable"
             >
-              {(hunks) =>
-                hunks.flatMap((h) => [
-                  <Decoration key={`d-${h.content}`}><span>{h.content}</span></Decoration>,
-                  <Hunk key={`h-${h.content}`} hunk={h} />,
-                ])
+              {(hs) =>
+                hs.flatMap((h, i) => {
+                  const prev = i > 0 ? hs[i - 1] : null;
+                  const hidden = file.type !== "delete" && p.onLoadSource ? getCollapsedLinesCountBetween(prev, h) : 0;
+                  const start = prev ? prev.newStart + prev.newLines : 1;
+                  return [
+                    <Decoration key={`d-${h.content}`}>
+                      {hidden > 0 ? (
+                        <button type="button" className="expand-btn" onClick={() => expand(start, h.newStart)} title="Show the unchanged lines here">
+                          <ChevronUp size={12} />Show {hidden} hidden {hidden === 1 ? "line" : "lines"}<span className="muted mono">{h.content}</span>
+                        </button>
+                      ) : (
+                        <span>{h.content}</span>
+                      )}
+                    </Decoration>,
+                    <Hunk key={`h-${h.content}`} hunk={h} />,
+                  ];
+                })
               }
             </Diff>
+          )}
+          {file && !hideDiff && p.onLoadSource && file.type !== "delete" && hunks.length > 0 && (
+            <button
+              type="button"
+              className="expand-btn expand-end"
+              onClick={() => {
+                const last = hunks[hunks.length - 1];
+                expand(last.newStart + last.newLines, Number.MAX_SAFE_INTEGER);
+              }}
+            >
+              <ChevronDown size={12} />Show the rest of the file
+            </button>
           )}
         </div>
       </div>

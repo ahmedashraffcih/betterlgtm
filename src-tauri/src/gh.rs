@@ -214,6 +214,17 @@ pub async fn resolve_thread(config: State<'_, ConfigState>, thread_id: String, r
     run(&config.get().gh_path, &["api", "graphql", "-f", &format!("query={query}"), "-f", &format!("id={thread_id}")], None).await.map(|_| ())
 }
 
+/// A file's content at a commit, for expanding diff context.
+#[tauri::command]
+pub async fn file_at(config: State<'_, ConfigState>, repo: String, sha: String, path: String) -> Result<String, String> {
+    if !sha.chars().all(|c| c.is_ascii_hexdigit()) || path.contains("..") {
+        return Err("Unexpected file reference".into());
+    }
+    let encoded: String = path.split('/').map(|seg| seg.replace('%', "%25").replace(' ', "%20").replace('#', "%23").replace('?', "%3F")).collect::<Vec<_>>().join("/");
+    let api = format!("repos/{repo}/contents/{encoded}?ref={sha}");
+    run(&config.get().gh_path, &["api", &api, "-H", "Accept: application/vnd.github.raw"], None).await
+}
+
 /// The user's login and the organizations they belong to, for the organization settings.
 #[tauri::command]
 pub async fn list_orgs(config: State<'_, ConfigState>) -> Result<Value, String> {

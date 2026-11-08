@@ -21,7 +21,7 @@ import { FilterDialog, type OwnerRow, type RepoRow } from "./components/FilterDi
 import { DescriptionDialog } from "./components/DescriptionDialog";
 import { FILTER_GROUPS, NO_FILTERS, type Filters, type SortKey } from "./inboxFilters";
 import { ReviewStatus } from "./components/ReviewStatus";
-import { filePath } from "./diffUtils";
+import { filePath, ignoreWhitespace } from "./diffUtils";
 import { fileIcon, SEVERITY } from "./icons";
 import { emptySession, useSessions, useStoredState, type ChatItem } from "./sessions";
 import { Settings, type SettingsSection } from "./components/Settings";
@@ -643,7 +643,11 @@ export default function App() {
   const since = key ? sinceReviews[key] : undefined;
   const lastReview = since?.review ?? null;
   const hasNewCommits = !!(details && lastReview && lastReview.commitId !== details.headRefOid);
-  const diffFiles = diffRange === "since" && since?.files ? since.files : files;
+  const rangeFiles = diffRange === "since" && since?.files ? since.files : files;
+  const diffFiles = useMemo(() => (settings.hideWhitespace ? ignoreWhitespace(rangeFiles) : rangeFiles), [rangeFiles, settings.hideWhitespace]);
+  /** Lines picked in the diff that the next chat question is about. */
+  const [lineContext, setLineContext] = useState<ChatContext | null>(null);
+  useEffect(() => setLineContext(null), [key]);
   const analysisHead = session?.analysisHead ?? session?.headOid;
   /** The findings were made on an older commit than the PR's current head. */
   const analysisOutdated = !!(details && analysis?.findings.length && analysisHead && analysisHead !== details.headRefOid);
@@ -741,6 +745,7 @@ export default function App() {
 
   // What the chat question is about: the finding, claim or file the user is looking at.
   const chatContext = ((): ChatContext | null => {
+    if (lineContext) return lineContext;
     if (tab === "analysis" && analysis) {
       const k = outlineKey[0];
       const i = Number(outlineKey.slice(1));
@@ -786,7 +791,10 @@ export default function App() {
     running: !!(key && chatRunning[key]),
     context: chatContext,
     focusSignal: chatFocus,
-    onSend: sendChat,
+    onSend: (text: string, ctx: ChatContext | null) => {
+      sendChat(text, ctx);
+      if (ctx && ctx === lineContext) setLineContext(null);
+    },
     onCancel: () => key && runIds.current[`chat-${key}`] && api.claudeCancel(runIds.current[`chat-${key}`]),
     onClear: () => key && update(key, (s) => ({ ...s, chat: [] })),
     onHide: () => setChatOpen(false),
@@ -930,7 +938,7 @@ export default function App() {
             <Code size={14} /><span className="lbl-text">Open in editor</span>
           </button>
           <button type="button" className="btn primary" disabled={!details} aria-label="Submit review" title="Submit review on GitHub" onClick={() => setReviewOpen(true)}>
-            <Send size={14} /><span className="lbl-text">Submit review…</span>{(session?.inReview.length ?? 0) > 0 && <span className="cnt on-primary">{session?.inReview.length}</span>}
+            <Send size={14} /><span className="lbl-text">Submit review…</span>{(session?.inReview.length ?? 0) + (session?.draftComments?.length ?? 0) > 0 && <span className="cnt on-primary">{(session?.inReview.length ?? 0) + (session?.draftComments?.length ?? 0)}</span>}
           </button>
         </div>
         {details && (
@@ -1050,7 +1058,26 @@ export default function App() {
             activeFinding={diffTarget.finding}
             split={split}
             onSplit={setSplit}
-            onPickFile={(path) => setDiffTarget({ path, range: null, finding: null })}
+            onPickFile={(path, range) => setDiffTarget({ path, range: range ?? null, finding: null })}
+            hideWhitespace={settings.hideWhitespace}
+            onHideWhitespace={(v) => updateSettings({ hideWhitespace: v })}
+            onLoadSource={(path) => api.fileAt(selected.repository.nameWithOwner, details.headRefOid, path)}
+            onAskLines={(path, start, end, code) => {
+              const where = `${path}:${start}${end > start ? `-${end}` : ""}`;
+              setLineContext({
+                label: where.split("/").pop() ?? where,
+                prompt: `About ${where} in this PR:\n\`\`\`\n${code.slice(0, 4000)}\n\`\`\``,
+                suggestions: ["What does this do?", "What could go wrong here?", "Is this tested?"],
+              });
+              setChatOpen(true);
+              setChatFocus((c) => c + 1);
+            }}
+            onAddComment={(c) => key && update(key, (s) => ({ ...s, draftComments: [...(s.draftComments ?? []), c] }))}
+            onSearchRepo={async (pattern, regex, cs) => {
+              const wt = await ensureWorktree(key!, selected, details);
+              return api.searchWorktree(wt, pattern, regex, cs);
+            }}
+            onOpenInEditor={(path, line) => session?.worktree && openUrl(`vscode://file${session.worktree}/${path}:${line}`)}
             onBack={() => { if (diffTarget.finding !== null) setOutlineKey(`f${diffTarget.finding}`); setTab("analysis"); }}
             onStepFinding={stepFinding}
           />
@@ -1202,12 +1229,15 @@ export default function App() {
           ownPr={!!orgs?.login && details.author.login === orgs.login}
           checks={checks?.results}
           states={findingStates}
+          drafts={session?.draftComments ?? []}
+          onDrafts={(d) => update(key, (s) => ({ ...s, draftComments: d }))}
           onDraftSummary={session?.worktree ? (event, comments, notes) => draftSummary(event, comments, notes) : undefined}
           onClose={() => setReviewOpen(false)}
           onSubmitted={(url, posted) => {
             const findings = analysis?.findings ?? [];
             update(key, (s) => ({
               ...s,
+              draftComments: [],
               findingStates: { ...(s.findingStates ?? {}), ...Object.fromEntries(posted.filter((i) => findings[i]).map((i) => [findingId(findings[i]), { state: "commented" as const, at: Date.now() }])) },
             }));
             setReviewOpen(false);

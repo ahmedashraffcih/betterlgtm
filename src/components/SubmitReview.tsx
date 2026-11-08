@@ -1,10 +1,11 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Loader, Send, Sparkles, X } from "lucide-react";
+import { ExternalLink, Loader, MessageSquare, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FileData } from "react-diff-view";
 import { anchorLabel, type Analysis, type Finding, type FindingCheck, type FindingState } from "../analysis";
 import { api, errorText, type PrDetails, type ReviewEvent } from "../api";
 import { commentLines } from "../diffUtils";
+import type { DraftComment } from "./DiffView";
 import { SEVERITY } from "../icons";
 
 interface Props {
@@ -22,6 +23,9 @@ interface Props {
   states?: Record<number, FindingState>;
   onClose: () => void;
   onSubmitted: (url: string, postedFindings: number[]) => void;
+  /** Comments written on selected diff lines. */
+  drafts: DraftComment[];
+  onDrafts: (d: DraftComment[]) => void;
   /** Asks Claude for a summary; absent until the PR has a worktree. */
   onDraftSummary?: (event: ReviewEvent, comments: Finding[], notes: string) => Promise<string>;
 }
@@ -106,7 +110,7 @@ export function SubmitReview(p: Props) {
         .join("\n\n---\n\n"),
     [summary, inBody],
   );
-  const empty = event !== "APPROVE" && !body && inline.length === 0;
+  const empty = event !== "APPROVE" && !body && inline.length === 0 && p.drafts.length === 0;
 
   const allChecked = items.length > 0 && chosen.length === items.length;
   const selectAll = useRef<HTMLInputElement>(null);
@@ -125,7 +129,7 @@ export function SubmitReview(p: Props) {
         commitId: p.details.headRefOid,
         event,
         body,
-        comments: inline.map((i) => ({ ...i.where!, body: i.suggest && i.canSuggest ? `${i.text}\n\n\`\`\`suggestion\n${i.finding.suggestion}\n\`\`\`` : i.text })),
+        comments: [...p.drafts.map((d) => ({ path: d.path, line: d.line, ...(d.start_line ? { start_line: d.start_line } : {}), body: d.body })), ...inline.map((i) => ({ ...i.where!, body: i.suggest && i.canSuggest ? `${i.text}\n\n\`\`\`suggestion\n${i.finding.suggestion}\n\`\`\`` : i.text }))],
       });
       p.onSubmitted(url, chosen.map((i) => i.index));
     } catch (e) {
@@ -193,6 +197,22 @@ export function SubmitReview(p: Props) {
             </>
           ) : (
             <p className="muted" style={{ margin: 0 }}>No findings to comment on. You can still leave a summary and a decision.</p>
+          )}
+
+          {p.drafts.length > 0 && (
+            <>
+              <div className="review-head" style={{ marginTop: 8 }}><span>Your comments</span><span className="muted">{p.drafts.length} on lines</span></div>
+              {p.drafts.map((d, i) => (
+                <div key={i} className="review-item on">
+                  <div className="review-item-head">
+                    <MessageSquare size={14} className="tone-accent" />
+                    <span className="mono ellipsis" style={{ flex: 1 }}>{d.path}:{d.start_line ? `${d.start_line}–` : ""}{d.line}</span>
+                    <button type="button" className="tb" aria-label="Remove comment" onClick={() => p.onDrafts(p.drafts.filter((_, j) => j !== i))}><X size={13} /></button>
+                  </div>
+                  <textarea className="set-input" rows={2} value={d.body} aria-label={`Comment on ${d.path}`} onChange={(e) => p.onDrafts(p.drafts.map((x, j) => (j === i ? { ...x, body: e.target.value } : x)))} />
+                </div>
+              ))}
+            </>
           )}
 
           <div className="review-head" style={{ marginTop: 8, alignItems: "center" }}>

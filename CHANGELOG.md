@@ -8,6 +8,10 @@ All notable changes to BetterLGTM are listed here. Versions follow [semantic ver
 - **Self-review** ([#15](https://github.com/drmas/betterlgtm/issues/15)): run the analysis on your own PR before asking for reviews. Claude addresses you as the author, and the verdict reads "Ready to ask for reviews" or "Fix these before asking for reviews".
 - **Write the description** ([#16](https://github.com/drmas/betterlgtm/issues/16)): **Edit with Claude** drafts your PR's description from the diff, following the repository's PR template. Edit and preview it, then save it to GitHub.
 - **Reply to feedback** ([#18](https://github.com/drmas/betterlgtm/issues/18)): reply to a review conversation from the app, with **Draft reply with Claude** reading the code first, and resolve or reopen it.
+- **Syntax highlighting, hidden lines and whitespace** ([#19](https://github.com/drmas/betterlgtm/issues/19)): diffs are highlighted for common languages, with word-level change marks. **Show hidden lines** expands the code between and after hunks, and the whitespace button hides whitespace-only changes.
+- **Files with findings** ([#20](https://github.com/drmas/betterlgtm/issues/20)): the file list shows finding counts and can be filtered to files with findings.
+- **Comment on lines or ask about them** ([#21](https://github.com/drmas/betterlgtm/issues/21)): click a line number (shift-click to extend), then **Ask Claude** about those lines or **Add comment**. Line comments go into Submit review.
+- **Search** ([#22](https://github.com/drmas/betterlgtm/issues/22)): search the diff with regex and case options, in all, added or removed lines or file paths, and search the whole repository with ripgrep to find callers of changed code.
 
 ## [0.3.0] — 2026-11-08
 

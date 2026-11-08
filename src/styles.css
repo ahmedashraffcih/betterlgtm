@@ -463,3 +463,34 @@ button.link { padding: 0; color: var(--accent); text-decoration: underline; font
 .merge-row { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; }
 .merge-row svg { flex-shrink: 0; margin-top: 1px; }
 .thread-reply { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line2); }
+/* Syntax colours for diffs (Prism token classes from refractor). */
+:root { --tk-comment: #6a737d; --tk-keyword: #cf222e; --tk-string: #0a3069; --tk-number: #0550ae; --tk-function: #8250df; --tk-type: #953800; --tk-punct: #57606a; --tk-property: #0550ae; }
+:root[data-theme="dark"] { --tk-comment: #8b949e; --tk-keyword: #ff7b72; --tk-string: #a5d6ff; --tk-number: #79c0ff; --tk-function: #d2a8ff; --tk-type: #ffa657; --tk-punct: #8b949e; --tk-property: #79c0ff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --tk-comment: #8b949e; --tk-keyword: #ff7b72; --tk-string: #a5d6ff; --tk-number: #79c0ff; --tk-function: #d2a8ff; --tk-type: #ffa657; --tk-punct: #8b949e; --tk-property: #79c0ff; } }
+.diff .token.comment, .diff .token.prolog, .diff .token.doctype { color: var(--tk-comment); font-style: italic; }
+.diff .token.keyword, .diff .token.important, .diff .token.atrule, .diff .token.rule { color: var(--tk-keyword); }
+.diff .token.string, .diff .token.char, .diff .token.template-string, .diff .token.regex, .diff .token.attr-value, .diff .token.url { color: var(--tk-string); }
+.diff .token.number, .diff .token.boolean, .diff .token.constant, .diff .token.symbol { color: var(--tk-number); }
+.diff .token.function, .diff .token.function-variable { color: var(--tk-function); }
+.diff .token.class-name, .diff .token.builtin, .diff .token.tag, .diff .token.selector { color: var(--tk-type); }
+.diff .token.property, .diff .token.attr-name, .diff .token.variable { color: var(--tk-property); }
+.diff .token.punctuation, .diff .token.operator { color: var(--tk-punct); }
+.diff .diff-code-edit { background: color-mix(in srgb, currentColor 14%, transparent); border-radius: 2px; }
+.diff-pickable .diff-gutter { cursor: pointer; }
+.diff-pickable .diff-gutter:hover { background: var(--accent-bg); }
+.expand-btn { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; font-size: 12px; color: var(--accent); }
+.expand-btn .muted { margin-left: 8px; }
+.expand-btn:hover { text-decoration: underline; }
+.expand-end { margin: 4px 8px 12px; }
+.diff-search { border-bottom: 1px solid var(--line); background: var(--side); padding: 6px 8px; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; max-height: 45%; }
+.diff-search-row { display: flex; align-items: center; gap: 6px; }
+.diff-results { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; }
+.diff-results-head { font-size: 11px; padding: 2px 4px; }
+.diff-result { display: flex; align-items: center; gap: 8px; padding: 2px 6px; border-radius: 4px; font-size: 12px; text-align: left; }
+.diff-result:hover { background: var(--hover); }
+.dr-kind { width: 12px; text-align: center; font-family: var(--mono); color: var(--muted); flex-shrink: 0; }
+.dr-add { color: var(--ok); }
+.dr-del { color: var(--crit); }
+.dr-path { width: 180px; flex-shrink: 0; color: var(--muted); }
+.pick-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--accent-line); background: var(--accent-bg); flex-shrink: 0; }
+.pick-comment { width: 100%; display: flex; flex-direction: column; gap: 6px; }
