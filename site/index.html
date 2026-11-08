@@ -332,22 +332,22 @@ footer .end { margin-left: auto; }
     <div class="platforms">
       <div class="platform">
         <h3>macOS</h3>
-        <a class="dl" data-asset="mac-arm" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.5/BetterLGTM_0.2.5_aarch64.dmg"><span>Apple silicon</span><span class="meta">.dmg, 3.0 MB</span></a>
-        <a class="dl" data-asset="mac-intel" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.5/BetterLGTM_0.2.5_x64.dmg"><span>Intel</span><span class="meta">.dmg, 3.3 MB</span></a>
+        <a class="dl" data-asset="mac-arm" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.6/BetterLGTM_0.2.6_aarch64.dmg"><span>Apple silicon</span><span class="meta">.dmg, 3.1 MB</span></a>
+        <a class="dl" data-asset="mac-intel" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.6/BetterLGTM_0.2.6_x64.dmg"><span>Intel</span><span class="meta">.dmg, 3.4 MB</span></a>
       </div>
       <div class="platform">
         <h3>Windows</h3>
-        <a class="dl" data-asset="win-exe" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.5/BetterLGTM_0.2.5_x64-setup.exe"><span>Installer</span><span class="meta">.exe, 2.4 MB</span></a>
-        <a class="dl" data-asset="win-msi" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.5/BetterLGTM_0.2.5_x64_en-US.msi"><span>Windows Installer</span><span class="meta">.msi, 3.2 MB</span></a>
+        <a class="dl" data-asset="win-exe" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.6/BetterLGTM_0.2.6_x64-setup.exe"><span>Installer</span><span class="meta">.exe, 2.5 MB</span></a>
+        <a class="dl" data-asset="win-msi" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.6/BetterLGTM_0.2.6_x64_en-US.msi"><span>Windows Installer</span><span class="meta">.msi, 3.4 MB</span></a>
       </div>
       <div class="platform">
         <h3>Linux</h3>
-        <a class="dl" data-asset="appimage" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.5/BetterLGTM_0.2.5_amd64.AppImage"><span>AppImage</span><span class="meta">78 MB</span></a>
-        <a class="dl" data-asset="deb" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.5/BetterLGTM_0.2.5_amd64.deb"><span>Debian, Ubuntu</span><span class="meta">.deb, 3.7 MB</span></a>
-        <a class="dl" data-asset="rpm" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.5/BetterLGTM-0.2.5-1.x86_64.rpm"><span>Fedora</span><span class="meta">.rpm, 3.7 MB</span></a>
+        <a class="dl" data-asset="appimage" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.6/BetterLGTM_0.2.6_amd64.AppImage"><span>AppImage</span><span class="meta">79 MB</span></a>
+        <a class="dl" data-asset="deb" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.6/BetterLGTM_0.2.6_amd64.deb"><span>Debian, Ubuntu</span><span class="meta">.deb, 4.1 MB</span></a>
+        <a class="dl" data-asset="rpm" href="https://github.com/drmas/betterlgtm/releases/download/v0.2.6/BetterLGTM-0.2.6-1.x86_64.rpm"><span>Fedora</span><span class="meta">.rpm, 4.1 MB</span></a>
       </div>
     </div>
-    <p class="fine"><span id="version">Version 0.2.5.</span> The macOS app is signed and notarized by Apple, and the app updates itself from here on. Windows builds aren't signed yet: if SmartScreen warns, choose More info › Run anyway. <a href="https://github.com/drmas/betterlgtm/releases">All releases</a></p>
+    <p class="fine"><span id="version">Version 0.2.6.</span> The macOS app is signed and notarized by Apple, and the app updates itself from here on. Windows builds aren't signed yet: if SmartScreen warns, choose More info › Run anyway. <a href="https://github.com/drmas/betterlgtm/releases">All releases</a></p>
   </div>
 </section>
 </main>
@@ -385,7 +385,7 @@ footer .end { margin-left: auto; }
     document.getElementById("hero-note").textContent = "Version " + version + " " + hero[2];
   }
 
-  setHero("0.2.5");
+  setHero("0.2.6");
   fetch("https://api.github.com/repos/drmas/betterlgtm/releases/latest")
     .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
     .then(function (release) {
