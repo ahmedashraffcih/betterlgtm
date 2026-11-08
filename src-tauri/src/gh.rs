@@ -131,6 +131,22 @@ pub async fn submit_review(
     Ok(out?.trim().to_string())
 }
 
+/// Issues the PR closes (linked with "Fixes #12" or in the sidebar), with their text.
+#[tauri::command]
+pub async fn linked_issues(config: State<'_, ConfigState>, repo: String, number: u64) -> Result<Value, String> {
+    let (owner, name) = repo.split_once('/').ok_or_else(|| format!("Unexpected repository name: {repo}"))?;
+    let query = "query($o: String!, $n: String!, $num: Int!) { repository(owner: $o, name: $n) { pullRequest(number: $num) {
+      closingIssuesReferences(first: 5) { nodes { number title body url repository { nameWithOwner } } } } } }";
+    let out = run(
+        &config.get().gh_path,
+        &["api", "graphql", "-f", &format!("query={query}"), "-f", &format!("o={owner}"), "-f", &format!("n={name}"), "-F", &format!("num={number}")],
+        None,
+    )
+    .await?;
+    let data = parse(&out)?;
+    Ok(data["data"]["repository"]["pullRequest"]["closingIssuesReferences"]["nodes"].clone())
+}
+
 /// The user's login and the organizations they belong to, for the organization settings.
 #[tauri::command]
 pub async fn list_orgs(config: State<'_, ConfigState>) -> Result<Value, String> {

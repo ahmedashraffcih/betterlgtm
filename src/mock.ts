@@ -167,7 +167,7 @@ const analysis = {
   claims: [
     { text: "Accepts an Idempotency-Key header on charge requests.", verdict: "implemented", anchors: [{ path: "src/http/charges.ts", startLine: 39, endLine: 43 }] },
     { text: "Keys are stored in Redis for 24 hours.", verdict: "partial", note: "The TTL is 24 hours, but keys are shared across merchants.", finding: 1, anchors: [{ path: "src/idempotency/store.ts", startLine: 23, endLine: 24 }] },
-    { text: "Safe to retry, even when requests arrive concurrently.", verdict: "contradicted", note: "Two concurrent requests with the same key can both create a charge.", finding: 0, anchors: [] },
+    { text: "Safe to retry, even when requests arrive concurrently.", source: "#311", verdict: "contradicted", note: "Two concurrent requests with the same key can both create a charge.", finding: 0, anchors: [] },
   ],
   findings: [
     { severity: "critical", category: "Correctness", title: "Concurrent retries can double-charge", body: ["`save()` reads and writes the key in two calls", "Two requests arriving together both miss the cache", "Both create a charge"], fix: "Reserve the key with `SET NX` before charging.", confidence: "high", anchors: [{ path: "src/idempotency/store.ts", startLine: 21, endLine: 24 }, { path: "src/http/charges.ts", startLine: 41, endLine: 42 }] },
@@ -188,6 +188,8 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
   switch (cmd) {
     case "list_review_requests":
       return requests;
+    case "linked_issues":
+      return [{ number: 311, title: "Retried charges are billed twice", body: "When a client times out and retries POST /v1/charges, the customer is charged twice.\n\nAcceptance:\n- Retrying with the same Idempotency-Key never creates a second charge\n- Works when two retries arrive at the same time", url: "https://github.com/acme/payments-api/issues/311", repository: { nameWithOwner: "acme/payments-api" } }];
     case "last_review":
       return { commitId: "9f2c41ab", state: "COMMENTED", submittedAt: new Date(Date.now() - 20 * 3600e3).toISOString() };
     case "diff_since":

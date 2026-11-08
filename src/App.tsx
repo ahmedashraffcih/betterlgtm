@@ -4,7 +4,7 @@ import { Check, Code, Download, ExternalLink, History, FileDiff, GitBranch, GitP
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
-import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type PrDetails, type ReviewRequest } from "./api";
+import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest } from "./api";
 import { anchorLabel, findingId, type Finding, type FindingState, buildAnalysisPrompt, buildSummaryPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
 import { AnalysisView, type OutlineKey, type RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
@@ -34,6 +34,7 @@ interface Loaded {
   details: PrDetails;
   bodyHtml: string;
   files: FileData[];
+  issues: LinkedIssue[];
 }
 
 type Pane = "inbox" | "outline" | "content";
@@ -256,8 +257,9 @@ export default function App() {
       api.prDiff(repo, selected.number),
       // The rendered description is a nicety; fall back to the raw Markdown if it fails.
       api.prBodyHtml(repo, selected.number).catch(() => ""),
+      api.linkedIssues(repo, selected.number).catch(() => [] as LinkedIssue[]),
     ])
-      .then(([details, diff, bodyHtml]) => !stale && setLoaded({ key, details, bodyHtml, files: parseDiff(diff, { nearbySequences: "zip" }) }))
+      .then(([details, diff, bodyHtml, issues]) => !stale && setLoaded({ key, details, bodyHtml, issues, files: parseDiff(diff, { nearbySequences: "zip" }) }))
       .catch((e) => !stale && setLoadError(errorText(e)));
     return () => {
       stale = true;
@@ -282,11 +284,12 @@ export default function App() {
     setRun(k, () => ({ running: true, step: "Preparing the worktree…", log: [] }));
     try {
       const wt = await ensureWorktree(k, pr, details);
-      setRun(k, (r) => ({ ...r, step: "Claude is reading the change…", log: [...r.log, `Worktree: ${wt}`] }));
+      const issues = await api.linkedIssues(pr.repository.nameWithOwner, pr.number).catch(() => [] as LinkedIssue[]);
+      setRun(k, (r) => ({ ...r, step: "Claude is reading the change…", log: [...r.log, `Worktree: ${wt}`, ...issues.map((i) => `Linked issue #${i.number}: ${i.title}`)] }));
       let finalText = "";
       let sessionId: string | undefined;
       let usage: ClaudeUsage = {};
-      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"), opts.since), undefined, (e) => {
+      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"), opts.since, issues), undefined, (e) => {
         if (e.session_id) sessionId = e.session_id;
         if (e.type === "assistant") {
           for (const block of e.message?.content ?? []) {
@@ -867,6 +870,9 @@ export default function App() {
           <div className="prhead-meta muted">
             <span className="opt">{selected.repository.nameWithOwner}</span>
             <span className="opt">{details.author.login}</span>
+            {(loaded && loaded.key === key ? loaded.issues : []).map((i) => (
+              <button key={i.number} type="button" className="flink opt" title={i.title} onClick={() => openUrl(i.url)}>Closes #{i.number}</button>
+            ))}
             <span className="ellipsis" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><GitBranch size={13} style={{ flexShrink: 0 }} /><span className="mono ellipsis">{details.headRefName} → {details.baseRefName}</span></span>
             <span style={{ whiteSpace: "nowrap" }}>+{details.additions} −{details.deletions} · {details.changedFiles} files</span>
             <span className={ciFailing ? "tone-crit" : ciPending ? "tone-high" : "tone-ok"} style={{ whiteSpace: "nowrap" }}>{ci.length === 0 ? "No CI" : ciFailing ? "CI failing" : ciPending ? "CI running" : "CI passing"}</span>

@@ -27,6 +27,15 @@ export interface ReviewRequest {
   requestedAt?: string | null;
 }
 
+/** An issue the PR closes. */
+export interface LinkedIssue {
+  number: number;
+  title: string;
+  body: string;
+  url: string;
+  repository: { nameWithOwner: string };
+}
+
 /** Your most recent submitted review on a PR, and the commit it was made on. */
 export interface LastReview {
   commitId: string;
@@ -97,6 +106,7 @@ export const api = {
   lastReview: (repo: string, number: number, login: string) => invoke<LastReview | null>("last_review", { repo, number, login }),
   diffSince: (repo: string, number: number, baseRef: string, since: string) =>
     invoke<{ diff: string; commits: { oid: string; subject: string }[] }>("diff_since", { repo, number, baseRef, since }),
+  linkedIssues: (repo: string, number: number) => invoke<LinkedIssue[]>("linked_issues", { repo, number }),
   listOrgs: () => invoke<{ login: string; orgs: string[] }>("list_orgs"),
   setConfig: (config: { ghPath: string; claudePath: string; dataDir: string; model: string; effort: string }) => invoke<void>("set_config", { config }),
   toolStatus: () =>

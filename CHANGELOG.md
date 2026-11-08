@@ -9,6 +9,7 @@ All notable changes to BetterLGTM are listed here. Versions follow [semantic ver
 - **Suggested changes** ([#8](https://github.com/drmas/betterlgtm/issues/8)): when a fix is a small, certain change to the finding's lines, Claude includes the replacement code. Submit review can post it as a GitHub suggestion the author applies in one click.
 - **Drafted review summary** ([#9](https://github.com/drmas/betterlgtm/issues/9)): **Draft with Claude** in Submit review writes the summary from your decision and the comments you're posting, keeping anything you already wrote. You edit it before posting.
 - **Review guidelines** ([#14](https://github.com/drmas/betterlgtm/issues/14)): the analysis follows a repository's REVIEW.md or the review section of CONTRIBUTING.md and says which files it used. Settings › Claude adds instructions for a single repository on top of your global ones.
+- **Linked issues** ([#11](https://github.com/drmas/betterlgtm/issues/11)): the analysis also checks the PR against the issues it closes, turning their requirements into claims marked with the issue number. The PR header links each issue it closes.
 
 ## [0.2.6] — 2026-11-08
 

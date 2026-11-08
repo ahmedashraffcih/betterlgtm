@@ -436,11 +436,12 @@ function Detail(p: Props & { analysis: Analysis }) {
       <>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span className={`sev ${v.tone}`}><v.icon size={16} />{v.label}</span>
+          {c.source && <span className="tag">From issue {c.source}</span>}
           <span style={{ flex: 1 }} />
           <span className="muted" style={{ fontSize: 12 }}>Claim {idx + 1} of {a.claims.length}</span>
         </div>
         <div>
-          <span className="section-title">The description says</span>
+          <span className="section-title">{c.source ? `Issue ${c.source} asks for` : "The description says"}</span>
           <blockquote style={{ margin: "6px 0 0", padding: "6px 12px", borderLeft: "3px solid var(--line)", fontSize: 16, lineHeight: 1.5 }}>{c.text}</blockquote>
         </div>
         {c.note && (

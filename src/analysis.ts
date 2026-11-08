@@ -1,4 +1,4 @@
-import type { PrDetails } from "./api";
+import type { LinkedIssue, PrDetails } from "./api";
 
 export type Verdict = "implemented" | "partial" | "contradicted" | "missing";
 export type Severity = "critical" | "high" | "medium" | "low";
@@ -16,6 +16,8 @@ export interface Claim {
   anchors: Anchor[];
   /** Index into `findings` when the problem is explained by a finding. */
   finding?: number;
+  /** Where the claim comes from when it isn't the description, such as "#311". */
+  source?: string;
 }
 
 export interface Finding {
@@ -74,12 +76,16 @@ Reply with only one JSON block: \`\`\`json { ${WALKTHROUGH_SHAPE} } \`\`\``;
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 /** With `since`, a re-review: focus on what changed after the commit the reviewer last reviewed. */
-export function buildAnalysisPrompt(pr: PrDetails, extraInstructions = "", since?: string): string {
+export function buildAnalysisPrompt(pr: PrDetails, extraInstructions = "", since?: string, issues: LinkedIssue[] = []): string {
   const extra = extraInstructions.trim() ? `\n\nThe reviewer's own instructions (follow them):\n${extraInstructions.trim()}` : "";
   const focus = since
     ? `\n\nThis is a re-review. The reviewer last reviewed commit ${since}. Focus on what changed since then: git diff ${since} HEAD (and git log ${since}..HEAD). Use the full PR diff only for context. Report findings only for code changed since ${since}, and check description claims only where the new commits affect them. Mention in the summary that this covers the changes since the last review.`
     : "";
-  return baseAnalysisPrompt(pr) + focus + extra;
+  const linked = issues.length
+    ? `\n\nThe PR says it closes these issues. Turn their concrete requirements into claims as well, check them the same way, and set "source" to the issue number (for example "#${issues[0].number}"):\n` +
+      issues.map((i) => `<issue number="${i.number}" title="${i.title.replace(/"/g, "'")}">\n${(i.body ?? "").trim().slice(0, 2000) || "(no description)"}\n</issue>`).join("\n")
+    : "";
+  return baseAnalysisPrompt(pr) + linked + focus + extra;
 }
 
 function baseAnalysisPrompt(pr: PrDetails): string {
@@ -123,7 +129,7 @@ When you are done, reply with only one JSON block in this shape:
   "summary": ["...", "..."],
   "guidelines": ["REVIEW.md"],
   "recommendation": { "decision": "approve|comment|request_changes", "reason": "..." },
-  "claims": [{ "text": "...", "verdict": "implemented|partial|contradicted|missing", "note": "...", "finding": 0,
+  "claims": [{ "text": "...", "verdict": "implemented|partial|contradicted|missing", "note": "...", "finding": 0, "source": "#12 (only for claims from an issue)",
                "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
   "findings": [{ "severity": "critical|high|medium|low", "category": "Correctness|Security|Behavior change|Tests|Data handling|Performance|Maintainability",
                  "title": "...", "body": ["...", "..."], "fix": "...", "suggestion": "replacement lines", "confidence": "high|medium|low", "notInDescription": false,
@@ -194,6 +200,7 @@ export function parseAnalysis(text: string): Analysis | null {
         claims: asArray<Claim>(data.claims).map((c) => ({
           ...c,
           note: c.note ? asText(c.note) : undefined,
+          source: typeof c.source === "string" && /^#?\d+/.test(c.source) ? `#${c.source.replace(/^#/, "").match(/^\d+/)![0]}` : undefined,
           anchors: asArray<Anchor>(c.anchors),
           finding: typeof c.finding === "number" ? remap.get(c.finding) : undefined,
         })),
