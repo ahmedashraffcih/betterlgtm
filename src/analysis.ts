@@ -258,3 +258,15 @@ export function parseRecheck(text: string): Record<number, FindingCheck> | null 
   }
   return null;
 }
+
+export type FindingStateKind = "dismissed" | "resolved" | "commented";
+
+/** What the reviewer did with a finding. Kept per PR and matched to findings across re-runs. */
+export interface FindingState {
+  state: FindingStateKind;
+  reason?: string;
+  at: number;
+}
+
+/** Identifies a finding across analysis runs: its first file and its title. */
+export const findingId = (f: Finding) => `${f.anchors[0]?.path ?? ""}|${f.title.trim().toLowerCase()}`;

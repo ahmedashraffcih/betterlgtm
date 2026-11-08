@@ -5,6 +5,7 @@ All notable changes to BetterLGTM are listed here. Versions follow [semantic ver
 ## Unreleased
 
 - **Auto-analyze** ([#6](https://github.com/drmas/betterlgtm/issues/6)): optionally analyze new review requests in the background, so results are ready when you open the PR. Off by default since it uses tokens; turn it on in Settings › Claude. Covers requests that arrive after you turn it on, skips drafts unless you include them, runs 1–3 at a time, shows Queued in the inbox, and notifies you when each analysis is ready.
+- **Finding states** ([#7](https://github.com/drmas/betterlgtm/issues/7)): resolve a finding, or dismiss it with a reason; reopen either later. Posted findings are marked Commented. States are kept across re-runs, dismissed findings fold away, and Submit review leaves handled findings unchecked.
 
 ## [0.2.6] — 2026-11-08
 

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type PrDetails, type ReviewRequest } from "./api";
-import { anchorLabel, buildAnalysisPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
+import { anchorLabel, findingId, type FindingState, buildAnalysisPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
 import { AnalysisView, type OutlineKey, type RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import { DiffView, type DiffMode } from "./components/DiffView";
@@ -560,6 +560,25 @@ export default function App() {
   const analysisOutdated = !!(details && analysis?.findings.length && analysisHead && analysisHead !== details.headRefOid);
   const checks = session?.findingChecks && details && session.findingChecks.head === details.headRefOid ? session.findingChecks : undefined;
   const recheck = key ? recheckRuns[key] : undefined;
+  /** Finding states for the current analysis, by finding index. */
+  const findingStates = useMemo(() => {
+    const out: Record<number, FindingState> = {};
+    analysis?.findings.forEach((f, i) => {
+      const st = session?.findingStates?.[findingId(f)];
+      if (st) out[i] = st;
+    });
+    return out;
+  }, [analysis, session?.findingStates]);
+  const setFindingState = (i: number, st: FindingState | null) => {
+    const f = analysis?.findings[i];
+    if (!key || !f) return;
+    update(key, (s) => {
+      const all = { ...(s.findingStates ?? {}) };
+      if (st) all[findingId(f)] = st;
+      else delete all[findingId(f)];
+      return { ...s, findingStates: all, inReview: st && st.state !== "commented" ? s.inReview.filter((x) => x !== i) : s.inReview };
+    });
+  };
 
   // Your last review of the selected PR, to offer "since your review" when new commits arrived.
   const login = orgs?.login;
@@ -890,6 +909,8 @@ export default function App() {
             selected={outlineKey}
             inReview={session?.inReview ?? []}
             checks={checks?.results}
+            states={findingStates}
+            onState={setFindingState}
             onSelect={(k) => { setOutlineKey(k); setFocusPane("outline"); }}
             onOpenAnchor={openAnchor}
             onStart={() => startAnalysis()}
@@ -1078,8 +1099,14 @@ export default function App() {
           inReview={session?.inReview ?? []}
           ownPr={!!orgs?.login && details.author.login === orgs.login}
           checks={checks?.results}
+          states={findingStates}
           onClose={() => setReviewOpen(false)}
-          onSubmitted={(url) => {
+          onSubmitted={(url, posted) => {
+            const findings = analysis?.findings ?? [];
+            update(key, (s) => ({
+              ...s,
+              findingStates: { ...(s.findingStates ?? {}), ...Object.fromEntries(posted.filter((i) => findings[i]).map((i) => [findingId(findings[i]), { state: "commented" as const, at: Date.now() }])) },
+            }));
             setReviewOpen(false);
             // Show the new review state, and drop the PR from "To review" if the request is done.
             const repo = selected.repository.nameWithOwner;

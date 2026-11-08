@@ -2,7 +2,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, Send, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FileData } from "react-diff-view";
-import { anchorLabel, type Analysis, type Finding, type FindingCheck } from "../analysis";
+import { anchorLabel, type Analysis, type Finding, type FindingCheck, type FindingState } from "../analysis";
 import { api, errorText, type PrDetails, type ReviewEvent } from "../api";
 import { commentLines } from "../diffUtils";
 import { SEVERITY } from "../icons";
@@ -18,8 +18,10 @@ interface Props {
   ownPr: boolean;
   /** Re-check results after new commits; fixed findings start unchecked. */
   checks?: Record<number, FindingCheck>;
+  /** Dismissed, resolved or already-commented findings start unchecked. */
+  states?: Record<number, FindingState>;
   onClose: () => void;
-  onSubmitted: (url: string) => void;
+  onSubmitted: (url: string, postedFindings: number[]) => void;
 }
 
 interface Item {
@@ -47,7 +49,7 @@ export function SubmitReview(p: Props) {
     findings.map((finding, index) => ({
       index,
       finding,
-      checked: p.checks?.[index]?.status !== "fixed" && (p.inReview.length ? p.inReview.includes(index) : finding.severity === "critical" || finding.severity === "high"),
+      checked: p.checks?.[index]?.status !== "fixed" && !p.states?.[index] && (p.inReview.length ? p.inReview.includes(index) : finding.severity === "critical" || finding.severity === "high"),
       text: commentText(finding),
       where: finding.anchors.map((a) => commentLines(p.files, a)).find(Boolean) ?? null,
     })),
@@ -95,7 +97,7 @@ export function SubmitReview(p: Props) {
         body,
         comments: inline.map((i) => ({ ...i.where!, body: i.text })),
       });
-      p.onSubmitted(url);
+      p.onSubmitted(url, chosen.map((i) => i.index));
     } catch (e) {
       setError(errorText(e));
       setSending(false);
@@ -137,6 +139,7 @@ export function SubmitReview(p: Props) {
                       <Icon size={14} className={sev.tone} aria-label={sev.label} />
                       <span className="ellipsis" style={{ flex: 1 }}>{i.finding.title}</span>
                       {p.checks?.[i.index]?.status === "fixed" && <span className="check-badge check-ok" title={p.checks[i.index].note}>Fixed</span>}
+                      {p.states?.[i.index] && <span className={`check-badge state-${p.states[i.index].state}`} title={p.states[i.index].reason}>{{ dismissed: "Dismissed", resolved: "Resolved", commented: "Commented" }[p.states[i.index].state]}</span>}
                       <span className="muted review-where">
                         {i.where ? `${i.where.path.split("/").pop()}:${i.where.start_line ? `${i.where.start_line}–` : ""}${i.where.line}` : "Not on a changed line"}
                       </span>

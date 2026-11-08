@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { Analysis, FindingChecks } from "./analysis";
+import type { Analysis, FindingChecks, FindingState } from "./analysis";
 
 export interface ChatItem {
   role: "user" | "assistant" | "tool" | "error";
@@ -21,6 +21,8 @@ export interface PrSession {
   analysisHead?: string;
   /** Findings re-checked after new commits. */
   findingChecks?: FindingChecks;
+  /** Dismissed, resolved or commented findings, keyed by `findingId`. */
+  findingStates?: Record<string, FindingState>;
   headOid?: string;
   chat: ChatItem[];
   tokens?: number;

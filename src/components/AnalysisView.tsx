@@ -1,12 +1,12 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ArrowLeft, ChevronDown, ChevronRight, ChevronUp, CircleCheck, ExternalLink, FileDiff, FileText, FileX, Flag, Funnel,
-  LayoutDashboard, Loader, MessageSquare, MessageSquarePlus, OctagonExclamationPoint, Play, RefreshCw, Wrench,
+  BadgeCheck, CircleSlash, LayoutDashboard, Loader, MessageSquare, MessageSquarePlus, OctagonExclamationPoint, Play, RefreshCw, RotateCcw, Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
 import type { FileData } from "react-diff-view";
-import { anchorLabel, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck } from "../analysis";
+import { anchorLabel, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck, type FindingState } from "../analysis";
 import type { PrDetails } from "../api";
 import { categoryIcon, SEVERITY, VERDICT } from "../icons";
 import { changesInRange, findFile, lineNumbers } from "../diffUtils";
@@ -35,6 +35,9 @@ interface Props {
   inReview: number[];
   /** Re-check results after new commits, by finding index. */
   checks?: Record<number, FindingCheck>;
+  /** Dismissed, resolved or commented findings, by index. */
+  states?: Record<number, FindingState>;
+  onState: (finding: number, state: FindingState | null) => void;
   onSelect: (k: OutlineKey) => void;
   onOpenAnchor: (a: Anchor, finding: number | null) => void;
   onStart: () => void;
@@ -57,6 +60,54 @@ function CheckBadge({ check }: { check?: FindingCheck }) {
   return <span className={`check-badge check-${c.tone}`} title={check.note}>{c.label}</span>;
 }
 
+const STATE_LABEL: Record<FindingState["state"], string> = { dismissed: "Dismissed", resolved: "Resolved", commented: "Commented" };
+const DISMISS_REASONS = ["Not a problem", "Won't fix", "Handled elsewhere"];
+
+function StateBadge({ state }: { state?: FindingState }) {
+  if (!state) return null;
+  return <span className={`check-badge state-${state.state}`} title={state.reason}>{STATE_LABEL[state.state]}</span>;
+}
+
+/** Resolve, dismiss with a reason, or restore a finding. */
+function FindingActions({ state, onState }: { state?: FindingState; onState: (s: FindingState | null) => void }) {
+  const [choosing, setChoosing] = useState(false);
+  const [other, setOther] = useState("");
+  const dismiss = (reason: string) => {
+    onState({ state: "dismissed", reason, at: Date.now() });
+    setChoosing(false);
+    setOther("");
+  };
+  if (state?.state === "dismissed" || state?.state === "resolved") {
+    return (
+      <div className={`check-note state-note-${state.state}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ flex: 1 }}><strong>{STATE_LABEL[state.state]}</strong>{state.reason ? `: ${state.reason}` : ""}</span>
+        <button type="button" className="btn sm" onClick={() => onState(null)}><RotateCcw size={13} />Reopen</button>
+      </div>
+    );
+  }
+  if (choosing) {
+    return (
+      <div className="dismiss-box" role="group" aria-label="Why dismiss this finding?">
+        <span className="muted" style={{ fontSize: 12 }}>Why dismiss it?</span>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {DISMISS_REASONS.map((r) => <button key={r} type="button" className="btn sm" onClick={() => dismiss(r)}>{r}</button>)}
+        </div>
+        <form style={{ display: "flex", gap: 6 }} onSubmit={(e) => { e.preventDefault(); if (other.trim()) dismiss(other.trim()); }}>
+          <input className="set-input" style={{ flex: 1, minWidth: 0 }} placeholder="Another reason" aria-label="Another reason" value={other} onChange={(e) => setOther(e.target.value)} />
+          <button type="submit" className="btn sm" disabled={!other.trim()}>Dismiss</button>
+          <button type="button" className="btn sm" onClick={() => setChoosing(false)}>Cancel</button>
+        </form>
+      </div>
+    );
+  }
+  return (
+    <>
+      <button type="button" className="btn" data-key="resolve" onClick={() => onState({ state: "resolved", at: Date.now() })}><BadgeCheck size={14} />Resolve</button>
+      <button type="button" className="btn" data-key="dismiss" onClick={() => setChoosing(true)}><CircleSlash size={14} />Dismiss…</button>
+    </>
+  );
+}
+
 function ago(ts?: number) {
   if (!ts) return "";
   const m = Math.round((Date.now() - ts) / 60000);
@@ -66,6 +117,7 @@ function ago(ts?: number) {
 export function AnalysisView(p: Props) {
   const [showVerified, setShowVerified] = useState(false);
   const [showMinor, setShowMinor] = useState(false);
+  const [showDismissed, setShowDismissed] = useState(false);
   // In narrow panes the list and the detail take turns instead of sitting side by side.
   const [rootRef, width] = useElementWidth<HTMLDivElement>();
   const [showDetail, setShowDetail] = useState(false);
@@ -83,16 +135,19 @@ export function AnalysisView(p: Props) {
 
   const problems = a.claims.map((c, i) => ({ c, i })).filter(({ c }) => c.verdict !== "implemented");
   const verified = a.claims.map((c, i) => ({ c, i })).filter(({ c }) => c.verdict === "implemented");
-  const major = a.findings.map((f, i) => ({ f, i })).filter(({ f }) => f.severity === "critical" || f.severity === "high");
-  const minor = a.findings.map((f, i) => ({ f, i })).filter(({ f }) => f.severity === "medium" || f.severity === "low");
-  const crit = a.findings.filter((f) => f.severity === "critical").length;
-  const high = a.findings.filter((f) => f.severity === "high").length;
+  const isDismissed = (i: number) => p.states?.[i]?.state === "dismissed";
+  const live = a.findings.map((f, i) => ({ f, i })).filter(({ i }) => !isDismissed(i));
+  const dismissed = a.findings.map((f, i) => ({ f, i })).filter(({ i }) => isDismissed(i));
+  const major = live.filter(({ f }) => f.severity === "critical" || f.severity === "high");
+  const minor = live.filter(({ f }) => f.severity === "medium" || f.severity === "low");
+  const crit = live.filter(({ f }) => f.severity === "critical").length;
+  const high = live.filter(({ f }) => f.severity === "high").length;
 
-  const Row = ({ k, sub, Icon, tone, text, meta, check }: { k: OutlineKey; sub?: boolean; Icon: LucideIcon; tone: string; text: string; meta?: string; check?: FindingCheck }) => (
-    <button type="button" data-nav className={["row", sub && "sub", p.selected === k && "sel", check?.status === "fixed" && "fixed"].filter(Boolean).join(" ")} onClick={() => select(k)} title={text}>
+  const Row = ({ k, sub, Icon, tone, text, meta, check, state }: { k: OutlineKey; sub?: boolean; Icon: LucideIcon; tone: string; text: string; meta?: string; check?: FindingCheck; state?: FindingState }) => (
+    <button type="button" data-nav className={["row", sub && "sub", p.selected === k && "sel", (check?.status === "fixed" || state?.state === "resolved" || state?.state === "dismissed") && "fixed"].filter(Boolean).join(" ")} onClick={() => select(k)} title={text}>
       <Icon size={14} className={tone} />
       <span className="ellipsis" style={{ flex: 1 }}>{text}</span>
-      <CheckBadge check={check} />
+      {state ? <StateBadge state={state} /> : <CheckBadge check={check} />}
       {meta && <span className="rm">{meta}</span>}
     </button>
   );
@@ -135,12 +190,16 @@ export function AnalysisView(p: Props) {
 
         <Group title="Findings" meta={crit || high ? [crit && `${crit} critical`, high && `${high} high`].filter(Boolean).join(" · ") : `${a.findings.length}`} />
         {major.map(({ f, i }) => (
-          <Row key={i} k={`f${i}`} Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} check={p.checks?.[i]} />
+          <Row key={i} k={`f${i}`} Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} check={p.checks?.[i]} state={p.states?.[i]} />
         ))}
         {minor.length > 0 && (
           <Toggle open={showMinor} text={minor.length === 1 ? "1 medium or low finding" : `${minor.length} medium and low findings`} onClick={() => setShowMinor(!showMinor)} />
         )}
-        {showMinor && minor.map(({ f, i }) => <Row key={i} k={`f${i}`} sub Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} check={p.checks?.[i]} />)}
+        {showMinor && minor.map(({ f, i }) => <Row key={i} k={`f${i}`} sub Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} check={p.checks?.[i]} state={p.states?.[i]} />)}
+        {dismissed.length > 0 && (
+          <Toggle open={showDismissed} text={dismissed.length === 1 ? "1 dismissed finding" : `${dismissed.length} dismissed findings`} onClick={() => setShowDismissed(!showDismissed)} />
+        )}
+        {showDismissed && dismissed.map(({ f, i }) => <Row key={i} k={`f${i}`} sub Icon={SEVERITY[f.severity].icon} tone="tone-muted" text={f.title} meta={String(i + 1)} state={p.states?.[i]} />)}
         {a.findings.length === 0 && <p className="muted" style={{ margin: "2px 10px", fontSize: 12 }}>No findings.</p>}
       </nav>
     </div>
@@ -209,7 +268,9 @@ const DECISION: Record<Decision, { label: string; cls: string; icon: LucideIcon;
 function Overview(p: Props & { analysis: Analysis }) {
   const a = p.analysis;
   const problems = a.claims.map((c, i) => ({ c, i })).filter(({ c }) => c.verdict !== "implemented");
-  const major = a.findings.map((f, i) => ({ f, i })).filter(({ f }) => f.severity === "critical" || f.severity === "high");
+  const major = a.findings
+    .map((f, i) => ({ f, i }))
+    .filter(({ f, i }) => (f.severity === "critical" || f.severity === "high") && p.states?.[i]?.state !== "dismissed" && p.states?.[i]?.state !== "resolved");
   const count = (s: string) => a.findings.filter((f) => f.severity === s).length;
   const derived: Decision = major.length || problems.some(({ c }) => c.verdict !== "partial") ? "request_changes" : a.findings.length || problems.length ? "comment" : "approve";
   const decision = DECISION[a.recommendation?.decision ?? derived];
@@ -320,6 +381,7 @@ function Detail(p: Props & { analysis: Analysis }) {
           </span>
           {f.notInDescription && <span className="tag"><FileX size={12} />Not in description</span>}
           <CheckBadge check={p.checks?.[idx]} />
+          <StateBadge state={p.states?.[idx]} />
           <span style={{ flex: 1 }} />
           <span className="muted" style={{ fontSize: 12 }}>Finding {idx + 1} of {a.findings.length}</span>
           <button type="button" className="tb" aria-label="Previous finding (K)" onClick={() => go(-1)}><ChevronUp size={16} /></button>
@@ -350,12 +412,14 @@ function Detail(p: Props & { analysis: Analysis }) {
             ))}
           </div>
         )}
-        <div style={{ display: "flex", gap: 8, paddingTop: 8, borderTop: "1px solid var(--line2)" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingTop: 8, borderTop: "1px solid var(--line2)" }}>
           <button type="button" data-key="add-review" className={inReview ? "btn in-review" : "btn"} aria-pressed={inReview} onClick={() => p.onToggleReview(idx)}>
             {inReview ? <CircleCheck size={14} /> : <MessageSquarePlus size={14} />}{inReview ? "In review" : "Add to review"}
           </button>
           <button type="button" className="btn" onClick={() => p.onAsk(`About finding ${idx + 1} ("${f.title}"): `)}><MessageSquare size={14} />Ask Claude</button>
+          {p.states?.[idx]?.state !== "dismissed" && p.states?.[idx]?.state !== "resolved" && <FindingActions state={p.states?.[idx]} onState={(st) => p.onState(idx, st)} />}
         </div>
+        {(p.states?.[idx]?.state === "dismissed" || p.states?.[idx]?.state === "resolved") && <FindingActions state={p.states?.[idx]} onState={(st) => p.onState(idx, st)} />}
       </>
     );
   }
