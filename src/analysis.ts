@@ -49,6 +49,8 @@ export interface Analysis {
   findings: Finding[];
   /** Guided review steps. Missing in analyses from older versions; can be generated separately. */
   walkthrough?: WalkStep[];
+  /** Repository guideline files Claude followed, such as REVIEW.md. */
+  guidelines?: string[];
 }
 
 const WALKTHROUGH_RULES = `Group the changes into review steps for a guided review:
@@ -91,6 +93,8 @@ ${pr.body?.trim() || "(empty)"}
 </description>
 
 Do this, using only read-only commands:
+0. Look for review guidelines in the repository: REVIEW.md, .github/REVIEW.md, docs/REVIEW.md, CODE_REVIEW.md, and any
+   review section in CONTRIBUTING.md. If there are any, follow them, and list the files you used in "guidelines".
 1. Split the description into concrete claims. For each, check the code and give a verdict:
    implemented, partial, contradicted (the code does the opposite or breaks the claim), or missing (not in the PR).
 2. Find the most important things a reviewer should look at: bugs, security problems, behavior changes,
@@ -117,6 +121,7 @@ When you are done, reply with only one JSON block in this shape:
 \`\`\`json
 {
   "summary": ["...", "..."],
+  "guidelines": ["REVIEW.md"],
   "recommendation": { "decision": "approve|comment|request_changes", "reason": "..." },
   "claims": [{ "text": "...", "verdict": "implemented|partial|contradicted|missing", "note": "...", "finding": 0,
                "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
@@ -182,6 +187,7 @@ export function parseAnalysis(text: string): Analysis | null {
       const rec = data.recommendation;
       return {
         summary: asText(data.summary) || undefined,
+        guidelines: asArray<string>(data.guidelines).filter((g) => typeof g === "string" && g.trim()),
         recommendation:
           rec && ["approve", "comment", "request_changes"].includes(rec.decision) ? { decision: rec.decision, reason: String(rec.reason ?? "") } : undefined,
         findings: order.map((i) => findings[i]),

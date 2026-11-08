@@ -289,6 +289,9 @@ function Overview(p: Props & { analysis: Analysis }) {
       <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <h2 className="section-title">In short</h2>
         {a.summary ? <Markdown text={a.summary} /> : <p className="muted" style={{ margin: 0 }}>Re-run the analysis to get a plain-language summary.</p>}
+        {a.guidelines && a.guidelines.length > 0 && (
+          <p className="muted" style={{ margin: "6px 0 0", fontSize: 12 }}>Followed the repository's review guidelines: {a.guidelines.join(", ")}</p>
+        )}
       </section>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

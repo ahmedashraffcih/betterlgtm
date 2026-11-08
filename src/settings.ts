@@ -30,6 +30,8 @@ export interface Settings {
   model: string;
   effort: string;
   reviewInstructions: string;
+  /** Extra instructions for one repository (owner/name), added after the global ones. */
+  repoInstructions: Record<string, string>;
   /** Analyze new review requests in the background. */
   autoAnalyze: boolean;
   /** When auto-analyze was turned on; only requests after this are analyzed automatically. */
@@ -62,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: "",
   effort: "",
   reviewInstructions: "",
+  repoInstructions: {},
   autoAnalyze: false,
   autoAnalyzeDrafts: false,
   autoAnalyzeLimit: 1,

@@ -282,11 +282,47 @@ export function Settings(p: Props) {
               <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
                 <span className="muted" style={{ fontSize: 12 }}>Added to every analysis. For example: what your team cares about, or what to ignore.</span>
                 <ReviewInstructions value={s.reviewInstructions} onSave={(v) => p.update({ reviewInstructions: v })} />
+                <span className="muted" style={{ fontSize: 12 }}>Claude also follows a repository's own REVIEW.md or review section in CONTRIBUTING.md.</span>
               </div>
             </div>
+            <RepoInstructions {...p} />
           </>
         )}
         {p.section === "tools" && <Tools {...p} />}
+      </div>
+    </div>
+  );
+}
+
+/** Instructions that only apply to one repository's analyses. */
+function RepoInstructions(p: Props) {
+  const s = p.settings;
+  const known = [...new Set([...(p.requests ?? []).map((r) => r.repository.nameWithOwner), ...Object.keys(s.repoInstructions)])].sort();
+  const [repo, setRepo] = useState(known[0] ?? "");
+  const save = (v: string) => {
+    const all = { ...s.repoInstructions };
+    if (v.trim()) all[repo] = v;
+    else delete all[repo];
+    p.update({ repoInstructions: all });
+  };
+  return (
+    <div className="set-group">
+      <div className="set-title" style={{ display: "flex", alignItems: "center", gap: 6 }}><Cpu size={13} />Instructions for one repository</div>
+      <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <span className="muted" style={{ fontSize: 12 }}>Added after the instructions above, only for this repository.</span>
+        <input
+          className="set-input"
+          list="repo-instruction-repos"
+          placeholder="owner/repository"
+          aria-label="Repository"
+          value={repo}
+          onChange={(e) => setRepo(e.target.value.trim())}
+        />
+        <datalist id="repo-instruction-repos">{known.map((r) => <option key={r} value={r} />)}</datalist>
+        {repo.includes("/") && <ReviewInstructions value={s.repoInstructions[repo] ?? ""} onSave={save} />}
+        {Object.keys(s.repoInstructions).length > 0 && (
+          <span className="muted" style={{ fontSize: 12 }}>Repositories with instructions: {Object.keys(s.repoInstructions).sort().join(", ")}</span>
+        )}
       </div>
     </div>
   );

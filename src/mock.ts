@@ -161,6 +161,7 @@ const bodyHtml = `<h2 dir="auto">Summary</h2>
 <div class="highlight highlight-source-shell"><pre class="notranslate">npm <span class="pl-c1">test</span> -- charges.idempotency</pre></div>`;
 
 const analysis = {
+  guidelines: ["CONTRIBUTING.md"],
   summary: ["Adds `Idempotency-Key` support to `POST /v1/charges`", "Caches the first response in Redis for 24 h", "Repeats with the same key get the cached response"],
   recommendation: { decision: "request_changes", reason: "Concurrent retries can still double-charge." },
   claims: [

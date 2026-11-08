@@ -286,7 +286,7 @@ export default function App() {
       let finalText = "";
       let sessionId: string | undefined;
       let usage: ClaudeUsage = {};
-      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, settings.reviewInstructions, opts.since), undefined, (e) => {
+      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"), opts.since), undefined, (e) => {
         if (e.session_id) sessionId = e.session_id;
         if (e.type === "assistant") {
           for (const block of e.message?.content ?? []) {
