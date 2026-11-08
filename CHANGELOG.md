@@ -2,7 +2,7 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## [0.2.6] — 2026-11-08
 
 - **Vim-style keys**: move between the inbox, the list and the content with h/l, through items with j/k, jump with gg/G, step through findings with n/N and files or sections with ]/[, mark reviewed with x, add a finding to the review with a, and submit with S. Esc leaves a text field. Press ? for the full list; turn them off in Settings › General. j/k now move within the focused pane; n/N step through findings.
 - **Re-check findings** ([#3](https://github.com/drmas/betterlgtm/issues/3)): when a PR has new commits since the analysis, Claude checks each finding and marks it fixed, still open, partly fixed or unclear, with a short note. Fixed findings start unchecked in Submit review.
@@ -56,6 +56,7 @@ The first release.
 - Menu bar, command palette, keyboard shortcuts, light and dark themes, and a Settings page.
 - Installers for macOS (Apple silicon and Intel), Windows and Linux.
 
+[0.2.6]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.6
 [0.2.5]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.5
 [0.2.4]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.4
 [0.2.3]: https://github.com/drmas/betterlgtm/releases/tag/v0.2.3
