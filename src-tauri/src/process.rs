@@ -77,6 +77,11 @@ fn shell_path() -> Option<String> {
     };
     let mut cmd = std::process::Command::new(&shell);
     cmd.args(["-i", "-l", "-c", &script]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+    // From the home folder, so project-specific shell setup (mise, direnv, …) in whatever folder
+    // the app was started from doesn't change or break the result.
+    if let Some(home) = home_dir() {
+        cmd.current_dir(home);
+    }
     for (key, value) in env_fixes() {
         match value {
             Some(v) => cmd.env(key, v),
@@ -100,6 +105,10 @@ fn shell_path() -> Option<String> {
     out.split(MARK).nth(1).filter(|p| !p.is_empty()).map(str::to_string)
 }
 
+fn home_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").filter(|h| !h.is_empty()).map(Into::into)
+}
+
 /// A command for an external tool (`git`, `gh`, `claude`), with a usable PATH and environment.
 pub fn command(program: &str) -> Command {
     let mut cmd = Command::new(program);
@@ -118,7 +127,9 @@ pub fn command(program: &str) -> Command {
 pub async fn run(program: &str, args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
     let mut cmd = command(program);
     cmd.args(args);
-    if let Some(dir) = cwd {
+    // Commands that don't need a folder run from home, not from wherever the app was started,
+    // so version-manager shims don't pick up an unrelated project's config.
+    if let Some(dir) = cwd.map(Path::to_path_buf).or_else(home_dir) {
         cmd.current_dir(dir);
     }
     let out = cmd
