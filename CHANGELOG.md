@@ -2,6 +2,10 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+- **Re-check findings** ([#3](https://github.com/drmas/betterlgtm/issues/3)): when a PR has new commits since the analysis, Claude checks each finding and marks it fixed, still open, partly fixed or unclear, with a short note. Fixed findings start unchecked in Submit review.
+
 ## [0.2.5] — 2026-11-08
 
 - **Since your last review** ([#2](https://github.com/drmas/betterlgtm/issues/2)): when commits land after your last review, a bar shows how many and when you reviewed. Switch the diff to just those changes, or analyze only them.

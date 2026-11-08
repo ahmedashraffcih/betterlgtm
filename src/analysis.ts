@@ -198,3 +198,63 @@ export function anchorLabel(a: Anchor): string {
   const file = a.path.split("/").pop() ?? a.path;
   return a.startLine === a.endLine ? `${file}:${a.startLine}` : `${file}:${a.startLine}–${a.endLine}`;
 }
+
+export type CheckStatus = "fixed" | "open" | "changed" | "unclear";
+
+export interface FindingCheck {
+  status: CheckStatus;
+  note: string;
+}
+
+/** The result of re-checking a PR's findings after new commits. */
+export interface FindingChecks {
+  /** The commit the findings were made on, and the one they were re-checked at. */
+  from: string;
+  head: string;
+  at: number;
+  results: Record<number, FindingCheck>;
+}
+
+/** Asks Claude which of the earlier findings the new commits fixed. */
+export function buildRecheckPrompt(findings: Finding[], from: string): string {
+  const list = findings
+    .map((f, i) => {
+      const where = f.anchors.map(anchorLabel).join(", ") || "no location";
+      return `[${i}] (${f.severity}) ${f.title} — ${where}\n${f.body}`;
+    })
+    .join("\n\n");
+  return `The pull request has new commits since your analysis, which looked at commit ${from}. The current directory is now checked out at the latest head.
+See what changed with: git diff ${from} HEAD
+
+Re-check each finding below against the current code:
+
+${list}
+
+Statuses:
+- fixed: the problem is gone.
+- open: still present as described.
+- changed: the code changed but the problem is only partly addressed, or it moved.
+- unclear: you can't tell from the code.
+
+Reply with only this JSON, one entry per finding, and a note of one short sentence saying why:
+{"results": [{"index": 0, "status": "fixed", "note": "..."}]}`;
+}
+
+export function parseRecheck(text: string): Record<number, FindingCheck> | null {
+  const statuses: CheckStatus[] = ["fixed", "open", "changed", "unclear"];
+  for (const raw of jsonCandidates(text)) {
+    try {
+      const data = JSON.parse(raw.trim());
+      const results: Record<number, FindingCheck> = {};
+      for (const r of asArray<{ index: unknown; status: unknown; note: unknown }>(data.results)) {
+        if (typeof r.index === "number" && statuses.includes(r.status as CheckStatus)) {
+          results[r.index] = { status: r.status as CheckStatus, note: asText(r.note) };
+        }
+      }
+      if (Object.keys(results).length) return results;
+    } catch {
+      // try the next candidate
+    }
+  }
+  return null;
+}

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type PrDetails, type ReviewRequest } from "./api";
-import { anchorLabel, buildAnalysisPrompt, buildWalkthroughPrompt, parseAnalysis, parseWalkthrough, type Anchor } from "./analysis";
+import { anchorLabel, buildAnalysisPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
 import { AnalysisView, type OutlineKey, type RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import { DiffView, type DiffMode } from "./components/DiffView";
@@ -67,6 +67,7 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [infoDialog, setInfoDialog] = useState<"shortcuts" | "about" | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [recheckRuns, setRecheckRuns] = useState<Record<string, { running: boolean; error?: string }>>({});
   const [sinceReviews, setSinceReviews] = useState<Record<string, SinceReview>>({});
   /** Diff tab: the whole PR, or only what changed since your last review. */
   const [diffRange, setDiffRange] = useState<"all" | "since">("all");
@@ -263,6 +264,8 @@ export default function App() {
         analysisRaw: parsed ? undefined : finalText,
         analyzedAt: parsed ? Date.now() : s.analyzedAt,
         analysisSince: parsed ? opts.since : s.analysisSince,
+        analysisHead: parsed ? details.headRefOid : s.analysisHead,
+        findingChecks: parsed ? undefined : s.findingChecks,
         tokens: (s.tokens ?? 0) + tokensOf(usage),
         costUsd: (s.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
@@ -361,6 +364,42 @@ export default function App() {
     }
   };
 
+  /** After new commits, asks Claude which of the existing findings are fixed. */
+  const recheckFindings = async () => {
+    const s = key ? sessions[key] : undefined;
+    const from = s?.analysisHead ?? s?.headOid;
+    if (!key || !selected || !loaded || loaded.key !== key || !s?.analysis?.findings.length || !from) return;
+    const k = key;
+    const details = loaded.details;
+    const findings = s.analysis.findings;
+    setRecheckRuns((r) => ({ ...r, [k]: { running: true } }));
+    try {
+      const wt = await ensureWorktree(k, selected, details);
+      let text = "";
+      let sessionId = s.sessionId;
+      let usage: ClaudeUsage = {};
+      await api.claudeRun(`recheck-${k}-${Date.now()}`, wt, buildRecheckPrompt(findings, from), s.sessionId, (e) => {
+        if (e.type === "result") {
+          text = e.result ?? "";
+          sessionId = e.session_id ?? sessionId;
+          usage = e;
+        }
+      });
+      const results = parseRecheck(text);
+      if (!results) throw new Error("Claude's answer didn't say which findings are fixed. Try again.");
+      update(k, (x) => ({
+        ...x,
+        sessionId,
+        findingChecks: { from, head: details.headRefOid, at: Date.now(), results },
+        tokens: (x.tokens ?? 0) + tokensOf(usage),
+        costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
+      }));
+      setRecheckRuns((r) => ({ ...r, [k]: { running: false } }));
+    } catch (e) {
+      setRecheckRuns((r) => ({ ...r, [k]: { running: false, error: errorText(e) } }));
+    }
+  };
+
   const stepFinding = (delta: number) => {
     if (!analysis?.findings.length) return;
     const n = analysis.findings.length;
@@ -388,6 +427,11 @@ export default function App() {
   const lastReview = since?.review ?? null;
   const hasNewCommits = !!(details && lastReview && lastReview.commitId !== details.headRefOid);
   const diffFiles = diffRange === "since" && since?.files ? since.files : files;
+  const analysisHead = session?.analysisHead ?? session?.headOid;
+  /** The findings were made on an older commit than the PR's current head. */
+  const analysisOutdated = !!(details && analysis?.findings.length && analysisHead && analysisHead !== details.headRefOid);
+  const checks = session?.findingChecks && details && session.findingChecks.head === details.headRefOid ? session.findingChecks : undefined;
+  const recheck = key ? recheckRuns[key] : undefined;
 
   // Your last review of the selected PR, to offer "since your review" when new commits arrived.
   const login = orgs?.login;
@@ -636,24 +680,45 @@ export default function App() {
         )}
         {details && <ReviewStatus details={details} me={orgs?.login} />}
       </section>
-      {hasNewCommits && lastReview && (
+      {(hasNewCommits || analysisOutdated) && (
         <div className="since-bar" role="status" title={since?.commits?.map((c) => `${c.oid.slice(0, 7)} ${c.subject}`).join("\n")}>
-          {since?.loading ? <Loader size={14} className="spin" /> : <History size={14} className="tone-accent" />}
+          {since?.loading || recheck?.running ? <Loader size={14} className="spin" /> : <History size={14} className="tone-accent" />}
           <span className="ellipsis" style={{ minWidth: 0 }}>
-            <strong>{since?.commits ? `${since.commits.length} new ${since.commits.length === 1 ? "commit" : "commits"}` : "New commits"}</strong>
-            {` since you ${REVIEW_VERB[lastReview.state] ?? "reviewed"} ${ago(lastReview.submittedAt)}`}
-            {session?.analysisSince === lastReview.commitId && <span className="muted"> · analysis covers them</span>}
+            {hasNewCommits && lastReview ? (
+              <>
+                <strong>{since?.commits ? `${since.commits.length} new ${since.commits.length === 1 ? "commit" : "commits"}` : "New commits"}</strong>
+                {` since you ${REVIEW_VERB[lastReview.state] ?? "reviewed"} ${ago(lastReview.submittedAt)}`}
+              </>
+            ) : (
+              <strong>New commits since the analysis</strong>
+            )}
+            {checks ? (
+              <span className="muted">{` · ${Object.values(checks.results).filter((r) => r.status === "fixed").length} of ${analysis?.findings.length ?? 0} findings fixed`}</span>
+            ) : recheck?.running ? (
+              <span className="muted"> · Claude is re-checking the findings…</span>
+            ) : null}
+            {hasNewCommits && lastReview && session?.analysisSince === lastReview.commitId && <span className="muted"> · analysis covers them</span>}
           </span>
           <span style={{ flex: 1 }} />
-          <div className="seg" role="group" aria-label="Changes to show">
-            <button type="button" className={tab === "diff" && diffRange === "since" ? "" : "on"} aria-pressed={!(tab === "diff" && diffRange === "since")} onClick={() => setDiffRange("all")}>All changes</button>
-            <button type="button" className={tab === "diff" && diffRange === "since" ? "on" : ""} aria-pressed={tab === "diff" && diffRange === "since"} onClick={showSinceReview}>Since your review</button>
-          </div>
-          <button type="button" className="btn sm" disabled={!canAnalyze} onClick={() => { setTab("analysis"); startAnalysis({ since: lastReview.commitId }); }}>
-            Analyze new changes
-          </button>
+          {hasNewCommits && lastReview && (
+            <div className="seg" role="group" aria-label="Changes to show">
+              <button type="button" className={tab === "diff" && diffRange === "since" ? "" : "on"} aria-pressed={!(tab === "diff" && diffRange === "since")} onClick={() => setDiffRange("all")}>All changes</button>
+              <button type="button" className={tab === "diff" && diffRange === "since" ? "on" : ""} aria-pressed={tab === "diff" && diffRange === "since"} onClick={showSinceReview}>Since your review</button>
+            </div>
+          )}
+          {analysisOutdated && !checks && (
+            <button type="button" className="btn sm" disabled={!!recheck?.running || !!run?.running} onClick={() => { setTab("analysis"); recheckFindings(); }}>
+              Re-check findings
+            </button>
+          )}
+          {hasNewCommits && lastReview && (
+            <button type="button" className="btn sm" disabled={!canAnalyze} onClick={() => { setTab("analysis"); startAnalysis({ since: lastReview.commitId }); }}>
+              Analyze new changes
+            </button>
+          )}
         </div>
       )}
+      {recheck?.error && <div className="since-bar tone-high" role="alert">{recheck.error}</div>}
       {since?.error && <div className="since-bar tone-high" role="alert">{since.error}</div>}
       <div style={{ flex: 1, minHeight: 0 }}>
         {loadError && <p className="selectable" style={{ margin: 16, color: "var(--crit)" }}>{loadError}</p>}
@@ -669,6 +734,7 @@ export default function App() {
             files={files}
             selected={outlineKey}
             inReview={session?.inReview ?? []}
+            checks={checks?.results}
             onSelect={(k) => { setOutlineKey(k); setFocusPane("outline"); }}
             onOpenAnchor={openAnchor}
             onStart={() => startAnalysis()}
@@ -833,6 +899,7 @@ export default function App() {
           files={files}
           inReview={session?.inReview ?? []}
           ownPr={!!orgs?.login && details.author.login === orgs.login}
+          checks={checks?.results}
           onClose={() => setReviewOpen(false)}
           onSubmitted={(url) => {
             setReviewOpen(false);

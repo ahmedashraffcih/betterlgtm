@@ -200,12 +200,22 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
       const prompt = String(args.prompt ?? "");
       const isAnalysis = prompt.includes("reply with only one JSON block");
       const isGuide = !isAnalysis && prompt.includes("guided review");
-      const result = isAnalysis
+      const isRecheck = prompt.includes("Re-check each finding");
+      const recheck = {
+        results: [
+          { index: 0, status: "fixed", note: "save() now takes a lock with SET NX before charging, so a second request waits." },
+          { index: 1, status: "open", note: "Keys are still stored as idem:{key} without the merchant ID." },
+          { index: 2, status: "unclear", note: "The cached body didn't change; it depends on what the client needs." },
+        ],
+      };
+      const result = isRecheck
+        ? "```json\n" + JSON.stringify(recheck) + "\n```"
+        : isAnalysis
         ? "```json\n" + JSON.stringify({ ...analysis, walkthrough }) + "\n```"
         : isGuide
           ? "```json\n" + JSON.stringify({ walkthrough }) + "\n```"
           : "ok";
-      onEvent?.({ type: "assistant", message: { content: [{ type: "text", text: isAnalysis || isGuide ? "Done." : "This is a sample answer from the browser preview." }] } });
+      onEvent?.({ type: "assistant", message: { content: [{ type: "text", text: isAnalysis || isGuide || isRecheck ? "Done." : "This is a sample answer from the browser preview." }] } });
       onEvent?.({ type: "result", session_id: "mock-session", result, usage: { input_tokens: 12000, output_tokens: 900 } });
       return null;
     }

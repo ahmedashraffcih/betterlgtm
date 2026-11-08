@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { Analysis } from "./analysis";
+import type { Analysis, FindingChecks } from "./analysis";
 
 export interface ChatItem {
   role: "user" | "assistant" | "tool" | "error";
@@ -17,6 +17,10 @@ export interface PrSession {
   analyzedAt?: number;
   /** Set when the last analysis covered only the changes after this commit (a re-review). */
   analysisSince?: string;
+  /** The PR head the analysis looked at. */
+  analysisHead?: string;
+  /** Findings re-checked after new commits. */
+  findingChecks?: FindingChecks;
   headOid?: string;
   chat: ChatItem[];
   tokens?: number;

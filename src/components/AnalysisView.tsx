@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { FileData } from "react-diff-view";
-import { anchorLabel, type Analysis, type Anchor, type Decision } from "../analysis";
+import { anchorLabel, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck } from "../analysis";
 import type { PrDetails } from "../api";
 import { categoryIcon, SEVERITY, VERDICT } from "../icons";
 import { changesInRange, findFile, lineNumbers } from "../diffUtils";
@@ -33,12 +33,28 @@ interface Props {
   files: FileData[];
   selected: OutlineKey;
   inReview: number[];
+  /** Re-check results after new commits, by finding index. */
+  checks?: Record<number, FindingCheck>;
   onSelect: (k: OutlineKey) => void;
   onOpenAnchor: (a: Anchor, finding: number | null) => void;
   onStart: () => void;
   onCancel: () => void;
   onToggleReview: (finding: number) => void;
   onAsk: (text: string) => void;
+}
+
+const CHECK: Record<CheckStatus, { label: string; tone: string }> = {
+  fixed: { label: "Fixed", tone: "ok" },
+  open: { label: "Still open", tone: "high" },
+  changed: { label: "Partly fixed", tone: "high" },
+  unclear: { label: "Unclear", tone: "muted" },
+};
+
+/** How a finding fared when it was re-checked after new commits. */
+function CheckBadge({ check }: { check?: FindingCheck }) {
+  if (!check) return null;
+  const c = CHECK[check.status];
+  return <span className={`check-badge check-${c.tone}`} title={check.note}>{c.label}</span>;
 }
 
 function ago(ts?: number) {
@@ -72,10 +88,11 @@ export function AnalysisView(p: Props) {
   const crit = a.findings.filter((f) => f.severity === "critical").length;
   const high = a.findings.filter((f) => f.severity === "high").length;
 
-  const Row = ({ k, sub, Icon, tone, text, meta }: { k: OutlineKey; sub?: boolean; Icon: LucideIcon; tone: string; text: string; meta?: string }) => (
-    <button type="button" className={["row", sub && "sub", p.selected === k && "sel"].filter(Boolean).join(" ")} onClick={() => select(k)} title={text}>
+  const Row = ({ k, sub, Icon, tone, text, meta, check }: { k: OutlineKey; sub?: boolean; Icon: LucideIcon; tone: string; text: string; meta?: string; check?: FindingCheck }) => (
+    <button type="button" className={["row", sub && "sub", p.selected === k && "sel", check?.status === "fixed" && "fixed"].filter(Boolean).join(" ")} onClick={() => select(k)} title={text}>
       <Icon size={14} className={tone} />
       <span className="ellipsis" style={{ flex: 1 }}>{text}</span>
+      <CheckBadge check={check} />
       {meta && <span className="rm">{meta}</span>}
     </button>
   );
@@ -118,12 +135,12 @@ export function AnalysisView(p: Props) {
 
         <Group title="Findings" meta={crit || high ? [crit && `${crit} critical`, high && `${high} high`].filter(Boolean).join(" · ") : `${a.findings.length}`} />
         {major.map(({ f, i }) => (
-          <Row key={i} k={`f${i}`} Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} />
+          <Row key={i} k={`f${i}`} Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} check={p.checks?.[i]} />
         ))}
         {minor.length > 0 && (
           <Toggle open={showMinor} text={minor.length === 1 ? "1 medium or low finding" : `${minor.length} medium and low findings`} onClick={() => setShowMinor(!showMinor)} />
         )}
-        {showMinor && minor.map(({ f, i }) => <Row key={i} k={`f${i}`} sub Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} />)}
+        {showMinor && minor.map(({ f, i }) => <Row key={i} k={`f${i}`} sub Icon={SEVERITY[f.severity].icon} tone={SEVERITY[f.severity].tone} text={f.title} meta={String(i + 1)} check={p.checks?.[i]} />)}
         {a.findings.length === 0 && <p className="muted" style={{ margin: "2px 10px", fontSize: 12 }}>No findings.</p>}
       </nav>
     </div>
@@ -236,6 +253,7 @@ function Overview(p: Props & { analysis: Analysis }) {
               <button key={`f${i}`} type="button" className="attn" onClick={() => p.onSelect(`f${i}`)}>
                 <sev.icon size={16} className={sev.tone} />
                 <span style={{ flex: 1, minWidth: 0 }}>{f.title}</span>
+                <CheckBadge check={p.checks?.[i]} />
                 <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>Finding {i + 1}</span>
                 <ChevronRight size={14} className="tone-muted" />
               </button>
@@ -301,11 +319,17 @@ function Detail(p: Props & { analysis: Analysis }) {
             <Cat size={14} />{f.category}{f.confidence ? ` · ${f.confidence} confidence` : ""}
           </span>
           {f.notInDescription && <span className="tag"><FileX size={12} />Not in description</span>}
+          <CheckBadge check={p.checks?.[idx]} />
           <span style={{ flex: 1 }} />
           <span className="muted" style={{ fontSize: 12 }}>Finding {idx + 1} of {a.findings.length}</span>
           <button type="button" className="tb" aria-label="Previous finding (K)" onClick={() => go(-1)}><ChevronUp size={16} /></button>
           <button type="button" className="tb" aria-label="Next finding (J)" onClick={() => go(1)}><ChevronDown size={16} /></button>
         </div>
+        {p.checks?.[idx] && (
+          <p className={`check-note check-${CHECK[p.checks[idx].status].tone}`}>
+            <strong>After the new commits:</strong> {p.checks[idx].note || CHECK[p.checks[idx].status].label}
+          </p>
+        )}
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, lineHeight: 1.35 }}>{f.title}</h2>
         <Markdown text={f.body} />
         {f.anchors[0] && <Excerpt files={p.files} anchor={f.anchors[0]} onOpen={() => p.onOpenAnchor(f.anchors[0], idx)} />}
