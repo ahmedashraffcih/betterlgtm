@@ -6,6 +6,11 @@ mod worktree;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Work out the tools' PATH while the window opens; asking the login shell can take a moment.
+    #[cfg(unix)]
+    std::thread::spawn(|| {
+        process::tool_path();
+    });
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
