@@ -42,6 +42,7 @@
       "requireSignedVersion": true,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJFODIxNEQ1RjYyQjgwMDMKUldRRGdDdjIxUlNDdnJMc0YrOFJnclY1amRRaEg5WU5WQnd4bUdvUFdlbDlTYjB6bURYeUpTLzIK",
       "endpoints": [
+        "https://drmas.github.io/betterlgtm/latest.json",
         "https://github.com/drmas/betterlgtm/releases/latest/download/latest.json"
       ]
     }

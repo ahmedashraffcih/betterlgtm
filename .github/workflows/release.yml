@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
@@ -203,3 +204,5 @@ jobs:
         run: python3 scripts/updater-manifest.py
       - name: Publish
         run: gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false
+      - name: Refresh the website's copy of latest.json
+        run: gh workflow run pages.yml -R "$GITHUB_REPOSITORY"

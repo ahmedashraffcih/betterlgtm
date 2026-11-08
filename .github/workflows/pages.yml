@@ -24,6 +24,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
+      # A copy of the updater feed, so apps can still update when GitHub's release downloads fail.
+      - name: Mirror latest.json
+        run: |
+          curl -fsSL --retry 10 --retry-all-errors --retry-delay 5 -o site/latest.json \
+            https://github.com/${{ github.repository }}/releases/latest/download/latest.json \
+            || { rm -f site/latest.json; echo "::warning::Couldn't copy latest.json; the site is published without it."; }
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
