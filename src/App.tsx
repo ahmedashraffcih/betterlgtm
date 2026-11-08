@@ -917,6 +917,8 @@ export default function App() {
                   view={inboxView}
                   counts={{ review: visibleRequests?.length ?? 0, mine: visibleMine?.length ?? 0 }}
                   onViewChange={setInboxView}
+                  showDrafts={settings.showDrafts}
+                  onShowDrafts={(v) => updateSettings({ showDrafts: v })}
                   requests={inboxList}
                   hiddenCount={hiddenCount}
                   error={inboxError}
