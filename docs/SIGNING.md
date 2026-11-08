@@ -62,3 +62,21 @@ spctl --assess --type execute --verbose /Applications/BetterLGTM.app
 ## Renewing
 
 Check the certificate's expiry with `openssl x509 -inform DER -in developerID_application.cer -noout -enddate`, and repeat steps 1 and 3 before then. Releases that were already notarized keep working.
+
+## Update signing
+
+Installed apps update themselves from `latest.json` on the latest GitHub release. Every update bundle is signed with a separate Tauri update key, and the app only installs bundles that match the public key in `src-tauri/tauri.conf.json`.
+
+The key pair is in `~/.betterlgtm-signing/` (`updater.key`, `updater.key.password`, `updater.key.pub`). The Release workflow needs two more secrets:
+
+| Secret | Contents |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | `updater.key` |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | `updater.key.password` |
+
+```bash
+gh secret set TAURI_SIGNING_PRIVATE_KEY -R drmas/betterlgtm < ~/.betterlgtm-signing/updater.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD -R drmas/betterlgtm < ~/.betterlgtm-signing/updater.key.password
+```
+
+Without them, release builds fail, because the app is configured to ship signed updates. Keep a backup of the key: if it's lost, installed copies can't receive updates and everyone has to reinstall by hand.

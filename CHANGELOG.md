@@ -2,6 +2,10 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+- The app checks for new versions and installs them when you choose **Install update** in the status bar. Turn automatic checks off in Settings › General, or use Help › Check for updates.
+
 ## 0.1.1 — 2026-11-07
 
 - macOS builds are signed with a Developer ID certificate and notarized by Apple.

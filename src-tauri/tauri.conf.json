@@ -34,6 +34,16 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "requireSignedVersion": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJFODIxNEQ1RjYyQjgwMDMKUldRRGdDdjIxUlNDdnJMc0YrOFJnclY1amRRaEg5WU5WQnd4bUdvUFdlbDlTYjB6bURYeUpTLzIK",
+      "endpoints": [
+        "https://github.com/drmas/betterlgtm/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

@@ -6,6 +6,7 @@ export interface Settings {
   // General
   theme: Theme;
   refreshMinutes: number;
+  autoUpdate: boolean;
   // Organizations and review requests
   orgMode: "all" | "selected";
   /** Used in "all" mode: organizations left out of the inbox. */
@@ -32,6 +33,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   refreshMinutes: 5,
+  autoUpdate: true,
   orgMode: "all",
   hiddenOrgs: [],
   selectedOrgs: [],

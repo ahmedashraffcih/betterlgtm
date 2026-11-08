@@ -1,6 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Code, ExternalLink, FileDiff, GitBranch, GitPullRequestArrow, Inbox as InboxIcon, ListChecks, ListOrdered, Loader, Lock, MessageSquare, RefreshCw, Send, Terminal } from "lucide-react";
+import { Check, Code, Download, ExternalLink, FileDiff, GitBranch, GitPullRequestArrow, Inbox as InboxIcon, ListChecks, ListOrdered, Loader, Lock, MessageSquare, RefreshCw, RotateCw, Send, Terminal, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
@@ -21,6 +21,7 @@ import { fileIcon, SEVERITY } from "./icons";
 import { emptySession, useSessions, useStoredState, type ChatItem } from "./sessions";
 import { Settings, type SettingsSection } from "./components/Settings";
 import { ownerVisible, useSettings } from "./settings";
+import { useUpdater } from "./updates";
 
 interface Loaded {
   key: string;
@@ -39,6 +40,7 @@ export default function App() {
   const [inboxLoading, setInboxLoading] = useState(false);
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const [settings, updateSettings] = useSettings();
+  const updater = useUpdater(settings.autoUpdate);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [infoDialog, setInfoDialog] = useState<"shortcuts" | "about" | null>(null);
@@ -446,6 +448,7 @@ export default function App() {
     { id: "clear-chat", menu: "Review", label: "Clear conversation", enabled: !!session?.chat.length, run: () => key && update(key, (s) => ({ ...s, chat: [] })) },
 
     { id: "shortcuts", menu: "Help", label: "Keyboard shortcuts", keys: { key: "/", ctrl: true }, run: () => setInfoDialog("shortcuts") },
+    { id: "updates", menu: "Help", label: "Check for updates…", enabled: updater.supported, run: () => updater.checkNow(true), separatorBefore: true },
     { id: "about", menu: "Help", label: "About BetterLGTM", run: () => setInfoDialog("about") },
   ];
   commandsRef.current = commands;
@@ -693,6 +696,7 @@ export default function App() {
         <span className="sb"><RefreshCw size={13} className={inboxLoading ? "spin" : undefined} />{syncedAt ? `Synced ${new Date(syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Syncing…"}</span>
         <span className="sb opt"><InboxIcon size={13} />{visibleRequests?.length ?? 0} to review</span>
         <span style={{ flex: 1 }} />
+        <UpdateStatus {...updater} />
         {key && (
           <span className="sb">
             {run?.running || chatRunning[key] ? <Loader size={13} className="spin tone-accent" /> : <MessageSquare size={13} />}
@@ -706,4 +710,23 @@ export default function App() {
       {infoDialog && <InfoDialog kind={infoDialog} commands={commands} onClose={() => setInfoDialog(null)} />}
     </div>
   );
+}
+
+function UpdateStatus({ state, install, restart }: ReturnType<typeof useUpdater>) {
+  switch (state.kind) {
+    case "checking":
+      return state.manual ? <span className="sb"><Loader size={13} className="spin" />Checking for updates…</span> : null;
+    case "current":
+      return state.manual ? <span className="sb"><Check size={13} />BetterLGTM is up to date</span> : null;
+    case "error":
+      return state.manual ? <span className="sb tone-high" title={state.message}><TriangleAlert size={13} />Couldn't update</span> : null;
+    case "available":
+      return <button type="button" className="sb sb-btn" onClick={install}><Download size={13} />Install update {state.version}</button>;
+    case "installing":
+      return <span className="sb"><Loader size={13} className="spin" />Updating{state.percent !== null ? ` ${state.percent}%` : "…"}</span>;
+    case "ready":
+      return <button type="button" className="sb sb-btn" onClick={() => restart()}><RotateCw size={13} />Restart to finish updating</button>;
+    default:
+      return null;
+  }
 }

@@ -199,7 +199,7 @@ export function Settings(p: Props) {
         {p.section === "general" && (
           <>
             <h1>General</h1>
-            <p className="lead">How the app looks and how often it checks GitHub.</p>
+            <p className="lead">How the app looks, how often it checks GitHub, and how it updates.</p>
             <div className="set-group">
               <Row label="Theme">
                 <Seg label="Theme" value={s.theme} options={[["system", "System"], ["light", "Light"], ["dark", "Dark"]]} onChange={(v) => p.update({ theme: v })} />
@@ -209,6 +209,7 @@ export function Settings(p: Props) {
                   {[1, 2, 5, 10, 15, 30, 60].map((m) => <option key={m} value={m}>Every {m} {m === 1 ? "minute" : "minutes"}</option>)}
                 </select>
               </Row>
+              <Check label="Check for app updates automatically" hint="New versions download only when you choose Install" checked={s.autoUpdate} onChange={(v) => p.update({ autoUpdate: v })} />
             </div>
           </>
         )}
