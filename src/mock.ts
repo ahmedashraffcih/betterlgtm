@@ -187,6 +187,21 @@ const walkthrough = [
   { title: "Charge route uses the store", why: ["Reads `Idempotency-Key` and returns cached responses", "Saves the first response after charging"], changes: [{ path: "src/http/charges.ts", startLine: 38, endLine: 48 }] },
 ];
 
+/** A large synthetic diff (PR 1290) for checking diff performance. */
+function bigDiff(): string {
+  const out: string[] = [];
+  for (let f = 0; f < 60; f++) {
+    const lines = f === 0 ? 4000 : 120;
+    const path = `src/module${f}/file${f}.ts`;
+    out.push(`diff --git a/${path} b/${path}`, `index 1111111..2222222 100644`, `--- a/${path}`, `+++ b/${path}`, `@@ -1,${lines} +1,${lines} @@`);
+    for (let i = 0; i < lines; i++) {
+      if (i % 7 === 3) out.push(`-export function old${i}(a: number) { return a * ${i}; }`, `+export function renamed${i}(a: number, b = ${i}) { return a * b; }`);
+      else out.push(` const value${i} = compute("${path}", ${i}); // context line`);
+    }
+  }
+  return out.join("\n") + "\n";
+}
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}, onEvent?: (e: ClaudeEvent) => void): Promise<unknown> {
@@ -247,7 +262,8 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
           }
         : details;
     case "pr_diff":
-      return diff;
+      // VITE_MOCK_BIG=1 swaps in a 60-file diff for checking diff performance.
+      return args.number === 1290 && import.meta.env.VITE_MOCK_BIG === "1" ? bigDiff() : diff;
     case "pr_body_html":
       return bodyHtml;
     case "prepare_worktree":

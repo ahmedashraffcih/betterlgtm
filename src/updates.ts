@@ -1,4 +1,5 @@
 import { relaunch } from "@tauri-apps/plugin-process";
+import { flushSessions } from "./sessions";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { inTauri } from "./mock";
@@ -98,5 +99,5 @@ export function useUpdater(auto: boolean) {
     }
   }, [state]);
 
-  return { state, checkNow, install, restart: relaunch, supported: inTauri };
+  return { state, checkNow, install, restart: () => (flushSessions(), relaunch()), supported: inTauri };
 }

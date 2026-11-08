@@ -1,5 +1,5 @@
 import { Building2, Clock, ListFilter, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, CircleX, EyeOff, Funnel, Loader, OctagonExclamationPoint, PencilLine, RefreshCw, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReviewRequest } from "../api";
 import { COMPARE, matchesFilters, type Filters, type SortKey } from "../inboxFilters";
 import { prRisk, waitingSince } from "../risk";
@@ -59,6 +59,8 @@ interface Props {
   /** PRs waiting for auto-analyze. */
   queued?: Set<string>;
   onSelect: (pr: ReviewRequest) => void;
+  /** Called when the pointer rests on a PR, to start loading it before it's clicked. */
+  onPrefetch?: (pr: ReviewRequest) => void;
   onRefresh: () => void;
   onHideOwner: (owner: string) => void;
   onManage: () => void;
@@ -69,6 +71,20 @@ interface Props {
 export const prKey = (pr: { repository: { nameWithOwner: string }; number: number }) =>
   `${pr.repository.nameWithOwner}#${pr.number}`;
 
+let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Pointer handlers that prefetch a PR after the pointer rests on it briefly. */
+function prefetchOnHover(pr: ReviewRequest, onPrefetch?: (pr: ReviewRequest) => void) {
+  if (!onPrefetch) return {};
+  return {
+    onMouseEnter: () => {
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => onPrefetch(pr), 120);
+    },
+    onMouseLeave: () => clearTimeout(hoverTimer),
+  };
+}
+
 function age(iso: string): string {
   const mins = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   if (mins < 60) return `${mins}m`;
@@ -77,7 +93,7 @@ function age(iso: string): string {
 }
 
 /** Narrow strip of PR numbers shown instead of the full inbox when the window is small. */
-export function InboxRail(p: Pick<Props, "requests" | "selected" | "sessions" | "analyzing" | "onSelect"> & { onExpand: () => void }) {
+export function InboxRail(p: Pick<Props, "requests" | "selected" | "sessions" | "analyzing" | "onSelect" | "onPrefetch"> & { onExpand: () => void }) {
   const prs = p.requests ?? [];
   return (
     <nav aria-label="Review requests, collapsed" className="side rail-strip">
@@ -95,6 +111,7 @@ export function InboxRail(p: Pick<Props, "requests" | "selected" | "sessions" | 
               className={p.selected === key ? "rail sel" : "rail"}
               title={`${pr.repository.nameWithOwner} #${pr.number} · ${pr.title}`}
               onClick={() => p.onSelect(pr)}
+              {...prefetchOnHover(pr, p.onPrefetch)}
             >
               {pr.number}
               {p.analyzing.has(key) ? <span className="dot busy" /> : crit ? <span className="dot" /> : null}
@@ -126,6 +143,17 @@ export function Inbox(p: Props) {
   }, [p.requests, filter, sort, filters, p.sessions]);
 
   const visibleCount = groups.reduce((n, [, prs]) => n + prs.length, 0);
+
+  // Load the PRs next to the selected one, since j and k open them next.
+  const { onPrefetch, selected } = p;
+  useEffect(() => {
+    if (!onPrefetch || !selected) return;
+    const flat = groups.filter(([org]) => !collapsed.includes(org)).flatMap(([, prs]) => prs);
+    const i = flat.findIndex((pr) => prKey(pr) === selected);
+    if (i < 0) return;
+    const t = setTimeout(() => [flat[i + 1], flat[i - 1]].forEach((pr) => pr && onPrefetch(pr)), 600);
+    return () => clearTimeout(t);
+  }, [selected, groups, collapsed, onPrefetch]);
 
   return (
     <aside className="side" data-pane="inbox" aria-label={p.view === "mine" ? "Your pull requests" : "Review requests"}>
@@ -197,7 +225,7 @@ export function Inbox(p: Props) {
                   const crit = findings.filter((f) => f.severity === "critical").length;
                   const cls = ["pr", p.selected === key && "sel", p.selected === key && p.focused && "focused"].filter(Boolean).join(" ");
                   return (
-                    <button key={key} type="button" data-nav className={cls} onClick={() => p.onSelect(pr)} title={pr.title}>
+                    <button key={key} type="button" data-nav className={cls} onClick={() => p.onSelect(pr)} title={pr.title} {...prefetchOnHover(pr, p.onPrefetch)}>
                       <span className="t1 ellipsis" style={{ width: "100%" }}>{pr.title}</span>
                       <span className="t2">
                         <span className="ellipsis" style={{ flex: 1 }}>

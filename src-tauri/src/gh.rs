@@ -229,8 +229,11 @@ pub async fn file_at(config: State<'_, ConfigState>, repo: String, sha: String, 
 #[tauri::command]
 pub async fn list_orgs(config: State<'_, ConfigState>) -> Result<Value, String> {
     let gh = config.get().gh_path;
-    let login = run(&gh, &["api", "user", "--jq", ".login"], None).await?;
-    let orgs = run(&gh, &["api", "user/orgs", "--paginate", "--jq", ".[].login"], None).await?;
+    let (login, orgs) = tokio::join!(
+        run(&gh, &["api", "user", "--jq", ".login"], None),
+        run(&gh, &["api", "user/orgs", "--paginate", "--jq", ".[].login"], None),
+    );
+    let (login, orgs) = (login?, orgs?);
     Ok(serde_json::json!({
         "login": login.trim(),
         "orgs": orgs.lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>(),

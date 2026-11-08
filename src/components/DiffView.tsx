@@ -7,7 +7,7 @@ import {
 import type { Anchor, Finding } from "../analysis";
 import { SEVERITY, fileIcon } from "../icons";
 import { allReviewed, changeKeys, changesInRange, filePath, fileStats, findFile, hunkKey, isGenerated } from "../diffUtils";
-import { highlightHunks } from "../highlight";
+import { useTokens } from "../highlightAsync";
 import { useElementWidth } from "../hooks";
 
 export type DiffMode = "guided" | "files";
@@ -67,6 +67,21 @@ interface Match {
   line: number;
   text: string;
   kind: "add" | "del" | "ctx" | "path";
+}
+
+/** Lines rendered at first and per step while scrolling, so huge files stay responsive. */
+const PAGE = 800;
+
+/** The first `n` changes of `hunks`; the same array when all of them fit. */
+function firstChanges(hunks: HunkData[], n: number): HunkData[] {
+  const out: HunkData[] = [];
+  let left = n;
+  for (const h of hunks) {
+    if (left <= 0) break;
+    out.push(h.changes.length <= left ? h : { ...h, changes: h.changes.slice(0, left) });
+    left -= h.changes.length;
+  }
+  return left >= 0 ? hunks : out;
 }
 
 const newLine = (c: ChangeData) => (c.type === "delete" ? null : c.type === "insert" ? c.lineNumber : c.newLineNumber);
@@ -146,7 +161,7 @@ export function DiffView(p: Props) {
   };
 
   const changeCount = hunks.reduce((n, h) => n + h.changes.length, 0);
-  const tokens = useMemo(() => (file && !hideDiff && changeCount < 6000 ? highlightHunks(hunks, path) : null), [hunks, path, hideDiff, changeCount, file]);
+  const tokens = useTokens(hunks, path, !!file && !hideDiff && changeCount < 20000);
 
   // Lines the user picked in the gutter (new-file line numbers), for asking Claude or commenting.
   const [picked, setPicked] = useState<{ path: string; start: number; end: number } | null>(null);
@@ -161,7 +176,33 @@ export function DiffView(p: Props) {
   const selected = useMemo(() => {
     const r = pickedRange ?? (p.range && p.range.startLine > 0 ? p.range : null);
     return file && r ? changeKeys(changesInRange({ ...file, hunks }, r)) : [];
-  }, [file, hunks, p.range, pickedRange?.startLine, pickedRange?.endLine]);
+  }, [file, hunks, p.range?.path, p.range?.startLine, p.range?.endLine, pickedRange?.startLine, pickedRange?.endLine]);
+
+  // Long files render in pages; scrolling near the end, or jumping to a line further down, shows more.
+  const [limit, setLimit] = useState<{ hunks: HunkData[]; n: number }>({ hunks, n: PAGE });
+  const target = useMemo(() => {
+    if (!selected.length) return 0;
+    const want = new Set(selected);
+    let i = 0;
+    for (const h of hunks) for (const c of h.changes) {
+      i++;
+      if (want.has(getChangeKey(c))) return i;
+    }
+    return 0;
+  }, [hunks, selected]);
+  const shownCount = Math.max(limit.hunks === hunks ? limit.n : PAGE, target + 200);
+  const shownHunks = useMemo(() => firstChanges(hunks, shownCount), [hunks, shownCount]);
+  const truncated = shownHunks !== hunks;
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!truncated || !sentinel.current) return;
+    const io = new IntersectionObserver(
+      (entries) => entries.some((e) => e.isIntersecting) && setLimit({ hunks, n: shownCount + PAGE }),
+      { root: scroller.current, rootMargin: "0px 0px 1500px 0px" },
+    );
+    io.observe(sentinel.current);
+    return () => io.disconnect();
+  }, [truncated, hunks, shownCount]);
 
   const markers = useMemo(() => {
     const m = new Map<string, number>();
@@ -182,26 +223,35 @@ export function DiffView(p: Props) {
     el?.scrollIntoView({ block: "center" });
   }, [selected]);
 
-  const renderGutter: RenderGutter = ({ change, side, renderDefault }) => {
-    const n = markers.get(getChangeKey(change));
+  const renderGutter: RenderGutter = useMemo(() => {
     const markerSide = split ? "new" : "old";
-    return (
-      <>
-        {n !== undefined && side === markerSide && <span className="mk" title={`Finding ${n}`}>{n}</span>}
-        {renderDefault()}
-      </>
-    );
-  };
+    return ({ change, side, renderDefault }) => {
+      const n = markers.get(getChangeKey(change));
+      return (
+        <>
+          {n !== undefined && side === markerSide && <span className="mk" title={`Finding ${n}`}>{n}</span>}
+          {renderDefault()}
+        </>
+      );
+    };
+  }, [markers, split]);
 
-  const gutterEvents = {
-    onClick: ({ change }: { change: ChangeData | null }, e: React.MouseEvent) => {
-      const line = change ? newLine(change) : null;
-      if (!line) return;
-      setCommenting(false);
-      if (e.shiftKey && picked && picked.path === path) setPicked({ path, start: Math.min(picked.start, line), end: Math.max(picked.end, line) });
-      else setPicked({ path, start: line, end: line });
-    },
-  };
+  // The diff element is memoized below, so its handlers read the latest state through a ref.
+  const latest = useRef({ picked, path, expand });
+  latest.current = { picked, path, expand };
+  const gutterEvents = useMemo(
+    () => ({
+      onClick: ({ change }: { change: ChangeData | null }, e: React.MouseEvent) => {
+        const line = change ? newLine(change) : null;
+        if (!line) return;
+        const { picked, path } = latest.current;
+        setCommenting(false);
+        if (e.shiftKey && picked && picked.path === path) setPicked({ path, start: Math.min(picked.start, line), end: Math.max(picked.end, line) });
+        else setPicked({ path, start: line, end: line });
+      },
+    }),
+    [],
+  );
 
   const pickedCode = () => {
     if (!pickedRange || !file) return "";
@@ -246,8 +296,50 @@ export function DiffView(p: Props) {
     }
   };
 
-  const isReviewed = (f: FileData) => allReviewed(f.hunks.map((h) => hunkKey(f, h)), p.reviewed);
-  const reviewedFiles = p.files.filter(isReviewed).length;
+  const reviewedSet = useMemo(() => new Set(p.files.filter((f) => allReviewed(f.hunks.map((h) => hunkKey(f, h)), p.reviewed))), [p.files, p.reviewed]);
+  const isReviewed = (f: FileData) => reviewedSet.has(f);
+  const reviewedFiles = reviewedSet.size;
+  const stats = useMemo(() => new Map(p.files.map((f) => [f, fileStats(f)])), [p.files]);
+
+  const canExpand = !!file && file.type !== "delete" && !!p.onLoadSource;
+  // Rebuilt only when the diff itself changes, not on every render of the app around it.
+  const diffElement = useMemo(
+    () =>
+      file && (
+        <Diff
+          key={path}
+          viewType={split ? "split" : "unified"}
+          diffType={file.type}
+          hunks={shownHunks}
+          tokens={tokens ?? undefined}
+          selectedChanges={selected}
+          renderGutter={renderGutter}
+          gutterEvents={gutterEvents as never}
+          className="diff-pickable"
+        >
+          {(hs) =>
+            hs.flatMap((h, i) => {
+              const prev = i > 0 ? hs[i - 1] : null;
+              const hidden = canExpand ? getCollapsedLinesCountBetween(prev, h) : 0;
+              const start = prev ? prev.newStart + prev.newLines : 1;
+              return [
+                <Decoration key={`d-${h.content}`}>
+                  {hidden > 0 ? (
+                    <button type="button" className="expand-btn" onClick={() => latest.current.expand(start, h.newStart)} title="Show the unchanged lines here">
+                      <ChevronUp size={12} />Show {hidden} hidden {hidden === 1 ? "line" : "lines"}<span className="muted mono">{h.content}</span>
+                    </button>
+                  ) : (
+                    <span>{h.content}</span>
+                  )}
+                </Decoration>,
+                <Hunk key={`h-${h.content}`} hunk={h} />,
+              ];
+            })
+          }
+        </Diff>
+      ),
+    [file, path, split, shownHunks, tokens, selected, renderGutter, gutterEvents, canExpand],
+  );
 
   const banner = p.activeFinding !== null ? p.findings[p.activeFinding] : undefined;
   const bannerOnFile = banner && file && banner.anchors.some((a) => findFile([file], a.path) === file);
@@ -273,7 +365,7 @@ export function DiffView(p: Props) {
           <div className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
             {listed.map((f) => {
               const fp = filePath(f);
-              const s = fileStats(f);
+              const s = stats.get(f) ?? fileStats(f);
               const Icon = fileIcon(fp);
               const n = counts.get(fp);
               const done = isReviewed(f);
@@ -458,40 +550,13 @@ export function DiffView(p: Props) {
             </div>
           )}
           {expandError && <p className="tone-crit" style={{ margin: "6px 12px", fontSize: 12 }}>Couldn't load the file: {expandError}</p>}
-          {file && !hideDiff && (
-            <Diff
-              key={path}
-              viewType={split ? "split" : "unified"}
-              diffType={file.type}
-              hunks={hunks}
-              tokens={tokens ?? undefined}
-              selectedChanges={selected}
-              renderGutter={renderGutter}
-              gutterEvents={gutterEvents as never}
-              className="diff-pickable"
-            >
-              {(hs) =>
-                hs.flatMap((h, i) => {
-                  const prev = i > 0 ? hs[i - 1] : null;
-                  const hidden = file.type !== "delete" && p.onLoadSource ? getCollapsedLinesCountBetween(prev, h) : 0;
-                  const start = prev ? prev.newStart + prev.newLines : 1;
-                  return [
-                    <Decoration key={`d-${h.content}`}>
-                      {hidden > 0 ? (
-                        <button type="button" className="expand-btn" onClick={() => expand(start, h.newStart)} title="Show the unchanged lines here">
-                          <ChevronUp size={12} />Show {hidden} hidden {hidden === 1 ? "line" : "lines"}<span className="muted mono">{h.content}</span>
-                        </button>
-                      ) : (
-                        <span>{h.content}</span>
-                      )}
-                    </Decoration>,
-                    <Hunk key={`h-${h.content}`} hunk={h} />,
-                  ];
-                })
-              }
-            </Diff>
+          {file && !hideDiff && diffElement}
+          {file && !hideDiff && truncated && (
+            <div ref={sentinel} className="muted" style={{ padding: "10px 12px", fontSize: 12 }}>
+              Showing {shownCount.toLocaleString()} of {changeCount.toLocaleString()} lines; scroll for more.
+            </div>
           )}
-          {file && !hideDiff && p.onLoadSource && file.type !== "delete" && hunks.length > 0 && (
+          {file && !hideDiff && !truncated && p.onLoadSource && file.type !== "delete" && hunks.length > 0 && (
             <button
               type="button"
               className="expand-btn expand-end"

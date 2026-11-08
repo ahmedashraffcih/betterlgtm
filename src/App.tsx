@@ -1,32 +1,30 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Check, Code, Download, ExternalLink, History, FileDiff, GitBranch, GitPullRequestArrow, Inbox as InboxIcon, ListChecks, ListOrdered, Loader, Lock, MessageSquare, RefreshCw, RotateCw, Send, Terminal, TriangleAlert } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
 import { anchorLabel, findingId, type Finding, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
-import { AnalysisView, type OutlineKey, type RunState } from "./components/AnalysisView";
+import type { OutlineKey, RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
-import { DiffView, type DiffMode } from "./components/DiffView";
-import { GuidedReview } from "./components/GuidedReview";
+import type { DiffMode } from "./components/DiffView";
+import { AnalysisView, CommandPalette, DescriptionDialog, DiffView, FilterDialog, GuidedReview, InfoDialog, preloadViews, Settings, SubmitReview } from "./lazy";
 import { Inbox, InboxRail, prKey, type InboxView } from "./components/Inbox";
 import { TitleBar } from "./components/TitleBar";
 import { useElementWidth } from "./hooks";
 import { matches, shortcutLabel, type Command } from "./commands";
-import { CommandPalette, type PaletteItem } from "./components/CommandPalette";
-import { InfoDialog } from "./components/InfoDialog";
-import { SubmitReview } from "./components/SubmitReview";
-import { FilterDialog, type OwnerRow, type RepoRow } from "./components/FilterDialog";
-import { DescriptionDialog } from "./components/DescriptionDialog";
+import type { PaletteItem } from "./components/CommandPalette";
+import type { OwnerRow, RepoRow } from "./components/FilterDialog";
 import { FILTER_GROUPS, NO_FILTERS, type Filters, type SortKey } from "./inboxFilters";
 import { ReviewStatus } from "./components/ReviewStatus";
 import { filePath, ignoreWhitespace } from "./diffUtils";
 import { fileIcon, SEVERITY } from "./icons";
-import { emptySession, useSessions, useStoredState, type ChatItem } from "./sessions";
-import { Settings, type SettingsSection } from "./components/Settings";
+import { emptySession, flushSessions, useSessions, useStoredState, type ChatItem } from "./sessions";
+import type { SettingsSection } from "./components/Settings";
 import { ownerVisible, useSettings } from "./settings";
 import { useUpdater } from "./updates";
+import { LruCache, readInboxCache, writeInboxCache } from "./cache";
 import { waitingSince } from "./risk";
 import { notify, useReviewNotifications } from "./notify";
 
@@ -35,8 +33,39 @@ interface Loaded {
   details: PrDetails;
   bodyHtml: string;
   files: FileData[];
+  /** The raw diff, to keep the parsed files (and their highlighting) when a refresh finds no change. */
+  diff: string;
   issues: LinkedIssue[];
   threads: ReviewThread[];
+}
+
+/** Recently opened or prefetched PRs; opening one shows this copy while GitHub is asked again. */
+const prCache = new LruCache<Loaded>(25);
+const inflight = new Map<string, Promise<{ details: PrDetails; diff: string }>>();
+
+/** Details and diff for a PR, sharing a request already in flight (from a hover, say). */
+function fetchCore(pr: ReviewRequest) {
+  const k = prKey(pr);
+  let req = inflight.get(k);
+  if (!req) {
+    const repo = pr.repository.nameWithOwner;
+    req = Promise.all([api.prDetails(repo, pr.number), api.prDiff(repo, pr.number)])
+      .then(([details, diff]) => ({ details, diff }))
+      .finally(() => inflight.delete(k));
+    inflight.set(k, req);
+  }
+  return req;
+}
+
+/** Starts loading a PR the user is likely to open next. */
+function prefetchPr(pr: ReviewRequest) {
+  const k = prKey(pr);
+  if (prCache.get(k) || inflight.has(k)) return;
+  fetchCore(pr)
+    .then(({ details, diff }) => {
+      if (!prCache.get(k)) prCache.set(k, { key: k, details, diff, files: parseDiff(diff, { nearbySequences: "zip" }), bodyHtml: "", issues: [], threads: [] });
+    })
+    .catch(() => {});
 }
 
 type Pane = "inbox" | "outline" | "content";
@@ -68,8 +97,12 @@ const tokensOf = (e: ClaudeUsage) =>
   (e.usage?.input_tokens ?? 0) + (e.usage?.output_tokens ?? 0) + (e.usage?.cache_read_input_tokens ?? 0) + (e.usage?.cache_creation_input_tokens ?? 0);
 
 export default function App() {
-  const [requests, setRequests] = useState<ReviewRequest[] | null>(null);
-  const [myPrs, setMyPrs] = useState<ReviewRequest[] | null>(null);
+  // The last inbox shows at once; a refresh from GitHub replaces it.
+  const [inboxCache] = useState(readInboxCache);
+  const [requests, setRequests] = useState<ReviewRequest[] | null>(inboxCache?.requests ?? null);
+  const [myPrs, setMyPrs] = useState<ReviewRequest[] | null>(inboxCache?.myPrs ?? null);
+  /** Set once GitHub answered in this run, so automatic work never starts from the cached copy. */
+  const [inboxLive, setInboxLive] = useState(false);
   const [inboxView, setInboxView] = useStoredState<InboxView>("better-lgtm.inboxView", "review");
   const [inboxSort, setInboxSort] = useStoredState<SortKey>("better-lgtm.inboxSort", "risk");
   const [storedFilters, setInboxFilters] = useStoredState<Filters>("better-lgtm.inboxFilters", NO_FILTERS);
@@ -77,7 +110,7 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
-  const [syncedAt, setSyncedAt] = useState<number | null>(null);
+  const [syncedAt, setSyncedAt] = useState<number | null>(inboxCache?.syncedAt ?? null);
   const [settings, updateSettings] = useSettings();
   const updater = useUpdater(settings.autoUpdate);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -92,7 +125,7 @@ export default function App() {
   /** The last review posted from the app, per PR, so the status bar can link to it. */
   const [postedReviews, setPostedReviews] = useState<Record<string, string>>({});
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
-  const [orgs, setOrgs] = useState<{ login: string; orgs: string[] } | null>(null);
+  const [orgs, setOrgs] = useState<{ login: string; orgs: string[] } | null>(inboxCache?.orgs ?? null);
   const [orgsError, setOrgsError] = useState<string | null>(null);
   const [configReady, setConfigReady] = useState(false);
   const [inboxOpen, setInboxOpen] = useStoredState("better-lgtm.inboxOpen", true);
@@ -128,6 +161,8 @@ export default function App() {
   const session = key ? sessions[key] ?? emptySession() : null;
   const analysis = session?.analysis;
 
+  useEffect(preloadViews, []);
+
   // The backend needs tool paths, the data folder and Claude options before it runs anything.
   useEffect(() => {
     api
@@ -143,7 +178,13 @@ export default function App() {
 
   const reloadOrgs = useCallback(() => {
     setOrgsError(null);
-    api.listOrgs().then(setOrgs).catch((e) => setOrgsError(errorText(e)));
+    api
+      .listOrgs()
+      .then((o) => {
+        setOrgs(o);
+        writeInboxCache({ orgs: o });
+      })
+      .catch((e) => setOrgsError(errorText(e)));
   }, []);
   useEffect(() => {
     if (configReady) reloadOrgs();
@@ -156,7 +197,10 @@ export default function App() {
       setRequests(review);
       setMyPrs(mine);
       setInboxError(null);
-      setSyncedAt(Date.now());
+      setInboxLive(true);
+      const now = Date.now();
+      setSyncedAt(now);
+      writeInboxCache({ requests: review, myPrs: mine, syncedAt: now });
     } catch (e) {
       setInboxError(errorText(e));
     } finally {
@@ -249,26 +293,45 @@ export default function App() {
     setSettingsOpen(true);
   };
 
-  // Load PR details and diff when the selection changes.
+  // Load PR details and diff when the selection changes. A cached copy shows at once; the details
+  // and diff come next, and the description, linked issues and conversations fill in after.
   useEffect(() => {
     if (!selected || !key) return;
     let stale = false;
     setLoadError(null);
     const repo = selected.repository.nameWithOwner;
+    const cached = prCache.get(key);
+    if (cached) setLoaded(cached);
+    let extras: Pick<Loaded, "bodyHtml" | "issues" | "threads"> | null = null;
+    const merge = (patch: Partial<Loaded>) =>
+      setLoaded((l) => (l && l.key === key ? { ...l, ...patch } : l));
+    fetchCore(selected)
+      .then(({ details, diff }) => {
+        if (stale) return;
+        setLoaded((l) => {
+          const prev = l && l.key === key ? l : prCache.get(key);
+          const files = prev && prev.diff === diff ? prev.files : parseDiff(diff, { nearbySequences: "zip" });
+          return { key, bodyHtml: "", issues: [], threads: [], ...prev, ...extras, details, diff, files };
+        });
+      })
+      .catch((e) => !stale && !cached && setLoadError(errorText(e)));
     Promise.all([
-      api.prDetails(repo, selected.number),
-      api.prDiff(repo, selected.number),
       // The rendered description is a nicety; fall back to the raw Markdown if it fails.
-      api.prBodyHtml(repo, selected.number).catch(() => ""),
-      api.linkedIssues(repo, selected.number).catch(() => [] as LinkedIssue[]),
-      api.reviewThreads(repo, selected.number).catch(() => [] as ReviewThread[]),
-    ])
-      .then(([details, diff, bodyHtml, issues, threads]) => !stale && setLoaded({ key, details, bodyHtml, issues, threads, files: parseDiff(diff, { nearbySequences: "zip" }) }))
-      .catch((e) => !stale && setLoadError(errorText(e)));
+      api.prBodyHtml(repo, selected.number).catch(() => cached?.bodyHtml ?? ""),
+      api.linkedIssues(repo, selected.number).catch(() => cached?.issues ?? ([] as LinkedIssue[])),
+      api.reviewThreads(repo, selected.number).catch(() => cached?.threads ?? ([] as ReviewThread[])),
+    ]).then(([bodyHtml, issues, threads]) => {
+      if (stale) return;
+      extras = { bodyHtml, issues, threads };
+      merge(extras);
+    });
     return () => {
       stale = true;
     };
   }, [selected, key]);
+  useEffect(() => {
+    if (loaded) prCache.set(loaded.key, loaded);
+  }, [loaded]);
 
   const setRun = (k: string, fn: (r: RunState) => RunState) =>
     setRuns((all) => ({ ...all, [k]: fn(all[k] ?? { running: false, step: "", log: [] }) }));
@@ -706,7 +769,7 @@ export default function App() {
   // Auto-analyze: review requests that arrived after it was turned on, a few at a time.
   const autoTried = useRef(new Set<string>());
   const autoQueue = useMemo(() => {
-    if (!settings.autoAnalyze || !visibleRequests) return [];
+    if (!settings.autoAnalyze || !visibleRequests || !inboxLive) return [];
     const since = settings.autoAnalyzeSince ?? Date.now();
     return visibleRequests.filter((pr) => {
       const k = prKey(pr);
@@ -714,7 +777,7 @@ export default function App() {
       if (pr.isDraft && !settings.autoAnalyzeDrafts) return false;
       return new Date(waitingSince(pr)).getTime() >= since;
     });
-  }, [settings.autoAnalyze, settings.autoAnalyzeSince, settings.autoAnalyzeDrafts, visibleRequests, sessions, runs]);
+  }, [settings.autoAnalyze, settings.autoAnalyzeSince, settings.autoAnalyzeDrafts, visibleRequests, sessions, runs, inboxLive]);
   useEffect(() => {
     const free = settings.autoAnalyzeLimit - analyzing.size;
     for (const pr of autoQueue.slice(0, Math.max(0, free))) {
@@ -807,7 +870,7 @@ export default function App() {
     { id: "github", menu: "File", label: "Open pull request on GitHub", enabled: !!selected, run: () => selected && openUrl(selected.url), separatorBefore: true },
     { id: "editor", menu: "File", label: "Open worktree in VS Code", enabled: !!session?.worktree, run: openInEditor },
     { id: "settings", menu: "File", label: "Settings…", keys: { key: ",", ctrl: true }, run: () => openSettings("general"), separatorBefore: true },
-    { id: "quit", menu: "File", label: "Quit", keys: { key: "q", ctrl: true }, run: () => getCurrentWindow().close(), separatorBefore: true },
+    { id: "quit", menu: "File", label: "Quit", keys: { key: "q", ctrl: true }, run: () => (flushSessions(), getCurrentWindow().close()), separatorBefore: true },
 
     { id: "filters", menu: "View", label: "Sort and filter…", run: () => setFiltersOpen(true) },
     { id: "palette", menu: "View", label: "Go to…", keys: { key: "k", ctrl: true }, run: () => setPaletteOpen(true) },
@@ -996,6 +1059,7 @@ export default function App() {
       {recheck?.error && <div className="since-bar tone-high" role="alert">{recheck.error}</div>}
       {since?.error && <div className="since-bar tone-high" role="alert">{since.error}</div>}
       <div style={{ flex: 1, minHeight: 0 }}>
+        <Suspense fallback={<div className="empty"><Loader size={18} className="spin" /></div>}>
         {loadError && <p className="selectable" style={{ margin: 16, color: "var(--crit)" }}>{loadError}</p>}
         {!loadError && !details && <div className="empty"><Loader size={18} className="spin" /></div>}
         {details && tab === "analysis" && (
@@ -1082,6 +1146,7 @@ export default function App() {
             onStepFinding={stepFinding}
           />
         )}
+        </Suspense>
       </div>
     </div>
   );
@@ -1100,6 +1165,7 @@ export default function App() {
       />
       {settingsOpen && (
         <div style={{ flex: 1, minHeight: 0 }}>
+          <Suspense fallback={null}>
           <Settings
             settings={settings}
             update={updateSettings}
@@ -1112,12 +1178,14 @@ export default function App() {
             onClearData={clearAll}
             onClose={() => setSettingsOpen(false)}
           />
+          </Suspense>
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0, display: settingsOpen ? "none" : "flex" }}>
         {inboxMode === "rail" && (
           <div style={{ width: 52, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
             <InboxRail
+              onPrefetch={prefetchPr}
               requests={inboxList}
               selected={key}
               sessions={sessions}
@@ -1133,6 +1201,7 @@ export default function App() {
             <>
               <Panel id="inbox" defaultSize={compact ? 260 : 280} minSize={220} maxSize={420}>
                 <Inbox
+                  onPrefetch={prefetchPr}
                   view={inboxView}
                   counts={{ review: visibleRequests?.length ?? 0, mine: visibleMine?.length ?? 0 }}
                   onViewChange={setInboxView}
@@ -1198,6 +1267,7 @@ export default function App() {
         {details && <span className="sb opt ellipsis"><GitBranch size={13} />{details.headRefName} @ {details.headRefOid.slice(0, 7)}</span>}
         <span className="sb opt"><Lock size={13} />Read-only</span>
       </footer>
+      <Suspense fallback={null}>
       {paletteOpen && <CommandPalette items={paletteItems} extra={openPrItem} onClose={() => setPaletteOpen(false)} />}
       {descOpen && details && (
         <DescriptionDialog current={details.body ?? ""} onDraft={draftDescription} onSave={saveDescription} onClose={() => setDescOpen(false)} />
@@ -1251,6 +1321,7 @@ export default function App() {
         />
       )}
       {infoDialog && <InfoDialog kind={infoDialog} commands={commands} vim={settings.vimKeys} onClose={() => setInfoDialog(null)} />}
+      </Suspense>
     </div>
   );
 }

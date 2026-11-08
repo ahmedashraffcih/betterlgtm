@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Decoration, Diff, Hunk, getChangeKey, type FileData, type HunkData, type RenderGutter } from "react-diff-view";
 import type { Anchor, Finding, WalkStep } from "../analysis";
 import { allReviewed, changesInRange, filePath, fileStats, findFile, hunkKey, hunksForRanges, isGenerated } from "../diffUtils";
-import { highlightHunks } from "../highlight";
+import { useTokens } from "../highlightAsync";
 import { useElementWidth } from "../hooks";
 import { fileIcon } from "../icons";
 import { DiffModeSwitch, type DiffMode } from "./DiffView";
@@ -84,7 +84,7 @@ function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; revi
     );
     return m;
   }, [part, p.findings]);
-  const tokens = useMemo(() => (open ? highlightHunks(part.hunks, path) : null), [open, part, path]);
+  const tokens = useTokens(part.hunks, path, open);
   const renderGutter: RenderGutter = ({ change, side, renderDefault }) => {
     const n = markers.get(getChangeKey(change));
     return (

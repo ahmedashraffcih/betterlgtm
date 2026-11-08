@@ -49,23 +49,47 @@ export function emptySession(): PrSession {
   return { chat: [], inReview: [] };
 }
 
+// Sessions hold chats and analyses, so writing all of them on every change is slow; writes are batched.
+let unsaved: Record<string, PrSession> | null = null;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Writes pending session changes now (before quitting or restarting). */
+export function flushSessions() {
+  clearTimeout(saveTimer);
+  if (!unsaved) return;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(unsaved));
+  } catch {
+    // storage full or unavailable: keep the in-memory copy
+  }
+  unsaved = null;
+}
+
+function save(all: Record<string, PrSession>) {
+  unsaved = all;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSessions, 800);
+}
+
+window.addEventListener("pagehide", flushSessions);
+window.addEventListener("beforeunload", flushSessions);
+document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && flushSessions());
+
 export function useSessions() {
   const [sessions, setSessions] = useState<Record<string, PrSession>>(load);
 
   const update = useCallback((key: string, fn: (s: PrSession) => PrSession) => {
     setSessions((all) => {
       const next = { ...all, [key]: fn(all[key] ?? emptySession()) };
-      try {
-        localStorage.setItem(KEY, JSON.stringify(next));
-      } catch {
-        // storage full or unavailable: keep the in-memory copy
-      }
+      save(next);
       return next;
     });
   }, []);
 
   const clearAll = useCallback(() => {
     setSessions({});
+    unsaved = null;
+    clearTimeout(saveTimer);
     try {
       localStorage.removeItem(KEY);
     } catch {

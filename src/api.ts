@@ -1,9 +1,10 @@
 import { Channel, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { inTauri, mockInvoke } from "./mock";
 
-// Outside Tauri (browser preview during development) the backend is replaced by sample data.
+// Outside Tauri (browser preview during development, or a VITE_MOCK=1 build) the backend is replaced by sample data.
+const useMock = !inTauri && (import.meta.env.DEV || import.meta.env.VITE_MOCK === "1");
 const invoke = <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
-  inTauri || !import.meta.env.DEV ? tauriInvoke<T>(cmd, args) : (mockInvoke(cmd, args) as Promise<T>);
+  useMock ? (mockInvoke(cmd, args) as Promise<T>) : tauriInvoke<T>(cmd, args);
 
 export interface ReviewRequest {
   number: number;
@@ -148,7 +149,7 @@ export const api = {
     resume: string | undefined,
     onEvent: (e: ClaudeEvent) => void,
   ) => {
-    if (!inTauri && import.meta.env.DEV) {
+    if (useMock) {
       return mockInvoke("claude_run", { runId, cwd, prompt }, onEvent) as Promise<void>;
     }
     const channel = new Channel<ClaudeEvent>();

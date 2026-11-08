@@ -3,6 +3,7 @@ import { Minus, PanelBottom, PanelLeft, Search, Settings2, Square, X } from "luc
 import type { Command } from "../commands";
 import { Logo } from "./Logo";
 import { MenuBar } from "./MenuBar";
+import { flushSessions } from "../sessions";
 
 interface Props {
   title: string;
@@ -40,7 +41,7 @@ export function TitleBar({ title, commands, inboxOpen, chatOpen, onToggleInbox, 
       <span style={{ width: 12 }} />
       <button type="button" className="wc" aria-label="Minimize" onClick={() => win().minimize()}><Minus size={14} /></button>
       <button type="button" className="wc" aria-label="Maximize" onClick={() => win().toggleMaximize()}><Square size={12} /></button>
-      <button type="button" className="wc close" aria-label="Close" onClick={() => win().close()}><X size={14} /></button>
+      <button type="button" className="wc close" aria-label="Close" onClick={() => (flushSessions(), win().close())}><X size={14} /></button>
     </header>
   );
 }

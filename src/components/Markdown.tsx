@@ -1,8 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import DOMPurify from "dompurify";
-import type { MouseEvent } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Suspense, type MouseEvent } from "react";
+import { MarkdownRenderer } from "../lazy";
 
 /** Links in rendered content open in the system browser, never inside the app window. */
 function openLinksExternally(e: MouseEvent<HTMLElement>) {
@@ -17,7 +16,9 @@ function openLinksExternally(e: MouseEvent<HTMLElement>) {
 export function Markdown({ text, className = "" }: { text: string; className?: string }) {
   return (
     <div className={`md ${className}`} onClick={openLinksExternally}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      <Suspense fallback={<p style={{ whiteSpace: "pre-wrap" }}>{text}</p>}>
+        <MarkdownRenderer text={text} />
+      </Suspense>
     </div>
   );
 }
