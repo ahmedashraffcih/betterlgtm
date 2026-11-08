@@ -1,132 +1,11 @@
 import { Building2, ListFilter, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, CircleX, EyeOff, Funnel, Loader, OctagonExclamationPoint, PencilLine, RefreshCw, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReviewRequest } from "../api";
-import { prRisk, RISK_RANK, waitingSince } from "../risk";
-import { useStoredState, type PrSession } from "../sessions";
+import { COMPARE, matchesFilters, type Filters, type SortKey } from "../inboxFilters";
+import { prRisk, waitingSince } from "../risk";
+import type { PrSession } from "../sessions";
 
 export type InboxView = "review" | "mine";
-type SortKey = "risk" | "waiting" | "size" | "updated";
-
-const SORTS: [SortKey, string][] = [
-  ["risk", "Riskiest first"],
-  ["waiting", "Waiting longest"],
-  ["size", "Largest first"],
-  ["updated", "Recently updated"],
-];
-
-interface Filters {
-  ci: "any" | "passing" | "failing" | "running";
-  risk: "any" | "high" | "medium";
-  review: "any" | "waiting" | "approved" | "changes";
-  analysis: "any" | "none" | "done";
-}
-
-const NO_FILTERS: Filters = { ci: "any", risk: "any", review: "any", analysis: "any" };
-
-const FILTER_GROUPS: { key: keyof Filters; label: string; options: [string, string][] }[] = [
-  { key: "ci", label: "CI", options: [["any", "Any"], ["passing", "Passing"], ["failing", "Failing"], ["running", "Running"]] },
-  { key: "risk", label: "Risk", options: [["any", "Any"], ["medium", "Medium+"], ["high", "High"]] },
-  { key: "review", label: "Review", options: [["any", "Any"], ["waiting", "Pending"], ["changes", "Changes"], ["approved", "Approved"]] },
-  { key: "analysis", label: "Analysis", options: [["any", "Any"], ["none", "Not yet"], ["done", "Analyzed"]] },
-];
-
-function matchesFilters(pr: ReviewRequest, f: Filters, analyzed: boolean): boolean {
-  const ci = pr.ci === "SUCCESS" ? "passing" : pr.ci === "FAILURE" || pr.ci === "ERROR" ? "failing" : pr.ci ? "running" : null;
-  if (f.ci !== "any" && ci !== f.ci) return false;
-  const risk = prRisk(pr).level;
-  if (f.risk === "high" && risk !== "high") return false;
-  if (f.risk === "medium" && risk === "low") return false;
-  if (f.review === "approved" && pr.reviewDecision !== "APPROVED") return false;
-  if (f.review === "changes" && pr.reviewDecision !== "CHANGES_REQUESTED") return false;
-  if (f.review === "waiting" && (pr.reviewDecision === "APPROVED" || pr.reviewDecision === "CHANGES_REQUESTED")) return false;
-  if (f.analysis === "none" && analyzed) return false;
-  if (f.analysis === "done" && !analyzed) return false;
-  return true;
-}
-
-/** Sort and filter menu behind the icon next to the filter box. Choices are kept across restarts. */
-function ViewMenu(p: {
-  sort: SortKey;
-  onSort: (s: SortKey) => void;
-  filters: Filters;
-  onFilters: (f: Filters) => void;
-  showDrafts: boolean;
-  onShowDrafts: (v: boolean) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent | KeyboardEvent) => {
-      if (e instanceof KeyboardEvent ? e.key === "Escape" : !root.current?.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", close);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("keydown", close);
-    };
-  }, [open]);
-  const active = FILTER_GROUPS.filter((g) => p.filters[g.key] !== "any").length + (p.showDrafts ? 0 : 1);
-  return (
-    <div ref={root} style={{ position: "relative" }}>
-      <button
-        type="button"
-        className={open ? "tb on view-btn" : "tb view-btn"}
-        aria-label="Sort and filter"
-        aria-expanded={open}
-        title={active ? `Sort and filter (${active} filter${active === 1 ? "" : "s"} on)` : "Sort and filter"}
-        onClick={() => setOpen(!open)}
-      >
-        <ListFilter size={15} />
-        {active > 0 && <span className="view-dot" aria-hidden="true" />}
-      </button>
-      {open && (
-        <div className="menu-pop view-pop" role="dialog" aria-label="Sort and filter">
-          <div className="menu-head">Sort</div>
-          {SORTS.map(([k, label]) => (
-            <button key={k} type="button" role="menuitemradio" aria-checked={p.sort === k} className="menu-item" onClick={() => p.onSort(k)}>
-              <span className="menu-check">{p.sort === k && <Check size={13} />}</span>
-              {label}
-            </button>
-          ))}
-          <div className="menu-sep" role="separator" />
-          {FILTER_GROUPS.map((g) => (
-            <div key={g.key} className="view-group">
-              <span className="view-label">{g.label}</span>
-              <div className="seg view-seg" role="radiogroup" aria-label={g.label}>
-                {g.options.map(([v, label]) => (
-                  <button key={v} type="button" role="radio" aria-checked={p.filters[g.key] === v} className={p.filters[g.key] === v ? "on" : ""} onClick={() => p.onFilters({ ...p.filters, [g.key]: v })}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-          <label className="menu-item" style={{ cursor: "default" }}>
-            <span className="menu-check"><input type="checkbox" checked={p.showDrafts} onChange={(e) => p.onShowDrafts(e.target.checked)} style={{ margin: 0, accentColor: "var(--accent)" }} /></span>
-            Show drafts
-          </label>
-          <div className="menu-sep" role="separator" />
-          <button type="button" className="menu-item" disabled={!active} onClick={() => { p.onFilters(NO_FILTERS); p.onShowDrafts(true); }}>
-            <span className="menu-check" />Clear filters
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-const time = (iso?: string | null) => (iso ? new Date(iso).getTime() : 0);
-const lines = (pr: ReviewRequest) => (pr.additions ?? 0) + (pr.deletions ?? 0);
-
-const COMPARE: Record<SortKey, (a: ReviewRequest, b: ReviewRequest) => number> = {
-  risk: (a, b) => RISK_RANK[prRisk(a).level] - RISK_RANK[prRisk(b).level] || time(waitingSince(a)) - time(waitingSince(b)),
-  waiting: (a, b) => time(waitingSince(a)) - time(waitingSince(b)),
-  size: (a, b) => lines(b) - lines(a),
-  updated: (a, b) => time(b.updatedAt) - time(a.updatedAt),
-};
-
 /** CI state, review decision, size and risk under a PR's title. */
 function RowFacts({ pr }: { pr: ReviewRequest }) {
   const risk = prRisk(pr);
@@ -160,8 +39,12 @@ function RowFacts({ pr }: { pr: ReviewRequest }) {
 interface Props {
   view: InboxView;
   counts: Record<InboxView, number>;
-  showDrafts: boolean;
-  onShowDrafts: (v: boolean) => void;
+  sort: SortKey;
+  filters: Filters;
+  /** How many filters are on, for the dot on the filter button. */
+  activeFilters: number;
+  onOpenFilters: () => void;
+  onClearFilters: () => void;
   onViewChange: (view: InboxView) => void;
   /** Already filtered by the organization and draft settings. */
   requests: ReviewRequest[] | null;
@@ -224,9 +107,7 @@ export function InboxRail(p: Pick<Props, "requests" | "selected" | "sessions" | 
 export function Inbox(p: Props) {
   const [filter, setFilter] = useState("");
   const [collapsed, setCollapsed] = useState<string[]>([]);
-  const [sort, setSort] = useStoredState<SortKey>("better-lgtm.inboxSort", "risk");
-  const [storedFilters, setFilters] = useStoredState<Filters>("better-lgtm.inboxFilters", NO_FILTERS);
-  const filters = { ...NO_FILTERS, ...storedFilters };
+  const { sort, filters } = p;
 
   const groups = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -240,7 +121,7 @@ export function Inbox(p: Props) {
     }
     for (const prs of map.values()) prs.sort(COMPARE[sort]);
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [p.requests, filter, sort, storedFilters, p.sessions]);
+  }, [p.requests, filter, sort, filters, p.sessions]);
 
   const visibleCount = groups.reduce((n, [, prs]) => n + prs.length, 0);
 
@@ -269,13 +150,22 @@ export function Inbox(p: Props) {
           <Funnel size={14} />
           <input data-key="filter" placeholder="Filter" aria-label="Filter pull requests" value={filter} onChange={(e) => setFilter(e.target.value)} />
         </label>
-        <ViewMenu sort={sort} onSort={setSort} filters={filters} onFilters={setFilters} showDrafts={p.showDrafts} onShowDrafts={p.onShowDrafts} />
+        <button
+          type="button"
+          className="tb view-btn"
+          aria-label="Sort and filter"
+          title={p.activeFilters ? `Sort and filter (${p.activeFilters} on)` : "Sort and filter"}
+          onClick={p.onOpenFilters}
+        >
+          <ListFilter size={15} />
+          {p.activeFilters > 0 && <span className="view-dot" aria-hidden="true" />}
+        </button>
       </div>
       <div className="scroll" style={{ padding: "0 6px 8px", display: "flex", flexDirection: "column", gap: 1 }}>
         {p.error && <p className="selectable" style={{ margin: 8, color: "var(--crit)", fontSize: 12 }}>{p.error}</p>}
         {!p.error && p.requests && visibleCount === 0 && (
           <p style={{ margin: "12px 8px", fontSize: 12 }} className="muted">{(p.requests?.length ?? 0) > 0 ? (
-              <>No pull requests match your filters. <button type="button" className="link" onClick={() => { setFilter(""); setFilters(NO_FILTERS); p.onShowDrafts(true); }}>Clear filters</button></>
+              <>No pull requests match your filters. <button type="button" className="link" onClick={() => { setFilter(""); p.onClearFilters(); }}>Clear filters</button></>
             ) : p.view === "mine" ? "You have no open pull requests in the organizations you show." : "No review requests in the organizations you show."}</p>
         )}
         {groups.map(([org, prs]) => {
@@ -332,7 +222,7 @@ export function Inbox(p: Props) {
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px 6px 12px", borderTop: "1px solid var(--line)", fontSize: 12 }} className="muted">
         {p.hiddenCount > 0 ? <EyeOff size={13} /> : <Building2 size={13} />}
         <span style={{ flex: 1 }} className="ellipsis">
-          {p.hiddenCount > 0 ? `${p.hiddenCount} hidden by your organization settings` : "Showing all organizations"}
+          {p.hiddenCount > 0 ? `${p.hiddenCount} hidden by organization, repository or draft settings` : "Showing all organizations"}
         </span>
         <button type="button" className="btn sm" onClick={p.onManage}>Organizations…</button>
       </div>

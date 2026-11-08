@@ -17,6 +17,8 @@ export interface Settings {
   hiddenOrgs: string[];
   /** Used in "selected" mode: the only organizations shown. */
   selectedOrgs: string[];
+  /** Repositories (owner/name) left out of the inbox, in any mode. */
+  hiddenRepos: string[];
   includePersonal: boolean;
   includeTeams: boolean;
   showDrafts: boolean;
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   orgMode: "all",
   hiddenOrgs: [],
   selectedOrgs: [],
+  hiddenRepos: [],
   includePersonal: true,
   includeTeams: true,
   showDrafts: true,

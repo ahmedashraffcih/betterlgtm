@@ -17,6 +17,8 @@ import { matches, shortcutLabel, type Command } from "./commands";
 import { CommandPalette, type PaletteItem } from "./components/CommandPalette";
 import { InfoDialog } from "./components/InfoDialog";
 import { SubmitReview } from "./components/SubmitReview";
+import { FilterDialog, type OwnerRow, type RepoRow } from "./components/FilterDialog";
+import { FILTER_GROUPS, NO_FILTERS, type Filters, type SortKey } from "./inboxFilters";
 import { ReviewStatus } from "./components/ReviewStatus";
 import { filePath } from "./diffUtils";
 import { fileIcon, SEVERITY } from "./icons";
@@ -65,6 +67,10 @@ export default function App() {
   const [requests, setRequests] = useState<ReviewRequest[] | null>(null);
   const [myPrs, setMyPrs] = useState<ReviewRequest[] | null>(null);
   const [inboxView, setInboxView] = useStoredState<InboxView>("better-lgtm.inboxView", "review");
+  const [inboxSort, setInboxSort] = useStoredState<SortKey>("better-lgtm.inboxSort", "risk");
+  const [storedFilters, setInboxFilters] = useStoredState<Filters>("better-lgtm.inboxFilters", NO_FILTERS);
+  const inboxFilters = { ...NO_FILTERS, ...storedFilters };
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
@@ -186,7 +192,12 @@ export default function App() {
   /** PRs that pass the organization and draft settings. */
   const visibleOf = useCallback(
     (list: ReviewRequest[] | null) =>
-      list?.filter((r) => (settings.showDrafts || !r.isDraft) && ownerVisible(settings, r.repository.nameWithOwner.split("/")[0], orgs?.orgs ?? null)) ?? null,
+      list?.filter(
+        (r) =>
+          (settings.showDrafts || !r.isDraft) &&
+          ownerVisible(settings, r.repository.nameWithOwner.split("/")[0], orgs?.orgs ?? null) &&
+          !settings.hiddenRepos.includes(r.repository.nameWithOwner),
+      ) ?? null,
     [settings, orgs],
   );
   const visibleRequests = useMemo(() => visibleOf(requests), [visibleOf, requests]);
@@ -195,10 +206,38 @@ export default function App() {
   useReviewNotifications(visibleRequests, settings.notifications);
   const hiddenCount = inboxView === "mine" ? (myPrs?.length ?? 0) - (visibleMine?.length ?? 0) : (requests?.length ?? 0) - (visibleRequests?.length ?? 0);
   /** The inbox's "hide" button: drops an organization, or personal repositories, from the inbox. */
-  const hideOwner = (owner: string) => {
-    if (orgs && !orgs.orgs.includes(owner)) updateSettings({ includePersonal: false });
-    else if (settings.orgMode === "all") updateSettings({ hiddenOrgs: [...new Set([...settings.hiddenOrgs, owner])] });
-    else updateSettings({ selectedOrgs: settings.selectedOrgs.filter((o) => o !== owner) });
+  /** Shows or hides an organization (or personal repositories) in the inbox, following the organization mode. */
+  const setOwnerVisible = (owner: string, show: boolean) => {
+    if (orgs && !orgs.orgs.includes(owner)) updateSettings({ includePersonal: show });
+    else if (settings.orgMode === "all")
+      updateSettings({ hiddenOrgs: show ? settings.hiddenOrgs.filter((o) => o !== owner) : [...new Set([...settings.hiddenOrgs, owner])] });
+    else updateSettings({ selectedOrgs: show ? [...new Set([...settings.selectedOrgs, owner])] : settings.selectedOrgs.filter((o) => o !== owner) });
+  };
+  const hideOwner = (owner: string) => setOwnerVisible(owner, false);
+  const setRepoVisible = (repo: string, show: boolean) =>
+    updateSettings({ hiddenRepos: show ? settings.hiddenRepos.filter((r) => r !== repo) : [...new Set([...settings.hiddenRepos, repo])] });
+
+  // Every owner and repository with an open PR in either list, for the filter dialog.
+  const allPrs = useMemo(() => [...(requests ?? []), ...(myPrs ?? [])], [requests, myPrs]);
+  const ownerRows: OwnerRow[] = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const pr of allPrs) {
+      const owner = pr.repository.nameWithOwner.split("/")[0];
+      counts.set(owner, (counts.get(owner) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count, visible: ownerVisible(settings, name, orgs?.orgs ?? null), personal: !!orgs && !orgs.orgs.includes(name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allPrs, settings, orgs]);
+  const repoRows: RepoRow[] = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const pr of allPrs) counts.set(pr.repository.nameWithOwner, (counts.get(pr.repository.nameWithOwner) ?? 0) + 1);
+    return [...counts.entries()].map(([name, count]) => ({ name, count, visible: !settings.hiddenRepos.includes(name) })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allPrs, settings.hiddenRepos]);
+  const activeFilters = FILTER_GROUPS.filter((g) => inboxFilters[g.key] !== "any").length + (settings.showDrafts ? 0 : 1) + (settings.hiddenRepos.length ? 1 : 0);
+  const clearFilters = () => {
+    setInboxFilters(NO_FILTERS);
+    updateSettings({ showDrafts: true, hiddenRepos: [] });
   };
   const openSettings = (section: SettingsSection) => {
     setSettingsSection(section);
@@ -429,7 +468,7 @@ export default function App() {
       if (e.key === "Escape" && t instanceof HTMLElement && !paletteOpen && !reviewOpen) t.blur();
       return;
     }
-    if (!settings.vimKeys || paletteOpen || infoDialog || reviewOpen || settingsOpen || e.metaKey || e.altKey) return;
+    if (!settings.vimKeys || paletteOpen || infoDialog || reviewOpen || filtersOpen || settingsOpen || e.metaKey || e.altKey) return;
     // A focused button already handles Enter and Space itself.
     if (t instanceof HTMLButtonElement && (e.key === "Enter" || e.key === " ")) return;
 
@@ -622,6 +661,7 @@ export default function App() {
     { id: "settings", menu: "File", label: "Settings…", keys: { key: ",", ctrl: true }, run: () => openSettings("general"), separatorBefore: true },
     { id: "quit", menu: "File", label: "Quit", keys: { key: "q", ctrl: true }, run: () => getCurrentWindow().close(), separatorBefore: true },
 
+    { id: "filters", menu: "View", label: "Sort and filter…", run: () => setFiltersOpen(true) },
     { id: "palette", menu: "View", label: "Go to…", keys: { key: "k", ctrl: true }, run: () => setPaletteOpen(true) },
     { id: "inbox", menu: "View", label: "Inbox panel", checked: inboxOpen, keys: { key: "b", ctrl: true }, run: () => setInboxOpen(!inboxOpen), separatorBefore: true },
     { id: "chat", menu: "View", label: "Claude panel", checked: chatOpen, keys: { key: "j", ctrl: true }, run: () => setChatOpen(!chatOpen) },
@@ -917,8 +957,11 @@ export default function App() {
                   view={inboxView}
                   counts={{ review: visibleRequests?.length ?? 0, mine: visibleMine?.length ?? 0 }}
                   onViewChange={setInboxView}
-                  showDrafts={settings.showDrafts}
-                  onShowDrafts={(v) => updateSettings({ showDrafts: v })}
+                  sort={inboxSort}
+                  filters={inboxFilters}
+                  activeFilters={activeFilters}
+                  onOpenFilters={() => setFiltersOpen(true)}
+                  onClearFilters={clearFilters}
                   requests={inboxList}
                   hiddenCount={hiddenCount}
                   error={inboxError}
@@ -976,6 +1019,23 @@ export default function App() {
         <span className="sb opt"><Lock size={13} />Read-only</span>
       </footer>
       {paletteOpen && <CommandPalette items={paletteItems} extra={openPrItem} onClose={() => setPaletteOpen(false)} />}
+      {filtersOpen && (
+        <FilterDialog
+          sort={inboxSort}
+          onSort={setInboxSort}
+          filters={inboxFilters}
+          onFilters={setInboxFilters}
+          showDrafts={settings.showDrafts}
+          onShowDrafts={(v) => updateSettings({ showDrafts: v })}
+          owners={ownerRows}
+          onOwner={setOwnerVisible}
+          repos={repoRows}
+          onRepo={setRepoVisible}
+          onClear={clearFilters}
+          onManageOrgs={() => { setFiltersOpen(false); openSettings("orgs"); }}
+          onClose={() => setFiltersOpen(false)}
+        />
+      )}
       {reviewOpen && selected && details && key && (
         <SubmitReview
           repo={selected.repository.nameWithOwner}
