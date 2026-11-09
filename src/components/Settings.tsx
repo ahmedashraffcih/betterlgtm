@@ -15,7 +15,8 @@ interface Props {
   requests: ReviewRequest[] | null;
   onReloadOrgs: () => void;
   onClearData: () => void;
-  onClose: () => void;
+  /** Absent in the separate Settings window, which closes like any window. */
+  onClose?: () => void;
 }
 
 const SECTIONS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
@@ -187,7 +188,7 @@ export function Settings(p: Props) {
       <nav className="settings-nav" aria-label="Settings sections">
         <div style={{ display: "flex", alignItems: "center", height: 30, padding: "0 4px 0 10px", marginBottom: 4 }}>
           <span style={{ flex: 1, fontSize: 12, fontWeight: 600 }} className="muted">Settings</span>
-          <button type="button" className="tb" aria-label="Close settings (Esc)" title="Close (Esc)" onClick={p.onClose}><X size={15} /></button>
+          {p.onClose && <button type="button" className="tb" aria-label="Close settings (Esc)" title="Close (Esc)" onClick={p.onClose}><X size={15} /></button>}
         </div>
         {SECTIONS.map((x) => (
           <button key={x.id} type="button" className={p.section === x.id ? "row sel" : "row"} aria-current={p.section === x.id ? "page" : undefined} onClick={() => p.onSection(x.id)}>

@@ -2,13 +2,13 @@ import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { shortcutLabel, type Command } from "../commands";
+import { comboLabel, controlLabel, shortcutLabel, type Command } from "../commands";
 import { Logo } from "./Logo";
 
 /** Keys handled outside the command list. */
 const OTHER_KEYS: [string, string][] = [
-  ["Enter", "Send a chat message"],
-  ["Shift+Enter", "New line in a chat message"],
+  [comboLabel({ key: "Enter" }), "Send a chat message"],
+  [comboLabel({ key: "Enter", shift: true }), "New line in a chat message"],
   ["Esc", "Leave a text field; close menus, dialogs and Settings"],
 ];
 
@@ -18,7 +18,7 @@ const VIM_KEYS: [string, string][] = [
   ["j / k", "Next / previous item, or scroll the content"],
   ["gg / G", "First / last item, or top / bottom"],
   ["Enter", "Go into the next pane"],
-  ["Ctrl+D / Ctrl+U", "Scroll the content half a page"],
+  [`${controlLabel("d")} / ${controlLabel("u")}`, "Scroll the content half a page"],
   ["n / N", "Next / previous finding"],
   ["] / [", "Next / previous file or section"],
   ["1 / 2", "Analysis / Diff"],

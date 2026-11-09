@@ -2,6 +2,7 @@ mod claude;
 mod config;
 mod gh;
 mod process;
+mod window;
 mod worktree;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -16,6 +17,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_window_state::Builder::new().with_denylist(&["settings"]).build())
         .manage(claude::Runs::default())
         .manage(config::ConfigState::default())
         .invoke_handler(tauri::generate_handler![
@@ -40,6 +42,7 @@ pub fn run() {
             worktree::search_worktree,
             claude::claude_run,
             claude::claude_cancel,
+            window::enable_mica,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

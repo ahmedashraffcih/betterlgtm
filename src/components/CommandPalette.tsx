@@ -10,7 +10,7 @@ export interface PaletteItem {
   run: () => void;
 }
 
-/** Ctrl+K: jump to a pull request, finding, section or file, or run a command. */
+/** ⌘K / Ctrl+K: jump to a pull request, finding, section or file, or run a command. */
 export function CommandPalette({ items, onClose, extra }: { items: PaletteItem[]; onClose: () => void; /** An item built from the query itself, shown first. */ extra?: (query: string) => PaletteItem | null }) {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);

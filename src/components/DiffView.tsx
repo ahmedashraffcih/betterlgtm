@@ -7,6 +7,7 @@ import {
 import type { Anchor, Finding } from "../analysis";
 import { SEVERITY, fileIcon } from "../icons";
 import { allReviewed, changeKeys, changesInRange, filePath, fileStats, findFile, hunkKey, isGenerated } from "../diffUtils";
+import { contextMenu, copyText } from "../contextMenu";
 import { useTokens } from "../highlightAsync";
 import { useElementWidth } from "../hooks";
 
@@ -370,7 +371,19 @@ export function DiffView(p: Props) {
               const n = counts.get(fp);
               const done = isReviewed(f);
               return (
-                <button key={fp} type="button" data-nav className={file === f ? "file cur" : "file"} title={done ? `${fp} (reviewed)` : fp} onClick={() => p.onPickFile(fp)}>
+                <button
+                  key={fp}
+                  type="button"
+                  data-nav
+                  className={file === f ? "file cur" : "file"}
+                  title={done ? `${fp} (reviewed)` : fp}
+                  onClick={() => p.onPickFile(fp)}
+                  onContextMenu={contextMenu([
+                    { label: "Open", run: () => p.onPickFile(fp) },
+                    { label: done ? "Mark as not reviewed" : "Mark as reviewed", run: () => p.onReviewed(f.hunks.map((h) => hunkKey(f, h)), !done), separatorBefore: true },
+                    { label: "Copy path", run: () => copyText(fp), separatorBefore: true },
+                  ])}
+                >
                   {done ? <Check size={14} className={file === f ? undefined : "tone-ok"} strokeWidth={2.5} /> : <Icon size={14} />}
                   <span className="mono ellipsis" style={{ flex: 1, opacity: isGenerated(f) && file !== f ? 0.6 : 1 }}>{fp}</span>
                   {n ? <span className="rm" style={{ display: "inline-flex", alignItems: "center", gap: 2 }} title={`${n} ${n === 1 ? "finding" : "findings"}`}><Flag size={11} />{n}</span> : null}

@@ -11,9 +11,13 @@ import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import type { DiffMode } from "./components/DiffView";
 import { AnalysisView, CommandPalette, DescriptionDialog, DiffView, FilterDialog, GuidedReview, InfoDialog, preloadViews, Settings, SubmitReview } from "./lazy";
 import { Inbox, InboxRail, prKey, type InboxView } from "./components/Inbox";
-import { TitleBar } from "./components/TitleBar";
+import { Toolbar } from "./components/Toolbar";
 import { useElementWidth } from "./hooks";
-import { matches, shortcutLabel, type Command } from "./commands";
+import { comboLabel, matches, shortcutLabel, type Command } from "./commands";
+import { runOnce, useNativeMenu } from "./nativeMenu";
+import { closeSettingsWindow, EV as SETTINGS_EV, openSettingsWindow, SETTINGS_LABEL, useSettingsWindow, type SettingsData } from "./settingsWindow";
+import { emitTo, listen } from "@tauri-apps/api/event";
+import { inTauri } from "./mock";
 import type { PaletteItem } from "./components/CommandPalette";
 import type { OwnerRow, RepoRow } from "./components/FilterDialog";
 import { FILTER_GROUPS, NO_FILTERS, type Filters, type SortKey } from "./inboxFilters";
@@ -226,10 +230,12 @@ export default function App() {
       const t = e.target;
       const typing = t instanceof Element && !!t.closest("input, textarea, select");
       for (const c of commandsRef.current) {
-        // While typing, only Ctrl shortcuts and function keys apply, so letters still reach the field.
-        if (c.keys && c.enabled !== false && matches(e, c.keys) && (!typing || c.keys.ctrl || /^F\d+$/.test(c.keys.key))) {
+        if (c.enabled === false) continue;
+        // While typing, only ⌘/Ctrl shortcuts and function keys apply, so letters still reach the field.
+        const hit = [c.keys, ...(c.altKeys ?? [])].find((k) => k && matches(e, k) && (!typing || k.ctrl || /^F\d+$/.test(k.key)));
+        if (hit) {
           e.preventDefault();
-          c.run();
+          runOnce(c);
           return;
         }
       }
@@ -289,6 +295,7 @@ export default function App() {
     updateSettings({ showDrafts: true, hiddenRepos: [] });
   };
   const openSettings = (section: SettingsSection) => {
+    if (useSettingsWindow) return void openSettingsWindow(section);
     setSettingsSection(section);
     setSettingsOpen(true);
   };
@@ -863,10 +870,25 @@ export default function App() {
     onHide: () => setChatOpen(false),
   };
 
+  // ⌘F / Ctrl+F: the search lives in the file diff, so switch to it, then open or focus the search box.
+  const findInDiff = () => {
+    setTab("diff");
+    if (diffMode === "guided") setDiffMode("files");
+    let tries = 0;
+    const open = () => {
+      const input = document.querySelector<HTMLInputElement>('input[aria-label="Search the diff"]');
+      if (input) return (input.focus(), input.select());
+      const btn = document.querySelector<HTMLElement>('[data-key="diff-search"]');
+      if (btn) return btn.click();
+      if (tries++ < 20) setTimeout(open, 50);
+    };
+    requestAnimationFrame(open);
+  };
+
   const openInEditor = () => session?.worktree && openUrl(`vscode://file${session.worktree}`);
   const canAnalyze = !!(details && !run?.running);
   const commands: Command[] = [
-    { id: "refresh", menu: "File", label: "Refresh pull requests", keys: { key: "F5" }, run: refresh },
+    { id: "refresh", menu: "File", label: "Refresh pull requests", keys: { key: "r", ctrl: true }, altKeys: [{ key: "F5" }], run: refresh },
     { id: "github", menu: "File", label: "Open pull request on GitHub", enabled: !!selected, run: () => selected && openUrl(selected.url), separatorBefore: true },
     { id: "editor", menu: "File", label: "Open worktree in VS Code", enabled: !!session?.worktree, run: openInEditor },
     { id: "settings", menu: "File", label: "Settings…", keys: { key: ",", ctrl: true }, run: () => openSettings("general"), separatorBefore: true },
@@ -878,6 +900,7 @@ export default function App() {
     { id: "chat", menu: "View", label: "Claude panel", checked: chatOpen, keys: { key: "j", ctrl: true }, run: () => setChatOpen(!chatOpen) },
     { id: "tab-analysis", menu: "View", label: "Analysis", checked: !!selected && tab === "analysis", enabled: !!selected, keys: { key: "1", ctrl: true }, run: () => setTab("analysis"), separatorBefore: true },
     { id: "tab-diff", menu: "View", label: "Diff", checked: !!selected && tab === "diff", enabled: !!selected, keys: { key: "2", ctrl: true }, run: () => setTab("diff") },
+    { id: "find", menu: "View", label: "Find in diff…", enabled: !!details, keys: { key: "f", ctrl: true }, run: findInDiff },
     { id: "guided", menu: "View", label: "Guided review", checked: diffMode === "guided", run: () => { setDiffMode("guided"); if (selected) setTab("diff"); }, separatorBefore: true },
     { id: "files", menu: "View", label: "All files", checked: diffMode === "files", run: () => { setDiffMode("files"); if (selected) setTab("diff"); } },
     { id: "split", menu: "View", label: "Split diff", checked: split, run: () => setSplit(!split) },
@@ -887,8 +910,8 @@ export default function App() {
 
     { id: "analyze", menu: "Review", label: analysis ? "Re-run analysis" : "Start review", enabled: canAnalyze, run: () => { setTab("analysis"); startAnalysis(); } },
     { id: "guide", menu: "Review", label: "Create guided review", enabled: !!(analysis && !analysis.walkthrough && session?.sessionId && !(key && guideRuns[key]?.running)), run: () => { setDiffMode("guided"); setTab("diff"); generateWalkthrough(); } },
-    { id: "next", menu: "Review", label: "Next finding", hint: "J", enabled: !!analysis?.findings.length, run: () => stepFinding(1), separatorBefore: true },
-    { id: "prev", menu: "Review", label: "Previous finding", hint: "K", enabled: !!analysis?.findings.length, run: () => stepFinding(-1) },
+    { id: "next", menu: "Review", label: "Next finding", hint: "n", enabled: !!analysis?.findings.length, run: () => stepFinding(1), separatorBefore: true },
+    { id: "prev", menu: "Review", label: "Previous finding", hint: comboLabel({ key: "N", shift: true }), enabled: !!analysis?.findings.length, run: () => stepFinding(-1) },
     { id: "describe", menu: "Review", label: "Edit description…", enabled: !!details && !!orgs?.login && details.author.login === orgs.login, run: () => setDescOpen(true) },
     { id: "submit", menu: "Review", label: "Submit review…", keys: { key: "Enter", ctrl: true, shift: true }, enabled: !!details, run: () => setReviewOpen(true), separatorBefore: true },
     { id: "ask", menu: "Review", label: "Ask Claude", keys: { key: "l", ctrl: true }, enabled: !!selected, run: () => { setChatOpen(true); setChatFocus((n) => n + 1); }, separatorBefore: true },
@@ -899,6 +922,34 @@ export default function App() {
     { id: "about", menu: "Help", label: "About BetterLGTM", run: () => setInfoDialog("about") },
   ];
   commandsRef.current = commands;
+  useNativeMenu(commands);
+
+  // The macOS Settings window: send it what the Organizations page lists, and run its actions here.
+  const settingsData: SettingsData = { orgs, orgsError, requests };
+  const settingsDataRef = useRef(settingsData);
+  settingsDataRef.current = settingsData;
+  const settingsActions = useRef({ reloadOrgs, clearAll });
+  settingsActions.current = { reloadOrgs, clearAll };
+  useEffect(() => {
+    if (useSettingsWindow) emitTo(SETTINGS_LABEL, SETTINGS_EV.data, settingsDataRef.current).catch(() => {});
+  }, [orgs, orgsError, requests]);
+  useEffect(() => {
+    if (!useSettingsWindow) return;
+    const un = [
+      listen(SETTINGS_EV.ready, () => emitTo(SETTINGS_LABEL, SETTINGS_EV.data, settingsDataRef.current)),
+      listen(SETTINGS_EV.reloadOrgs, () => settingsActions.current.reloadOrgs()),
+      listen(SETTINGS_EV.clearData, () => settingsActions.current.clearAll()),
+      // Settings belongs to the main window: close it with the main window, so the app quits.
+      getCurrentWindow().onCloseRequested(() => closeSettingsWindow()),
+    ];
+    return () => un.forEach((p) => p.then((f) => f()));
+  }, []);
+  // With the system title bar, the window title names the open pull request.
+  const windowTitle = selected ? `${selected.repository.nameWithOwner} #${selected.number} · ${selected.title}` : "BetterLGTM";
+  useEffect(() => {
+    document.title = windowTitle;
+    if (inTauri) getCurrentWindow().setTitle(windowTitle).catch(() => {});
+  }, [windowTitle]);
 
   /** A palette item that opens any PR typed as a GitHub link or owner/repo#number. */
   const openPrItem = (q: string): PaletteItem | null => {
@@ -923,7 +974,7 @@ export default function App() {
     };
   };
 
-  // Everything the Ctrl+K palette can jump to.
+  // Everything the ⌘K / Ctrl+K palette can jump to.
   const paletteItems: PaletteItem[] = paletteOpen
     ? [
         ...[...(visibleRequests ?? []), ...(visibleMine ?? []).filter((m) => !visibleRequests?.some((r) => prKey(r) === prKey(m)))].map((pr) => ({
@@ -1153,7 +1204,7 @@ export default function App() {
 
   return (
     <div className="app" ref={appRef}>
-      <TitleBar
+      <Toolbar
         title={selected ? `${selected.repository.nameWithOwner} #${selected.number} · ${selected.title}` : "Jump to a PR, file or finding"}
         inboxOpen={inboxOpen}
         chatOpen={chatOpen}
@@ -1161,10 +1212,9 @@ export default function App() {
         onToggleChat={() => setChatOpen(!chatOpen)}
         onOpenSettings={() => openSettings("general")}
         onOpenPalette={() => setPaletteOpen(true)}
-        commands={commands}
       />
       {settingsOpen && (
-        <div style={{ flex: 1, minHeight: 0 }}>
+        <div className="main-pane" style={{ flex: 1, minHeight: 0 }}>
           <Suspense fallback={null}>
           <Settings
             settings={settings}
@@ -1183,7 +1233,7 @@ export default function App() {
       )}
       <div style={{ flex: 1, minHeight: 0, display: settingsOpen ? "none" : "flex" }}>
         {inboxMode === "rail" && (
-          <div style={{ width: 52, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
+          <div className="inbox-pane" style={{ width: 52, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
             <InboxRail
               onPrefetch={prefetchPr}
               requests={inboxList}
@@ -1199,7 +1249,7 @@ export default function App() {
         <Group orientation="horizontal">
           {inboxMode === "full" && (
             <>
-              <Panel id="inbox" defaultSize={compact ? 260 : 280} minSize={220} maxSize={420}>
+              <Panel id="inbox" className="inbox-pane" defaultSize={compact ? 260 : 280} minSize={220} maxSize={420}>
                 <Inbox
                   onPrefetch={prefetchPr}
                   view={inboxView}
@@ -1222,6 +1272,7 @@ export default function App() {
                   onSelect={(pr) => { selectPr(pr); if (compact) setInboxExpanded(false); }}
                   onRefresh={refresh}
                   onHideOwner={hideOwner}
+                  onHideRepo={(r) => setRepoVisible(r, false)}
                   onManage={() => openSettings("orgs")}
                   onCollapse={compact ? () => setInboxExpanded(false) : undefined}
                 />
@@ -1229,7 +1280,7 @@ export default function App() {
               <Separator className="sep-v" />
             </>
           )}
-          <Panel id="main" minSize={420}>
+          <Panel id="main" className="main-pane" minSize={420}>
             <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ flex: 1, minHeight: 0 }}>
             <Group orientation="vertical">

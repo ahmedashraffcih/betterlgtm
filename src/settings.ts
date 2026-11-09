@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type Theme = "system" | "light" | "dark";
 
@@ -97,6 +97,12 @@ function load(): Settings {
 
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(load);
+  // Pick up changes made in another window (the macOS Settings window, or the main one).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => e.key === KEY && setSettings(load());
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
   const update = useCallback((patch: Partial<Settings>) => {
     setSettings((s) => {
       const next = { ...s, ...patch };

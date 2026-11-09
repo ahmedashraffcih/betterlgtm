@@ -7,6 +7,7 @@ import {
 import { useState } from "react";
 import type { FileData } from "react-diff-view";
 import { anchorLabel, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck, type FindingState } from "../analysis";
+import { contextMenu, copyText } from "../contextMenu";
 import { errorText, type PrDetails, type ReviewThread } from "../api";
 import { categoryIcon, SEVERITY, VERDICT } from "../icons";
 import { changesInRange, findFile, lineNumbers, testCodeLines } from "../diffUtils";
@@ -199,8 +200,22 @@ export function AnalysisView(p: Props) {
   const crit = live.filter(({ f }) => f.severity === "critical").length;
   const high = live.filter(({ f }) => f.severity === "high").length;
 
+  /** Right-click actions for a finding in the outline. */
+  const findingMenu = (k: OutlineKey) => {
+    if (k[0] !== "f" || !a) return undefined;
+    const i = Number(k.slice(1));
+    const f = a.findings[i];
+    const st = p.states?.[i]?.state;
+    return contextMenu([
+      { label: "Open", run: () => select(k) },
+      { label: p.inReview.includes(i) ? "Remove from review" : "Add to review", run: () => p.onToggleReview(i), separatorBefore: true },
+      st ? { label: "Reopen", run: () => p.onState(i, null) } : { label: "Resolve", run: () => p.onState(i, { state: "resolved", at: Date.now() }) },
+      { label: "Ask Claude", run: () => p.onAsk(`About finding ${i + 1} ("${f.title}"): `), separatorBefore: true },
+      { label: "Copy title", run: () => copyText(f.title) },
+    ]);
+  };
   const Row = ({ k, sub, Icon, tone, text, meta, check, state }: { k: OutlineKey; sub?: boolean; Icon: LucideIcon; tone: string; text: string; meta?: string; check?: FindingCheck; state?: FindingState }) => (
-    <button type="button" data-nav className={["row", sub && "sub", p.selected === k && "sel", (check?.status === "fixed" || state?.state === "resolved" || state?.state === "dismissed") && "fixed"].filter(Boolean).join(" ")} onClick={() => select(k)} title={text}>
+    <button type="button" data-nav className={["row", sub && "sub", p.selected === k && "sel", (check?.status === "fixed" || state?.state === "resolved" || state?.state === "dismissed") && "fixed"].filter(Boolean).join(" ")} onClick={() => select(k)} onContextMenu={findingMenu(k)} title={text}>
       <Icon size={14} className={tone} />
       <span className="ellipsis" style={{ flex: 1 }}>{text}</span>
       {state ? <StateBadge state={state} /> : <CheckBadge check={check} />}
@@ -574,8 +589,8 @@ function Detail(p: Props & { analysis: Analysis }) {
           <StateBadge state={p.states?.[idx]} />
           <span style={{ flex: 1 }} />
           <span className="muted" style={{ fontSize: 12 }}>Finding {idx + 1} of {a.findings.length}</span>
-          <button type="button" className="tb" aria-label="Previous finding (K)" onClick={() => go(-1)}><ChevronUp size={16} /></button>
-          <button type="button" className="tb" aria-label="Next finding (J)" onClick={() => go(1)}><ChevronDown size={16} /></button>
+          <button type="button" className="tb" aria-label="Previous finding" onClick={() => go(-1)}><ChevronUp size={16} /></button>
+          <button type="button" className="tb" aria-label="Next finding" onClick={() => go(1)}><ChevronDown size={16} /></button>
         </div>
         {p.checks?.[idx] && (
           <p className={`check-note check-${CHECK[p.checks[idx].status].tone}`}>

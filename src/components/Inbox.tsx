@@ -1,6 +1,8 @@
 import { Building2, Clock, ListFilter, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, CircleX, EyeOff, Funnel, Loader, OctagonExclamationPoint, PencilLine, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ReviewRequest } from "../api";
+import { contextMenu, copyText } from "../contextMenu";
 import { COMPARE, matchesFilters, type Filters, type SortKey } from "../inboxFilters";
 import { prRisk, waitingSince } from "../risk";
 import type { PrSession } from "../sessions";
@@ -63,6 +65,7 @@ interface Props {
   onPrefetch?: (pr: ReviewRequest) => void;
   onRefresh: () => void;
   onHideOwner: (owner: string) => void;
+  onHideRepo?: (repo: string) => void;
   onManage: () => void;
   /** Shown in narrow windows, where the inbox normally sits collapsed as a strip. */
   onCollapse?: () => void;
@@ -225,7 +228,21 @@ export function Inbox(p: Props) {
                   const crit = findings.filter((f) => f.severity === "critical").length;
                   const cls = ["pr", p.selected === key && "sel", p.selected === key && p.focused && "focused"].filter(Boolean).join(" ");
                   return (
-                    <button key={key} type="button" data-nav className={cls} onClick={() => p.onSelect(pr)} title={pr.title} {...prefetchOnHover(pr, p.onPrefetch)}>
+                    <button
+                      key={key}
+                      type="button"
+                      data-nav
+                      className={cls}
+                      onClick={() => p.onSelect(pr)}
+                      onContextMenu={contextMenu([
+                        { label: "Open", run: () => p.onSelect(pr) },
+                        { label: "Open on GitHub", run: () => openUrl(pr.url) },
+                        { label: "Copy link", run: () => copyText(pr.url), separatorBefore: true },
+                        { label: `Hide ${pr.repository.nameWithOwner}`, run: () => p.onHideRepo?.(pr.repository.nameWithOwner), enabled: !!p.onHideRepo, separatorBefore: true },
+                      ])}
+                      title={pr.title}
+                      {...prefetchOnHover(pr, p.onPrefetch)}
+                    >
                       <span className="t1 ellipsis" style={{ width: "100%" }}>{pr.title}</span>
                       <span className="t2">
                         <span className="ellipsis" style={{ flex: 1 }}>
