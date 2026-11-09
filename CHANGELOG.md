@@ -2,6 +2,14 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.4.2] — 2026-11-09
+
+- **Native window**: the system draws the title bar and window buttons. On macOS the toolbar is the title bar, with the traffic lights beside it and a translucent sidebar; Windows 11 shows Mica behind the inbox.
+- **Native menus**: the menu bar is the system's own, with the BetterLGTM, Edit and Window menus on macOS, and right-clicking a pull request, file or finding opens a native menu.
+- **Settings window**: on macOS, Settings (⌘,) opens in its own window. The main window reopens at the size and position you left it.
+- **Platform shortcuts**: ⌘ on macOS and Ctrl elsewhere, with labels to match. ⌘R / Ctrl+R refreshes (F5 still works), ⌘F / Ctrl+F finds in the diff, and the menu shows the right keys for next and previous finding (n / Shift+N).
+- **Logo**: the wordmark reads LGTM.
+
 ## [0.4.1] — 2026-11-08
 
 - **Faster startup**: the inbox shows its last copy right away and refreshes in the background, and the parts of the app you don't see at launch load after the first paint.
