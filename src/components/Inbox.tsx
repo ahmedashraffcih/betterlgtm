@@ -161,7 +161,7 @@ export function Inbox(p: Props) {
   return (
     <aside className="side" data-pane="inbox" aria-label={p.view === "mine" ? "Your pull requests" : "Review requests"}>
       <div className="ph">
-        <div className="seg" role="group" aria-label="Show" style={{ flex: 1, minWidth: 0 }}>
+        <div className="seg seg-fill" role="group" aria-label="Show" style={{ flex: 1, minWidth: 0 }}>
           <button type="button" className={p.view === "review" ? "on" : ""} aria-pressed={p.view === "review"} onClick={() => p.onViewChange("review")} title="Pull requests waiting for your review">
             To review<span className="cnt">{p.counts.review}</span>
           </button>

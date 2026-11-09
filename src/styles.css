@@ -503,3 +503,9 @@ button.link { padding: 0; color: var(--accent); text-decoration: underline; font
 :root[data-vibrancy] .main-pane { background: var(--bg); }
 :root[data-vibrancy] .toolbar, :root[data-vibrancy] .statusbar { background: color-mix(in srgb, var(--chrome) 35%, transparent); }
 :root[data-vibrancy] .inbox-pane, :root[data-vibrancy] .inbox-pane .side, :root[data-vibrancy] .inbox-pane .exh { background: transparent; }
+/* On the sidebar material, tints instead of solid greys, as native segmented controls do. */
+:root[data-vibrancy] .inbox-pane .seg { background: color-mix(in srgb, var(--text) 7%, transparent); border-color: transparent; }
+:root[data-vibrancy] .inbox-pane .seg > button.on { box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.14); }
+:root[data-vibrancy] .inbox-pane .cnt { background: color-mix(in srgb, var(--text) 9%, transparent); }
+/* A segmented control that fills its row: the options share the width equally. */
+.seg-fill > button { flex: 1; min-width: 0; justify-content: center; }
