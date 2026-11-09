@@ -2,6 +2,15 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.4.3] — 2026-11-09
+
+- **Fixed**: on macOS the main window didn't close from the red close button or ⌘W. ⌘Q still quit the app.
+- **Fixed**: **Show hidden lines** showed the wrong code and line numbers in files where earlier changes added or removed lines, and kept showing old lines after the diff changed.
+- **Fixed**: switching pull requests behind the **Edit description** or **Submit review** dialog could save the text to the other pull request.
+- **Fixed**: re-running the analysis kept your review picks on different findings. Picks are now cleared.
+- **Fixed**: **Open in editor** and **Open worktree in VS Code** did nothing.
+- **Fixed**: an analysis with an unknown severity or a missing title could blank the window.
+
 ## [0.4.2] — 2026-11-09
 
 - **Native window**: the system draws the title bar and window buttons. On macOS the toolbar is the title bar, with the traffic lights beside it and a translucent sidebar; Windows 11 shows Mica behind the inbox.

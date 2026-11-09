@@ -97,6 +97,12 @@ function ago(iso: string): string {
 }
 
 type ClaudeUsage = Pick<ClaudeEvent, "usage" | "total_cost_usd">;
+/** Opens the worktree, or a file and line in it, in VS Code. */
+function openInVsCode(worktree: string, path?: string, line?: number) {
+  const full = `${worktree}${path ? `/${path}` : ""}`.replace(/\\/g, "/").replace(/^\/*/, "/");
+  openUrl(`vscode://file${encodeURI(full)}${line ? `:${line}` : ""}`).catch((e) => console.error("Could not open VS Code", e));
+}
+
 const tokensOf = (e: ClaudeUsage) =>
   (e.usage?.input_tokens ?? 0) + (e.usage?.output_tokens ?? 0) + (e.usage?.cache_read_input_tokens ?? 0) + (e.usage?.cache_creation_input_tokens ?? 0);
 
@@ -391,6 +397,8 @@ export default function App() {
         analysisSince: parsed ? opts.since : s.analysisSince,
         analysisHead: parsed ? details.headRefOid : s.analysisHead,
         findingChecks: parsed ? undefined : s.findingChecks,
+        // Picks are positions in the old list of findings, which a new analysis replaces.
+        inReview: parsed ? [] : s.inReview,
         tokens: (s.tokens ?? 0) + tokensOf(usage),
         costUsd: (s.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
@@ -633,7 +641,7 @@ export default function App() {
       if (e.key === "Escape" && t instanceof HTMLElement && !paletteOpen && !reviewOpen) t.blur();
       return;
     }
-    if (!settings.vimKeys || paletteOpen || infoDialog || reviewOpen || filtersOpen || settingsOpen || e.metaKey || e.altKey) return;
+    if (!settings.vimKeys || paletteOpen || infoDialog || reviewOpen || descOpen || filtersOpen || settingsOpen || e.metaKey || e.altKey) return;
     // A focused button already handles Enter and Space itself.
     if (t instanceof HTMLButtonElement && (e.key === "Enter" || e.key === " ")) return;
 
@@ -885,7 +893,7 @@ export default function App() {
     requestAnimationFrame(open);
   };
 
-  const openInEditor = () => session?.worktree && openUrl(`vscode://file${session.worktree}`);
+  const openInEditor = () => session?.worktree && openInVsCode(session.worktree);
   const canAnalyze = !!(details && !run?.running);
   const commands: Command[] = [
     { id: "refresh", menu: "File", label: "Refresh pull requests", keys: { key: "r", ctrl: true }, altKeys: [{ key: "F5" }], run: refresh },
@@ -1048,7 +1056,7 @@ export default function App() {
             </button>
           </div>
           <button type="button" className="tb" aria-label="Open on GitHub" title="Open on GitHub" onClick={() => openUrl(selected.url)}><ExternalLink size={15} /></button>
-          <button type="button" className="btn" disabled={!session?.worktree} aria-label="Open in editor" title={session?.worktree ?? "The worktree is created when the review starts"} onClick={() => session?.worktree && openUrl(`vscode://file${session.worktree}`)}>
+          <button type="button" className="btn" disabled={!session?.worktree} aria-label="Open in editor" title={session?.worktree ?? "The worktree is created when the review starts"} onClick={openInEditor}>
             <Code size={14} /><span className="lbl-text">Open in editor</span>
           </button>
           <button type="button" className="btn primary" disabled={!details} aria-label="Submit review" title="Submit review on GitHub" onClick={() => setReviewOpen(true)}>
@@ -1192,7 +1200,7 @@ export default function App() {
               const wt = await ensureWorktree(key!, selected, details);
               return api.searchWorktree(wt, pattern, regex, cs);
             }}
-            onOpenInEditor={(path, line) => session?.worktree && openUrl(`vscode://file${session.worktree}/${path}:${line}`)}
+            onOpenInEditor={(path, line) => session?.worktree && openInVsCode(session.worktree, path, line)}
             onBack={() => { if (diffTarget.finding !== null) setOutlineKey(`f${diffTarget.finding}`); setTab("analysis"); }}
             onStepFinding={stepFinding}
           />
@@ -1321,7 +1329,7 @@ export default function App() {
       <Suspense fallback={null}>
       {paletteOpen && <CommandPalette items={paletteItems} extra={openPrItem} onClose={() => setPaletteOpen(false)} />}
       {descOpen && details && (
-        <DescriptionDialog current={details.body ?? ""} onDraft={draftDescription} onSave={saveDescription} onClose={() => setDescOpen(false)} />
+        <DescriptionDialog key={key} current={details.body ?? ""} onDraft={draftDescription} onSave={saveDescription} onClose={() => setDescOpen(false)} />
       )}
       {filtersOpen && (
         <FilterDialog
@@ -1342,6 +1350,7 @@ export default function App() {
       )}
       {reviewOpen && selected && details && key && (
         <SubmitReview
+          key={key}
           repo={selected.repository.nameWithOwner}
           details={details}
           analysis={analysis}

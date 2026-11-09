@@ -1,7 +1,7 @@
 import { ArrowLeft, CaseSensitive, Check, ChevronDown, ChevronUp, Columns2, Eye, Files, Flag, FolderSearch, ListOrdered, MessageSquare, MessageSquarePlus, Regex, Rows3, Search, Space, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Decoration, Diff, Hunk, expandFromRawCode, getChangeKey, getCollapsedLinesCountBetween,
+  Decoration, Diff, Hunk, getChangeKey, getCollapsedLinesCountBetween, insertHunk, textLinesToHunk,
   type ChangeData, type FileData, type HunkData, type RenderGutter,
 } from "react-diff-view";
 import type { Anchor, Finding } from "../analysis";
@@ -141,12 +141,14 @@ export function DiffView(p: Props) {
   const split = p.split && canSplit;
 
   // Lines shown between hunks after "Show hidden lines", per file.
-  const [expanded, setExpanded] = useState<{ path: string; hunks: HunkData[] } | null>(null);
+  const [expanded, setExpanded] = useState<{ path: string; base: HunkData[]; hunks: HunkData[] } | null>(null);
   const sources = useRef(new Map<string, string>());
   const [expandError, setExpandError] = useState<string | null>(null);
-  const hunks = expanded && expanded.path === path ? expanded.hunks : (file?.hunks ?? []);
+  // Expanded lines belong to one parse of the file: a new diff (whitespace toggle, new commits) drops them.
+  const hunks = expanded && expanded.path === path && expanded.base === file?.hunks ? expanded.hunks : (file?.hunks ?? []);
   useEffect(() => setExpandError(null), [path]);
-  const expand = async (start: number, end: number) => {
+  /** Show unchanged lines `start` up to `end` (new-file line numbers); `oldStart` is the old-file number of the first. */
+  const expand = async (start: number, end: number, oldStart: number) => {
     if (!file || !p.onLoadSource) return;
     try {
       let source = sources.current.get(path);
@@ -154,8 +156,11 @@ export function DiffView(p: Props) {
         source = await p.onLoadSource(path);
         sources.current.set(path, source);
       }
-      const total = source.split("\n").length;
-      setExpanded({ path, hunks: expandFromRawCode(hunks, source, start, Math.min(end, total + 1)) });
+      // The source is the new version of the file, so slice it by new-file line numbers.
+      const lines = source.split("\n");
+      if (lines[lines.length - 1] === "") lines.pop();
+      const hunk = textLinesToHunk(lines.slice(start - 1, Math.min(end, lines.length + 1) - 1), oldStart, start);
+      if (hunk) setExpanded({ path, base: file.hunks, hunks: insertHunk(hunks, hunk) });
     } catch (e) {
       setExpandError(String(e));
     }
@@ -326,7 +331,7 @@ export function DiffView(p: Props) {
               return [
                 <Decoration key={`d-${h.content}`}>
                   {hidden > 0 ? (
-                    <button type="button" className="expand-btn" onClick={() => latest.current.expand(start, h.newStart)} title="Show the unchanged lines here">
+                    <button type="button" className="expand-btn" onClick={() => latest.current.expand(start, h.newStart, prev ? prev.oldStart + prev.oldLines : 1)} title="Show the unchanged lines here">
                       <ChevronUp size={12} />Show {hidden} hidden {hidden === 1 ? "line" : "lines"}<span className="muted mono">{h.content}</span>
                     </button>
                   ) : (
@@ -575,7 +580,7 @@ export function DiffView(p: Props) {
               className="expand-btn expand-end"
               onClick={() => {
                 const last = hunks[hunks.length - 1];
-                expand(last.newStart + last.newLines, Number.MAX_SAFE_INTEGER);
+                expand(last.newStart + last.newLines, Number.MAX_SAFE_INTEGER, last.oldStart + last.oldLines);
               }}
             >
               <ChevronDown size={12} />Show the rest of the file

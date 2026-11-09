@@ -189,10 +189,27 @@ function asText(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
+/** Anchors with a path and line numbers; anything else would break the views that show them. */
+function asAnchors(v: unknown): Anchor[] {
+  return asArray<Anchor>(v)
+    .filter((a) => a && typeof a.path === "string" && a.path.trim())
+    .map((a) => {
+      const start = Number.isFinite(Number(a.startLine)) ? Number(a.startLine) : 1;
+      const end = Number.isFinite(Number(a.endLine)) ? Number(a.endLine) : start;
+      return { path: a.path, startLine: start, endLine: Math.max(start, end) };
+    });
+}
+
+/** Claude sometimes writes "High" or a level that doesn't exist; unknown levels count as low. */
+function asSeverity(v: unknown): Severity {
+  const s = typeof v === "string" ? v.trim().toLowerCase() : "";
+  return s in SEVERITY_RANK ? (s as Severity) : "low";
+}
+
 function parseSteps(v: unknown): WalkStep[] | undefined {
   const steps = asArray<WalkStep>(v)
     .filter((s) => s && typeof s.title === "string")
-    .map((s) => ({ title: s.title, why: asText(s.why), changes: asArray<Anchor>(s.changes) }));
+    .map((s) => ({ title: s.title, why: asText(s.why), changes: asAnchors(s.changes) }));
   return steps.length ? steps : undefined;
 }
 
@@ -219,12 +236,15 @@ export function parseAnalysis(text: string): Analysis | null {
   for (const raw of jsonCandidates(text)) {
     try {
       const data = JSON.parse(raw.trim());
-      const findings = asArray<Finding>(data.findings).map((f) => ({
+      const findings = asArray<Finding>(data.findings).filter((f) => f && typeof f === "object").map((f) => ({
         ...f,
+        severity: asSeverity(f.severity),
+        category: typeof f.category === "string" ? f.category : "",
+        title: typeof f.title === "string" && f.title.trim() ? f.title : "Untitled finding",
         body: asText(f.body),
         fix: f.fix ? asText(f.fix) : undefined,
         suggestion: typeof f.suggestion === "string" && f.suggestion.trim() ? f.suggestion.replace(/\n$/, "") : undefined,
-        anchors: asArray<Anchor>(f.anchors),
+        anchors: asAnchors(f.anchors),
       }));
       const order = findings.map((_, i) => i).sort((a, b) => SEVERITY_RANK[findings[a].severity] - SEVERITY_RANK[findings[b].severity]);
       const remap = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
@@ -234,7 +254,7 @@ export function parseAnalysis(text: string): Analysis | null {
         guidelines: asArray<string>(data.guidelines).filter((g) => typeof g === "string" && g.trim()),
         risks: asArray<Risk>(data.risks)
           .filter((r) => r && typeof r.area === "string")
-          .map((r) => ({ area: r.area, why: asText(r.why), anchors: asArray<Anchor>(r.anchors) })),
+          .map((r) => ({ area: r.area, why: asText(r.why), anchors: asAnchors(r.anchors) })),
         tests: asArray<TestCheck>(data.tests)
           .filter((t) => t && typeof t.change === "string" && ["yes", "partly", "no"].includes(t.covered))
           .map((t) => ({ change: t.change, covered: t.covered, tests: asArray<string>(t.tests).filter((x) => typeof x === "string"), note: t.note ? asText(t.note) : undefined })),
@@ -245,7 +265,7 @@ export function parseAnalysis(text: string): Analysis | null {
           ...c,
           note: c.note ? asText(c.note) : undefined,
           source: typeof c.source === "string" && /^#?\d+/.test(c.source) ? `#${c.source.replace(/^#/, "").match(/^\d+/)![0]}` : undefined,
-          anchors: asArray<Anchor>(c.anchors),
+          anchors: asAnchors(c.anchors),
           finding: typeof c.finding === "number" ? remap.get(c.finding) : undefined,
         })),
         walkthrough: parseSteps(data.walkthrough),
