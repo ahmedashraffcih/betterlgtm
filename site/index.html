@@ -344,6 +344,18 @@ i.risk { font-style: normal; font-size: 11.5px; padding: 0 7px; }
 .compare td:nth-child(2) { color: var(--faint); width: 36%; }
 .compare td:last-child { background: var(--add-bg); color: var(--add-body); }
 
+/* Agents */
+.agents { list-style: none; margin: 40px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; }
+.agent { display: flex; flex-direction: column; gap: 10px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.agent-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.agent h3 { font-size: 19px; }
+.agent .maker { font-size: 14px; color: var(--faint); }
+.agent p { margin: 0; flex: 1; color: var(--muted); font-size: 15.5px; }
+.agent .how { font-family: var(--mono); font-stretch: 80%; font-size: 13px; color: var(--body); background: var(--surface); border-radius: 6px; padding: 6px 10px; overflow-wrap: anywhere; }
+.agent .tag { align-self: flex-start; }
+.tag.exp { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+.agents-note { margin: 24px 0 0; color: var(--muted); font-size: 15.5px; max-width: 72ch; }
+
 /* Keys */
 .keys { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 0 32px; }
 .keys > div { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
@@ -401,6 +413,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   <a class="brand" href="#top"><img src="assets/favicon.png" alt=""><span>BetterLGTM</span></a>
   <nav class="nav-links" aria-label="Sections">
     <a href="#how">How it works</a>
+    <a href="#agents">Agents</a>
     <a href="#privacy">Privacy</a>
     <a href="#news">Changelog</a>
     <a href="#faq">FAQ</a>
@@ -569,6 +582,36 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   </div>
 </section>
 
+<section id="agents" class="wrap section" aria-labelledby="agents-title">
+  <div class="split top">
+    <div class="copy">
+      <h2 id="agents-title">Bring the agent you already use</h2>
+      <p>BetterLGTM runs the coding agent you've installed and signed in to, on your own plan. Pick one when you first open the app, and switch any time in Settings. The review, chat and drafts work the same with each.</p>
+    </div>
+  </div>
+  <ul class="agents">
+        <li class="agent">
+          <div class="agent-head"><h3>Claude Code</h3><span class="maker">Anthropic</span></div>
+          <p>Runs with a fixed list of read-only tools, and can stop automatic analyses at a spending limit.</p>
+          <code class="how">claude -p</code>
+          <span class="tag ok">Supported</span>
+        </li>
+        <li class="agent">
+          <div class="agent-head"><h3>Codex</h3><span class="maker">OpenAI</span></div>
+          <p>Runs in Codex's read-only sandbox. It may search the web while it reviews.</p>
+          <code class="how">codex exec</code>
+          <span class="tag ok">Supported</span>
+        </li>
+        <li class="agent">
+          <div class="agent-head"><h3>Gemini CLI</h3><span class="maker">Google</span></div>
+          <p>Runs in Gemini CLI's read-only plan mode.</p>
+          <code class="how">gemini -p</code>
+          <span class="tag exp">Experimental</span>
+        </li>
+  </ul>
+  <p class="agents-note">Whichever you choose, it can't edit your files or post to GitHub: the app posts your review through <code>gh</code>, and only when you press Submit. Each review stays with the agent that started it.</p>
+</section>
+
 <section class="wrap section">
   <div class="split">
     <div class="copy">
@@ -656,7 +699,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   <div class="split top">
     <div class="copy">
       <h2>What it leaves out</h2>
-      <p>BetterLGTM runs on your machine with the <code>gh</code> and <code>claude</code> you've already signed in to.</p>
+      <p>BetterLGTM runs on your machine with the <code>gh</code> and coding agent you've already signed in to.</p>
     </div>
     <ul class="visual lines privacy">
       <li class="del"><span class="s" aria-hidden="true">−</span><span><strong><span class="sr-only">No </span>An account and a server</strong>It talks to GitHub through your <code>gh</code> and to the model through your own agent CLI. Your code and tokens never pass through us.</span></li>
@@ -708,15 +751,15 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
     <div class="visual faq">
       <details>
         <summary>What does it cost?</summary>
-        <p>The app is free and MIT licensed. Analyses use your Claude Code plan or API usage, and the status bar shows the tokens each pull request used. Auto-analyze is off by default for that reason.</p>
+        <p>The app is free and MIT licensed. Analyses use your coding agent's plan or API usage, and the status bar shows the tokens each pull request used. Auto-analyze is off by default for that reason.</p>
       </details>
       <details>
         <summary>Where does my code go?</summary>
-        <p>Claude reads it from a local worktree through your own <code>claude</code>, the same as when you use Claude Code yourself. BetterLGTM has no server and never sees your tokens.</p>
+        <p>Your agent reads it from a local worktree through your own <code>claude</code>, <code>codex</code> or <code>gemini</code>, the same as when you use it yourself. BetterLGTM has no server and never sees your tokens.</p>
       </details>
       <details>
-        <summary>Can Claude change my code or post on GitHub?</summary>
-        <p>No. It can only read, search and run read-only git commands like <code>git log</code> and <code>git diff</code>. Reviews are posted by the app, through your <code>gh</code>, when you press Submit.</p>
+        <summary>Can the agent change my code or post on GitHub?</summary>
+        <p>No. Claude Code can only read, search and run read-only git commands like <code>git log</code> and <code>git diff</code>, Codex runs in its read-only sandbox, and Gemini CLI in its read-only plan mode. Reviews are posted by the app, through your <code>gh</code>, when you press Submit.</p>
       </details>
       <details>
         <summary>Does it follow our review guidelines?</summary>
@@ -724,7 +767,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
       </details>
       <details>
         <summary>Where is everything stored?</summary>
-        <p>Clones and worktrees live in <code>~/.betterlgtm</code>, and analyses, chats and settings in the app's own storage. You can move the folder or clear everything from Settings.</p>
+        <p>Clones and worktrees live in <code>~/.betterlgtm</code>, analyses and chats in the app's data folder, and settings in the app's own storage. You can move the folder or clear everything from Settings.</p>
       </details>
       <details>
         <summary>Can I build it myself?</summary>
