@@ -35,6 +35,8 @@ interface Props {
   analyzedAt?: number;
   run?: RunState;
   files: FileData[];
+  /** The reviewer's own generated-file globs, compiled; left out of the test-to-code ratio. */
+  generated: RegExp[];
   selected: OutlineKey;
   inReview: number[];
   /** Re-check results after new commits, by finding index. */
@@ -380,7 +382,7 @@ function RiskAndTests(p: Props & { analysis: Analysis }) {
     ci: failing ? "FAILURE" : "SUCCESS",
     files: p.files.map((f) => (f.type === "delete" ? f.oldPath : f.newPath)),
   } as Parameters<typeof prRisk>[0]);
-  const { test, code } = testCodeLines(p.files);
+  const { test, code } = testCodeLines(p.files, p.generated);
   const ratio = code ? test / code : 0;
   const tests = a.tests ?? [];
   const untested = tests.filter((t) => t.covered !== "yes").length;

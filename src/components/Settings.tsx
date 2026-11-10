@@ -230,7 +230,15 @@ export function Settings(p: Props) {
               <Row label="Diff layout" hint="Split needs a wide window">
                 <Seg label="Diff layout" value={s.diffLayout} options={[["unified", "Unified"], ["split", "Split"]]} onChange={(v) => p.update({ diffLayout: v })} />
               </Row>
-              <Check label="Hide generated files" hint="Lockfiles, build output, snapshots and generated code start folded" checked={s.hideGenerated} onChange={(v) => p.update({ hideGenerated: v })} />
+              <Check label="Hide generated files" hint="Guided review leaves out lockfiles, build output, snapshots and generated code; the Files view folds them" checked={s.hideGenerated} onChange={(v) => p.update({ hideGenerated: v })} />
+              <div className="set-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+                <div className="set-label">
+                  <span>More generated files</span>
+                  <span>One glob per line. <code>*</code> stays in a folder, <code>**</code> spans folders, a trailing <code>/</code> covers a whole folder. The agent skips these too.</span>
+                </div>
+                <GeneratedPatterns value={s.generatedPatterns} onSave={(v) => p.update({ generatedPatterns: v })} />
+              </div>
+              <Check label="Hide test files" hint="Guided review leaves out tests and specs; the Files view folds them. The agent still reads them to check coverage" checked={s.hideTests} onChange={(v) => p.update({ hideTests: v })} />
             </div>
           </>
         )}
@@ -352,6 +360,28 @@ function RepoInstructions(p: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+/** Saves the globs when you leave the field, so a half-typed glob doesn't hide files. */
+function GeneratedPatterns({ value, onSave }: { value: string[]; onSave: (v: string[]) => void }) {
+  const text = value.join("\n");
+  const [draft, setDraft] = useState(text);
+  useEffect(() => setDraft(text), [text]);
+  return (
+    <textarea
+      className="set-input"
+      style={{ fontFamily: "var(--mono)", fontSize: 12.5 }}
+      aria-label="More generated files"
+      spellCheck={false}
+      value={draft}
+      placeholder={"**/*.gen.ts\napi/openapi/\nschema.graphql"}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const next = draft.split("\n").map((l) => l.trim()).filter(Boolean);
+        if (next.join("\n") !== text) onSave(next);
+      }}
+    />
   );
 }
 

@@ -6,7 +6,7 @@ import {
 } from "react-diff-view";
 import type { Anchor, Finding } from "../analysis";
 import { SEVERITY, fileIcon } from "../icons";
-import { allReviewed, changeKeys, changesInRange, filePath, fileStats, findFile, hunkKey, isGenerated } from "../diffUtils";
+import { allReviewed, changeKeys, changesInRange, filePath, fileStats, findFile, hiddenKind, hunkKey, type HideRules } from "../diffUtils";
 import { contextMenu, copyText } from "../contextMenu";
 import { useTokens } from "../highlightAsync";
 import { useElementWidth } from "../hooks";
@@ -40,7 +40,8 @@ interface Props {
   onMode: (m: DiffMode) => void;
   reviewed: Set<string>;
   onReviewed: (hunkKeys: string[], reviewed: boolean) => void;
-  hideGenerated: boolean;
+  /** Generated and test files whose diffs start hidden. */
+  hide: HideRules;
   files: FileData[];
   current: string | null;
   range: Anchor | null;
@@ -130,11 +131,14 @@ export function DiffView(p: Props) {
   }, [p.findings, p.files]);
   const listed = onlyFindings ? p.files.filter((f) => counts.has(filePath(f))) : p.files;
 
-  const file = (p.current && findFile(p.files, p.current)) || p.files.find((f) => !isGenerated(f)) || p.files[0];
+  // Files to skip by default: generated always (even with hiding off, they're a poor first file), tests when hidden.
+  const skip = (f: FileData) => hiddenKind(f, { ...p.hide, generated: true }) !== null;
+  const file = (p.current && findFile(p.files, p.current)) || p.files.find((f) => !skip(f)) || p.files[0];
   const path = file ? filePath(file) : "";
-  // Generated files show a placeholder until the user asks for the diff.
+  // Generated and test files show a placeholder until the user asks for the diff.
   const [shownGenerated, setShownGenerated] = useState<Set<string>>(new Set());
-  const hideDiff = !!file && p.hideGenerated && isGenerated(file) && !shownGenerated.has(path);
+  const hiddenAs = file && !shownGenerated.has(path) ? hiddenKind(file, p.hide) : null;
+  const hideDiff = hiddenAs !== null;
   const scroller = useRef<HTMLDivElement>(null);
   // Narrow panes swap the file list for a dropdown; split view needs room for two columns.
   const [rootRef, width] = useElementWidth<HTMLDivElement>();
@@ -392,7 +396,7 @@ export function DiffView(p: Props) {
                   ])}
                 >
                   {done ? <Check size={14} className={file === f ? undefined : "tone-ok"} strokeWidth={2.5} /> : <Icon size={14} />}
-                  <span className="mono ellipsis" style={{ flex: 1, opacity: isGenerated(f) && file !== f ? 0.6 : 1 }}>{fp}</span>
+                  <span className="mono ellipsis" style={{ flex: 1, opacity: skip(f) && file !== f ? 0.6 : 1 }}>{fp}</span>
                   {n ? <span className="rm" style={{ display: "inline-flex", alignItems: "center", gap: 2 }} title={`${n} ${n === 1 ? "finding" : "findings"}`}><Flag size={11} />{n}</span> : null}
                   <span className="mono rm">+{s.add} −{s.del}</span>
                 </button>
@@ -561,8 +565,8 @@ export function DiffView(p: Props) {
           {file && hideDiff && (
             <div className="empty" style={{ height: "auto", padding: "40px 24px" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <span className="tag">Generated</span>
-                <span>This file looks generated, so its diff is hidden.</span>
+                <span className="tag">{hiddenAs === "test" ? "Test" : "Generated"}</span>
+                <span>{hiddenAs === "test" ? "This is a test file, so its diff is hidden." : "This file looks generated, so its diff is hidden."}</span>
                 <button type="button" className="btn sm" onClick={() => setShownGenerated(new Set([...shownGenerated, path]))}>
                   <Eye size={13} />Show diff
                 </button>

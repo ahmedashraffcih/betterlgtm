@@ -24,7 +24,7 @@ import type { PaletteItem } from "./components/CommandPalette";
 import type { OwnerRow, RepoRow } from "./components/FilterDialog";
 import { FILTER_GROUPS, NO_FILTERS, type Filters, type SortKey } from "./inboxFilters";
 import { ReviewStatus } from "./components/ReviewStatus";
-import { filePath, ignoreWhitespace } from "./diffUtils";
+import { compileGlobs, filePath, ignoreWhitespace } from "./diffUtils";
 import { fileIcon, SEVERITY } from "./icons";
 import { emptySession, flushSessions, useSessions, useStoredState, type ChatItem } from "./sessions";
 import type { SettingsSection } from "./components/Settings";
@@ -124,6 +124,11 @@ export default function App() {
   const [inboxLoading, setInboxLoading] = useState(false);
   const [syncedAt, setSyncedAt] = useState<number | null>(inboxCache?.syncedAt ?? null);
   const [settings, updateSettings] = useSettings();
+  const generatedGlobs = useMemo(() => compileGlobs(settings.generatedPatterns), [settings.generatedPatterns]);
+  const hideRules = useMemo(
+    () => ({ generated: settings.hideGenerated, tests: settings.hideTests, globs: generatedGlobs }),
+    [settings.hideGenerated, settings.hideTests, generatedGlobs],
+  );
   const agent = harnessOf(settings).short;
   const updater = useUpdater(settings.autoUpdate);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -431,7 +436,7 @@ export default function App() {
       let answer: unknown = "";
       let sessionId = session;
       let usage: ClaudeUsage = {};
-      await api.claudeRun(`guide-${k}-${Date.now()}`, wt, buildWalkthroughPrompt(), session, (e) => {
+      await api.claudeRun(`guide-${k}-${Date.now()}`, wt, buildWalkthroughPrompt(settings.generatedPatterns), session, (e) => {
         if (e.type === "result") {
           answer = answerOf(e);
           sessionId = e.session_id ?? sessionId;
@@ -499,6 +504,7 @@ export default function App() {
       const prompt = buildAnalysisPrompt(details, {
         instructions: [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"),
         since: opts.since,
+        generatedPatterns: settings.generatedPatterns,
         issues,
         threads,
         selfReview: !!orgs?.login && details.author.login === orgs.login,
@@ -1347,6 +1353,7 @@ export default function App() {
             analyzedAt={session?.analyzedAt}
             run={run}
             files={files}
+            generated={generatedGlobs}
             selected={outlineKey}
             inReview={session?.inReview ?? []}
             checks={checks?.results}
@@ -1382,7 +1389,7 @@ export default function App() {
             onStep={setGuideStep}
             onReviewed={setReviewed}
             onGenerate={generateWalkthrough}
-            hideGenerated={settings.hideGenerated}
+            hide={hideRules}
           />
         )}
         {details && tab === "diff" && (diffMode === "files" || diffRange === "since") && (
@@ -1390,7 +1397,7 @@ export default function App() {
             onMode={(m) => { if (m === "guided") setDiffRange("all"); setDiffMode(m); }}
             reviewed={reviewedHunks}
             onReviewed={setReviewed}
-            hideGenerated={settings.hideGenerated}
+            hide={hideRules}
             files={diffFiles}
             current={diffTarget.path}
             range={diffTarget.range}

@@ -19,10 +19,32 @@ const GENERATED_PATHS = [
 ];
 const GENERATED_MARKER = /@generated|Code generated .* DO NOT EDIT|auto-?generated|this file (is|was) generated/i;
 
-/** Lockfiles, build output, snapshots and files that say they're generated. Their diffs start hidden. */
-export function isGenerated(f: FileData): boolean {
+/**
+ * Turns a glob into a path pattern: `*` and `?` stay within a folder, `**` spans folders, and a
+ * trailing `/` means everything under that folder. A glob with no other `/` matches in any folder.
+ */
+export function globToRegExp(glob: string): RegExp | null {
+  let g = glob.trim().replace(/^\.?\//, "");
+  if (!g || g.startsWith("#")) return null;
+  const anywhere = !g.replace(/\/$/, "").includes("/");
+  if (g.endsWith("/")) g += "**";
+  const body = g
+    .split(/(\*\*\/|\*\*|\*|\?)/)
+    .map((t) => (t === "**/" ? "(?:.*/)?" : t === "**" ? ".*" : t === "*" ? "[^/]*" : t === "?" ? "[^/]" : t.replace(/[.+^${}()|[\]\\]/g, "\\$&")))
+    .join("");
+  return new RegExp(`${anywhere ? "(^|/)" : "^"}${body}$`);
+}
+
+/** The reviewer's own generated-file globs (one per line in Settings), ready for `isGenerated`. */
+export const compileGlobs = (globs: string[]): RegExp[] => globs.map(globToRegExp).filter((r): r is RegExp => r !== null);
+
+/**
+ * Lockfiles, build output, snapshots, files that say they're generated, and files matching the
+ * reviewer's own globs (`extra`). Guided review leaves them out; the Files view starts them hidden.
+ */
+export function isGenerated(f: FileData, extra: RegExp[] = []): boolean {
   const path = filePath(f);
-  if (GENERATED_PATHS.some((r) => r.test(path))) return true;
+  if (GENERATED_PATHS.some((r) => r.test(path)) || extra.some((r) => r.test(path))) return true;
   return (f.hunks[0]?.changes.slice(0, 8) ?? []).some((c) => GENERATED_MARKER.test(c.content));
 }
 
@@ -102,12 +124,26 @@ const TEST_PATH = /(^|\/)(__tests__|tests?|spec|specs)\/|\.(test|spec)\.[cm]?[jt
 
 export const isTestFile = (path: string) => TEST_PATH.test(path);
 
+export interface HideRules {
+  generated: boolean;
+  tests: boolean;
+  /** The reviewer's own generated-file globs, compiled. */
+  globs: RegExp[];
+}
+
+/** Why a file is kept out of the reviewer's way, or null when it should be read. */
+export function hiddenKind(f: FileData, r: HideRules): "generated" | "test" | null {
+  if (r.generated && isGenerated(f, r.globs)) return "generated";
+  if (r.tests && isTestFile(filePath(f))) return "test";
+  return null;
+}
+
 /** Added lines in test files and in other non-generated files. */
-export function testCodeLines(files: FileData[]): { test: number; code: number } {
+export function testCodeLines(files: FileData[], generated: RegExp[] = []): { test: number; code: number } {
   let test = 0;
   let code = 0;
   for (const f of files) {
-    if (isGenerated(f)) continue;
+    if (isGenerated(f, generated)) continue;
     const add = fileStats(f).add;
     if (isTestFile(filePath(f))) test += add;
     else code += add;

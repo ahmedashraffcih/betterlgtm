@@ -84,8 +84,9 @@ const WALKTHROUGH_RULES = `Group the changes into review steps for a guided revi
 - Each step collects related changes across files that should be read together
   (for example: a new type, the function that fills it, and the UI that shows it).
 - Order the steps so each one builds on the previous: foundations first, then usage, then tests.
-- 3–10 steps. Every changed hunk belongs to exactly one step. Put trivial changes (renames,
-  formatting, lockfiles, docs) together in one late step.
+- 3–10 steps. Every changed hunk belongs to exactly one step, except in generated files
+  (lockfiles, build output, snapshots, generated code): leave those out, the reviewer doesn't read them.
+  Put trivial changes (renames, formatting, docs) together in one late step.
 - Title up to 8 words. "why" is 1–3 short bullets: what changed and why it matters.
 - "changes" lists line ranges in the new version of each file. For deleted files use startLine 0 and endLine 0.`;
 
@@ -178,8 +179,8 @@ export const VERIFY_SCHEMA = {
 };
 
 /** Asks the analysis session to group the PR's changes into guided review steps. */
-export function buildWalkthroughPrompt(): string {
-  return `${WALKTHROUGH_RULES}
+export function buildWalkthroughPrompt(generatedPatterns: string[] = []): string {
+  return `${WALKTHROUGH_RULES}${generatedNote(generatedPatterns)}
 
 Use the PR you analyzed earlier in this session (git diff against the base branch).
 Give the result as one JSON object: { ${WALKTHROUGH_SHAPE} }`;
@@ -191,9 +192,17 @@ export interface EarlierFinding {
   state?: FindingState;
 }
 
+/** The reviewer's own generated-file globs, for the agent to skip like the built-in ones. */
+function generatedNote(patterns: string[]): string {
+  const globs = patterns.map((g) => g.trim()).filter((g) => g && !g.startsWith("#"));
+  return globs.length ? `\nAlso treat files matching these globs as generated: ${globs.map((g) => `\`${g}\``).join(", ")}.` : "";
+}
+
 export interface AnalysisOptions {
   /** The reviewer's own instructions, global and for this repository. */
   instructions?: string;
+  /** The reviewer's own generated-file globs. */
+  generatedPatterns?: string[];
   /** A re-review: focus on what changed after this commit. */
   since?: string;
   issues?: LinkedIssue[];
@@ -248,10 +257,10 @@ export function buildAnalysisPrompt(pr: PrDetails, o: AnalysisOptions = {}): str
   const self = o.selfReview
     ? `\n\nThis is the reviewer's own pull request: they wrote it and want to check it before asking others to review. Address them as the author ("you"). In "recommendation", approve means it's ready to ask for reviews, comment means it's worth another look first, and request_changes means fix these before asking anyone.`
     : "";
-  return baseAnalysisPrompt(pr) + linked + discussed + before + habits + self + focus + extra;
+  return baseAnalysisPrompt(pr, o.generatedPatterns) + linked + discussed + before + habits + self + focus + extra;
 }
 
-function baseAnalysisPrompt(pr: PrDetails): string {
+function baseAnalysisPrompt(pr: PrDetails, generatedPatterns: string[] = []): string {
   return `You are helping a developer review pull request #${pr.number} "${pr.title}" by ${pr.author.login}.
 The PR head is checked out in the current directory (detached HEAD). The base branch is origin/${pr.baseRefName}.
 See the change with: git diff origin/${pr.baseRefName}...HEAD
@@ -276,7 +285,7 @@ Do this, using only read-only commands:
    (yes, partly, no) and name the test files. Read the tests; don't run anything.
 
 Don't read generated files (lockfiles, build output, snapshots, generated code) line by line;
-only mention them if their change is unexpected, for example a lockfile change with no dependency change.
+only mention them if their change is unexpected, for example a lockfile change with no dependency change.${generatedNote(generatedPatterns)}
 
 The reviewer skims. Be brief and concrete:
 - Use bullet points, not paragraphs. Every bullet is one short line, at most about 12 words.

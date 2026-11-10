@@ -2,7 +2,7 @@ import { Check, ChevronDown, ChevronRight, Columns2, Files, Loader, Rows3, Spark
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Decoration, Diff, Hunk, getChangeKey, type FileData, type HunkData, type RenderGutter } from "react-diff-view";
 import type { Anchor, Finding, WalkStep } from "../analysis";
-import { allReviewed, changesInRange, filePath, fileStats, findFile, hunkKey, hunksForRanges, isGenerated } from "../diffUtils";
+import { allReviewed, changesInRange, filePath, fileStats, findFile, hiddenKind, hunkKey, hunksForRanges, type HideRules } from "../diffUtils";
 import { useTokens } from "../highlightAsync";
 import { useElementWidth } from "../hooks";
 import { fileIcon } from "../icons";
@@ -25,7 +25,8 @@ interface Props {
   onStep: (i: number) => void;
   onReviewed: (hunkKeys: string[], reviewed: boolean) => void;
   onGenerate: () => void;
-  hideGenerated: boolean;
+  /** Generated and test files to leave out of the sections and the progress count. */
+  hide: HideRules;
 }
 
 interface FilePart {
@@ -62,16 +63,14 @@ function resolveSteps(steps: WalkStep[], files: FileData[]): Step[] {
   return out.filter((s) => s.parts.length > 0);
 }
 
-function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; reviewed: boolean; hideGenerated: boolean; onToggle: (v: boolean) => void }) {
+function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; reviewed: boolean; onToggle: (v: boolean) => void }) {
   const { part } = p;
   const path = filePath(part.file);
   const Icon = fileIcon(path);
   const s = fileStats(part.file);
   // Reviewed files fold away, like GitHub's "Viewed", so the remaining work stays in view.
-  // Generated files (lockfiles, build output) start folded too.
-  const generated = useMemo(() => p.hideGenerated && isGenerated(part.file), [part.file, p.hideGenerated]);
-  const [open, setOpen] = useState(!p.reviewed && !generated);
-  useEffect(() => setOpen(!p.reviewed && !generated), [p.reviewed, generated]);
+  const [open, setOpen] = useState(!p.reviewed);
+  useEffect(() => setOpen(!p.reviewed), [p.reviewed]);
 
   // Everything shown already belongs to the section, so lines aren't highlighted; only finding markers stand out.
   const markers = useMemo(() => {
@@ -104,7 +103,6 @@ function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; revi
         </button>
         <Icon size={14} className="tone-muted" />
         <span className="mono ellipsis" style={{ flex: 1 }} title={path}>{path}</span>
-        {generated && <span className="tag" title="Generated file: diff hidden until you open it">Generated</span>}
         <span className="mono muted" style={{ fontSize: 11 }}>+{s.add} −{s.del}</span>
         <label className={p.reviewed ? "review-check on" : "review-check"}>
           <input type="checkbox" checked={p.reviewed} onChange={(e) => p.onToggle(e.target.checked)} />
@@ -136,7 +134,22 @@ export function GuidedReview(p: Props) {
   const scroller = useRef<HTMLDivElement>(null);
   const sections = useRef<(HTMLElement | null)[]>([]);
   const navItems = useRef<(HTMLDivElement | null)[]>([]);
-  const steps = useMemo(() => (p.steps ? resolveSteps(p.steps, p.files) : []), [p.steps, p.files]);
+  // Generated files (lockfiles, build output, the reviewer's own globs) and, by default, tests aren't
+  // part of any section, so they never need opening or marking reviewed. The Files view still shows them.
+  const { shown, hiddenGenerated, hiddenTests } = useMemo(() => {
+    const kinds = p.files.map((f) => hiddenKind(f, p.hide));
+    return {
+      shown: p.files.filter((_, i) => !kinds[i]),
+      hiddenGenerated: kinds.filter((k) => k === "generated").length,
+      hiddenTests: kinds.filter((k) => k === "test").length,
+    };
+  }, [p.files, p.hide]);
+  const hidden = hiddenGenerated + hiddenTests;
+  const hiddenLabel = [
+    hiddenGenerated && `${hiddenGenerated} generated`,
+    hiddenTests && `${hiddenTests} test`,
+  ].filter(Boolean).join(" and ") + ` ${hidden === 1 ? "file" : "files"} left out`;
+  const steps = useMemo(() => (p.steps ? resolveSteps(p.steps, shown) : []), [p.steps, shown]);
   const [active, setActive] = useState(Math.min(p.current, Math.max(steps.length - 1, 0)));
 
   const stepDone = (s: Step) => allReviewed(s.keys, p.reviewed);
@@ -201,6 +214,11 @@ export function GuidedReview(p: Props) {
       ) : (
         <span style={{ flex: 1 }} />
       )}
+      {hidden > 0 && !narrow && (
+        <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }} title="Generated files and tests are left out, as set in Settings → Review. The Files view shows them.">
+          {hiddenLabel}
+        </span>
+      )}
       <div className="seg" role="group" aria-label="Diff layout">
         <button type="button" className={split ? "" : "on"} aria-pressed={!split} title="Unified" onClick={() => p.onSplit(false)}><Rows3 size={13} />{!narrow && "Unified"}</button>
         <button type="button" className={split ? "on" : ""} aria-pressed={split} disabled={!canSplit} title={canSplit ? "Split" : "Make the window wider to use split view"} onClick={() => p.onSplit(true)}><Columns2 size={13} />{!narrow && "Split"}</button>
@@ -217,7 +235,9 @@ export function GuidedReview(p: Props) {
             <Sparkles size={32} strokeWidth={1.4} className="tone-accent" />
             <h2 style={{ margin: 0, fontSize: 15, color: "var(--text)" }}>Guided review</h2>
             <p style={{ margin: 0 }}>{agent} groups related changes across files into sections, explains each one, and orders them so each builds on the last.</p>
-            {p.generating?.running ? (
+            {p.steps && hidden > 0 ? (
+              <span>Every changed file is generated or a test, so there's nothing to walk through here.</span>
+            ) : p.generating?.running ? (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Loader size={14} className="spin" />Grouping the changes…</span>
             ) : p.canGenerate ? (
               <button type="button" className="btn primary" onClick={p.onGenerate}><Sparkles size={14} />Create guided review</button>
@@ -294,7 +314,6 @@ export function GuidedReview(p: Props) {
                       part={part}
                       findings={p.findings}
                       split={split}
-                      hideGenerated={p.hideGenerated}
                       reviewed={allReviewed(part.keys, p.reviewed)}
                       onToggle={(v) => p.onReviewed(part.keys, v)}
                     />

@@ -27,6 +27,10 @@ export interface Settings {
   diffMode: "guided" | "files";
   diffLayout: "unified" | "split";
   hideGenerated: boolean;
+  /** The reviewer's own globs for files to treat as generated, on top of the built-in list. */
+  generatedPatterns: string[];
+  /** Leave test and spec files out of the guided review and fold them in the Files view. The agent still reads them. */
+  hideTests: boolean;
   /** Treat lines that differ only in whitespace as unchanged. */
   hideWhitespace: boolean;
   // The agent that runs reviews
@@ -76,6 +80,8 @@ export const DEFAULT_SETTINGS: Settings = {
   diffMode: "guided",
   diffLayout: "unified",
   hideGenerated: true,
+  generatedPatterns: [],
+  hideTests: true,
   hideWhitespace: false,
   harness: "claude",
   model: "",
