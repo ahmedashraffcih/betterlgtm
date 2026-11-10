@@ -168,7 +168,7 @@ code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--
 .file .rm { color: var(--muted); font-size: 11px; }
 
 /* simple diff rows used in excerpts */
-.dl { display: grid; grid-template-columns: 44px 44px 18px minmax(0, 1fr); font: 12px/20px var(--mono); }
+.dl { display: grid; grid-template-columns: 44px 44px 18px minmax(0, 1fr); font: 12px/20px var(--mono); tab-size: 2; }
 .dl .n { color: var(--faint); text-align: right; padding-right: 8px; }
 .dl .t { white-space: pre; overflow: hidden; }
 .dl.insert { background: var(--add-bg); color: var(--add-text); }
@@ -176,7 +176,7 @@ code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--
 .dl.hl { background-image: linear-gradient(var(--hl-bg), var(--hl-bg)); box-shadow: inset 3px 0 0 var(--hl-bar); }
 
 /* react-diff-view theme */
-.diff { font: 12px/20px var(--mono); width: 100%; border-collapse: collapse; user-select: text; }
+.diff { font: 12px/20px var(--mono); width: 100%; border-collapse: collapse; user-select: text; tab-size: 2; }
 .diff-gutter { color: var(--faint); padding: 0 8px; min-width: 44px; text-align: right; position: relative; }
 .diff-code { padding-left: 8px; white-space: pre; }
 .diff-code-insert, .diff-gutter-insert { background: var(--add-bg); color: var(--add-text); }
@@ -202,7 +202,7 @@ code { font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--
 .md a { color: var(--accent); text-decoration: none; }
 .md a:hover { text-decoration: underline; }
 .md code { font-size: 12.5px; }
-.md pre { padding: 10px 12px; border-radius: 6px; background: var(--sunken); overflow-x: auto; font: 12px/1.5 var(--mono); }
+.md pre { padding: 10px 12px; border-radius: 6px; background: var(--sunken); overflow-x: auto; font: 12px/1.5 var(--mono); tab-size: 2; }
 .md pre code { padding: 0; background: none; font-size: inherit; }
 .md blockquote { padding: 0 12px; border-left: 3px solid var(--line); color: var(--muted); }
 .md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
