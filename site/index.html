@@ -487,15 +487,15 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 <section id="tour" class="wrap tour" aria-labelledby="tour-title">
   <h2 id="tour-title" class="sr-only">A review in BetterLGTM</h2>
   <div class="tabs" role="tablist" aria-label="Steps of a review">
-    <button type="button" role="tab" id="tab-inbox" aria-controls="panel-inbox" aria-selected="false" tabindex="-1"><span class="k">1</span>Inbox</button>
+    <button type="button" role="tab" id="tab-inbox" aria-controls="panel-inbox" aria-selected="true"><span class="k">1</span>Inbox</button>
     <button type="button" role="tab" id="tab-analysis" aria-controls="panel-analysis" aria-selected="false" tabindex="-1"><span class="k">2</span>Analysis</button>
-    <button type="button" role="tab" id="tab-guided" aria-controls="panel-guided" aria-selected="true"><span class="k">3</span>Guided review</button>
+    <button type="button" role="tab" id="tab-guided" aria-controls="panel-guided" aria-selected="false" tabindex="-1"><span class="k">3</span>Guided review</button>
     <button type="button" role="tab" id="tab-submit" aria-controls="panel-submit" aria-selected="false" tabindex="-1"><span class="k">4</span>Submit</button>
   </div>
   <div class="window">
     <div class="titlebar" aria-hidden="true"><span></span><span></span><span></span><b>payments-api #482 · Add idempotency keys to charge endpoint</b></div>
 
-    <div class="panel" role="tabpanel" id="panel-inbox" aria-labelledby="tab-inbox" hidden>
+    <div class="panel" role="tabpanel" id="panel-inbox" aria-labelledby="tab-inbox">
       <p class="panel-note">Pull requests waiting on you, sorted by risk. A review requested from your team counts too.</p>
       <ul class="inbox">
         <li class="on"><span class="pr"><b>Add idempotency keys to charge endpoint</b><span>acme/payments-api #482 · mira-k · requested 2h ago</span></span><span class="size"><i class="plus">+214</i> <i class="minus">−38</i></span><span class="ci ok">CI passing</span><span class="risk high">High risk</span></li>
@@ -528,7 +528,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
       </div>
     </div>
 
-    <div class="panel" role="tabpanel" id="panel-guided" aria-labelledby="tab-guided">
+    <div class="panel" role="tabpanel" id="panel-guided" aria-labelledby="tab-guided" hidden>
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="assets/guided-dark.webp">
         <img src="assets/guided-light.webp" width="1600" height="1031" loading="lazy" alt="Guided review: the change split into three sections, each with a short summary above the diff of its file">
