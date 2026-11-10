@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BetterLGTM — review pull requests you've actually read</title>
-<meta name="description" content="A desktop app for the pull requests waiting on your review. It checks each one out, has Claude Code compare the description with the code, and walks you through the changes.">
+<meta name="description" content="A desktop app for the pull requests waiting on your review. It checks each one out, has your coding agent compare the description with the code, and walks you through the changes.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:title" content="BetterLGTM — mean it when you say lgtm">
-<meta property="og:description" content="Review GitHub pull requests with Claude Code, from your desktop. Free for macOS, Windows and Linux.">
+<meta property="og:description" content="Review GitHub pull requests with Claude Code, Codex or Gemini CLI, from your desktop. Free for macOS, Windows and Linux.">
 <meta property="og:image" content="https://drmas.github.io/betterlgtm/assets/og.png">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
@@ -420,7 +420,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
     <span class="was"><span aria-hidden="true">−</span><span class="struck"><span class="sr-only">Not just </span>Looks good to me.<span class="strike" aria-hidden="true"></span></span></span>
     <span class="now"><span>Mean it when you say lgtm.</span></span>
   </h1>
-  <p class="lede">A desktop app for the pull requests waiting on your review. Claude Code checks the description against the code, so you know what to read first.</p>
+  <p class="lede">A desktop app for the pull requests waiting on your review. Your coding agent checks the description against the code, so you know what to read first.</p>
   <div class="cta-row">
     <a class="btn btn-lg" id="hero-cta" href="https://github.com/drmas/betterlgtm/releases/latest">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
@@ -431,7 +431,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
       <button type="button" id="brew-copy" aria-label="Copy the Homebrew command">Copy</button>
     </div>
   </div>
-  <p class="note"><span id="hero-note">Free and open source, for macOS, Windows and Linux.</span> Needs the <a href="https://cli.github.com/">GitHub CLI</a> and <a href="https://claude.com/claude-code">Claude Code</a>, signed in.</p>
+  <p class="note"><span id="hero-note">Free and open source, for macOS, Windows and Linux.</span> Needs the <a href="https://cli.github.com/">GitHub CLI</a> and <a href="https://claude.com/claude-code">Claude Code</a>, <a href="https://developers.openai.com/codex/cli">Codex</a> or <a href="https://geminicli.com">Gemini CLI</a>, signed in.</p>
 
   <figure class="stage" style="margin-left: 0; margin-right: 0; margin-bottom: 0;">
     <div class="panes captions" aria-hidden="true">
@@ -551,11 +551,11 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
       </li>
       <li class="step">
         <span class="dot" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="9" r="3"/><path d="M6 9v6"/><path d="M18 12c0 3-3 3-6 3H9"/></svg></span>
-        <div><h3>It's checked out on its own</h3><p>Each pull request gets a git worktree next to a shared clone, so Claude reads real files, not just the diff.</p></div>
+        <div><h3>It's checked out on its own</h3><p>Each pull request gets a git worktree next to a shared clone, so the agent reads real files, not just the diff.</p></div>
       </li>
       <li class="step">
         <span class="dot" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
-        <div><h3>Claude Code reads it</h3><p>It checks every claim in the description against the code and ranks the findings by severity. With auto-analyze on, this happens before you open it.</p></div>
+        <div><h3>Your agent reads it</h3><p>It checks every claim in the description against the code and ranks the findings by severity. With auto-analyze on, this happens before you open it.</p></div>
       </li>
       <li class="step">
         <span class="dot" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
@@ -612,7 +612,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   <div class="split">
     <div class="copy">
       <h2>Ask about the line you're on</h2>
-      <p>The chat knows which finding, section or file you're looking at, and Claude can read the whole repository to answer.</p>
+      <p>The chat knows which finding, section or file you're looking at, and the agent can read the whole repository to answer.</p>
     </div>
     <div class="visual chat">
       <p class="msg-me">How would you fix the double charge?</p>
@@ -645,7 +645,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
   <ul class="lines also">
     <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Re-check findings.</strong> After the author pushes, see which are fixed and which are still open.</span></li>
     <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Risk and tests.</strong> The risk level and why, the sensitive areas touched, and what's tested.</span></li>
-    <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Your own pull requests.</strong> See what's blocking merge, self-review, and let Claude write the description.</span></li>
+    <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Your own pull requests.</strong> See what's blocking merge, self-review, and let the agent write the description.</span></li>
     <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Your team's guidelines.</strong> The analysis follows a repository's REVIEW.md or the review part of CONTRIBUTING.md.</span></li>
     <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>Linked issues.</strong> Requirements from the issues a PR closes are checked like description claims.</span></li>
     <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>A full diff view.</strong> Unified or split, whitespace hiding, and regex search across the repository.</span></li>
@@ -659,9 +659,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
       <p>BetterLGTM runs on your machine with the <code>gh</code> and <code>claude</code> you've already signed in to.</p>
     </div>
     <ul class="visual lines privacy">
-      <li class="del"><span class="s" aria-hidden="true">−</span><span><strong><span class="sr-only">No </span>An account and a server</strong>It talks to GitHub through your <code>gh</code> and to Claude through your <code>claude</code>. Your code and tokens never pass through us.</span></li>
+      <li class="del"><span class="s" aria-hidden="true">−</span><span><strong><span class="sr-only">No </span>An account and a server</strong>It talks to GitHub through your <code>gh</code> and to the model through your own agent CLI. Your code and tokens never pass through us.</span></li>
       <li class="del"><span class="s" aria-hidden="true">−</span><span><strong><span class="sr-only">No </span>Touching your working copy</strong>Each pull request has its own worktree. The branch you're on stays exactly as you left it.</span></li>
-      <li class="del"><span class="s" aria-hidden="true">−</span><span><strong><span class="sr-only">No </span>Write access</strong>Claude Code can read, search and look at git history. It can't edit files, run other commands, or comment on GitHub.</span></li>
+      <li class="del"><span class="s" aria-hidden="true">−</span><span><strong><span class="sr-only">No </span>Write access</strong>The agent can read, search and look at git history. It can't edit files, run other commands, or comment on GitHub.</span></li>
       <li class="add"><span class="s" aria-hidden="true">+</span><span><strong>The source, MIT licensed</strong>Read it, file an issue, or send a pull request on <a href="https://github.com/drmas/betterlgtm">GitHub</a>.</span></li>
     </ul>
   </div>
@@ -674,6 +674,10 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
       <p>When a new release is out, the app offers to install it. <a href="https://github.com/drmas/betterlgtm/blob/main/CHANGELOG.md">Full changelog</a></p>
     </div>
     <ol class="visual releases">
+      <li>
+        <h3><span class="ver">0.5.0</span> Choose your coding agent</h3>
+        <p>Review with Claude Code, Codex or Gemini CLI, set up on first run with a sample review to try, and findings that are double-checked against the code.</p>
+      </li>
       <li>
         <h3><span class="ver">0.4.3</span> Fixes for the window, hidden lines and reviews</h3>
         <p>The window closes again on macOS, hidden lines in the diff show the right code, and Open in editor works.</p>
@@ -732,25 +736,25 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 
 <section id="download" class="wrap download">
   <h2>Download BetterLGTM</h2>
-  <p class="sub">Free. <span id="version">Version 0.4.3.</span> The app updates itself from here on.</p>
+  <p class="sub">Free. <span id="version">Version 0.5.0.</span> The app updates itself from here on.</p>
   <div class="platforms">
     <div class="platform">
       <h3>macOS</h3>
-      <a class="dl primary" data-asset="mac-arm" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.3/BetterLGTM_0.4.3_aarch64.dmg"><span>Apple silicon</span><span class="meta">.dmg, 3.2 MB</span></a>
-      <a class="dl" data-asset="mac-intel" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.3/BetterLGTM_0.4.3_x64.dmg"><span>Intel</span><span class="meta">.dmg, 3.6 MB</span></a>
+      <a class="dl primary" data-asset="mac-arm" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_aarch64.dmg"><span>Apple silicon</span><span class="meta">.dmg, 3.3 MB</span></a>
+      <a class="dl" data-asset="mac-intel" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_x64.dmg"><span>Intel</span><span class="meta">.dmg, 3.6 MB</span></a>
       <p>Signed and notarized by Apple.</p>
     </div>
     <div class="platform">
       <h3>Windows</h3>
-      <a class="dl" data-asset="win-exe" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.3/BetterLGTM_0.4.3_x64-setup.exe"><span>Installer</span><span class="meta">.exe, 2.6 MB</span></a>
-      <a class="dl" data-asset="win-msi" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.3/BetterLGTM_0.4.3_x64_en-US.msi"><span>Windows Installer</span><span class="meta">.msi, 3.6 MB</span></a>
+      <a class="dl" data-asset="win-exe" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_x64-setup.exe"><span>Installer</span><span class="meta">.exe, 2.7 MB</span></a>
+      <a class="dl" data-asset="win-msi" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_x64_en-US.msi"><span>Windows Installer</span><span class="meta">.msi, 3.6 MB</span></a>
       <p>Not signed yet. If SmartScreen warns, choose More info › Run anyway.</p>
     </div>
     <div class="platform">
       <h3>Linux</h3>
-      <a class="dl" data-asset="appimage" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.3/BetterLGTM_0.4.3_amd64.AppImage"><span>AppImage</span><span class="meta">79 MB</span></a>
-      <a class="dl" data-asset="deb" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.3/BetterLGTM_0.4.3_amd64.deb"><span>Debian, Ubuntu</span><span class="meta">.deb, 4.3 MB</span></a>
-      <a class="dl" data-asset="rpm" href="https://github.com/drmas/betterlgtm/releases/download/v0.4.3/BetterLGTM-0.4.3-1.x86_64.rpm"><span>Fedora</span><span class="meta">.rpm, 4.3 MB</span></a>
+      <a class="dl" data-asset="appimage" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_amd64.AppImage"><span>AppImage</span><span class="meta">79 MB</span></a>
+      <a class="dl" data-asset="deb" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_amd64.deb"><span>Debian, Ubuntu</span><span class="meta">.deb, 4.4 MB</span></a>
+      <a class="dl" data-asset="rpm" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM-0.5.0-1.x86_64.rpm"><span>Fedora</span><span class="meta">.rpm, 4.4 MB</span></a>
       <p>Needs WebKitGTK 4.1.</p>
     </div>
   </div>
@@ -797,7 +801,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
     document.querySelectorAll(".dl.primary").forEach(function (el) { el.classList.remove("primary"); });
     link(hero[0]).classList.add("primary");
   }
-  setHero("0.4.3");
+  setHero("0.5.0");
   document.getElementById("brew-copy").addEventListener("click", function () {
     var button = this;
     navigator.clipboard.writeText(document.getElementById("brew-cmd").textContent).then(function () {
