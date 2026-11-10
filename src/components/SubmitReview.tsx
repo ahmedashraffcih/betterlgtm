@@ -7,6 +7,7 @@ import { api, errorText, type PrDetails, type ReviewEvent } from "../api";
 import { commentLines } from "../diffUtils";
 import type { DraftComment } from "./DiffView";
 import { SEVERITY } from "../icons";
+import { useAgent } from "../harness";
 
 interface Props {
   repo: string;
@@ -59,6 +60,7 @@ function commentText(f: Finding): string {
 
 /** Posts a GitHub review, with the chosen findings as comments on their diff lines. */
 export function SubmitReview(p: Props) {
+  const agent = useAgent().short;
   const findings = p.analysis?.findings ?? [];
   const [items, setItems] = useState<Item[]>(() =>
     findings.map((finding, index) => ({
@@ -218,8 +220,8 @@ export function SubmitReview(p: Props) {
           <div className="review-head" style={{ marginTop: 8, alignItems: "center" }}>
             <span>Summary</span>
             {p.onDraftSummary && (
-              <button type="button" className="btn sm" onClick={draft} disabled={drafting || sending} title="Claude writes a summary from your decision and comments; you can edit it">
-                {drafting ? <Loader size={13} className="spin" /> : <Sparkles size={13} />}{drafting ? "Drafting…" : summary.trim() ? "Redraft with Claude" : "Draft with Claude"}
+              <button type="button" className="btn sm" onClick={draft} disabled={drafting || sending} title={`${agent} writes a summary from your decision and comments; you can edit it`}>
+                {drafting ? <Loader size={13} className="spin" /> : <Sparkles size={13} />}{drafting ? "Drafting…" : summary.trim() ? `Redraft with ${agent}` : `Draft with ${agent}`}
               </button>
             )}
           </div>

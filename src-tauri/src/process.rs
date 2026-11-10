@@ -123,6 +123,26 @@ pub fn command(program: &str) -> Command {
     cmd
 }
 
+/// Where a tool's command resolves to: the file itself when given as a path, otherwise the first
+/// match on the PATH the tools run with. `None` when nothing is found.
+pub fn resolve(program: &str) -> Option<String> {
+    let given = Path::new(program);
+    if given.components().count() > 1 {
+        return given.is_file().then(|| program.to_string());
+    }
+    #[cfg(unix)]
+    let (path, exts) = (tool_path().to_string(), vec![String::new()]);
+    #[cfg(not(unix))]
+    let (path, exts) = (
+        std::env::var("PATH").unwrap_or_default(),
+        std::env::var("PATHEXT").unwrap_or_else(|_| ".EXE;.CMD;.BAT".into()).split(';').map(str::to_string).chain([String::new()]).collect::<Vec<_>>(),
+    );
+    std::env::split_paths(&path)
+        .flat_map(|dir| exts.iter().map(move |ext| dir.join(format!("{program}{ext}"))))
+        .find(|candidate| candidate.is_file())
+        .map(|found| found.to_string_lossy().into_owned())
+}
+
 /// Runs a program to completion and returns its stdout, or an error that includes stderr.
 pub async fn run(program: &str, args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
     let mut cmd = command(program);

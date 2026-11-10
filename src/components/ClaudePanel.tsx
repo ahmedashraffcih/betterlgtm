@@ -2,6 +2,7 @@ import { ArrowUp, ChevronDown, ChevronRight, Eraser, Flag, Loader, MessageSquare
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ChatItem } from "../sessions";
 import { Markdown } from "./Markdown";
+import { useAgent } from "../harness";
 
 export interface ChatContext {
   /** Short label for the chip, e.g. "Finding 2: Keys aren't scoped". */
@@ -57,6 +58,7 @@ function ToolGroup({ items }: { items: ChatItem[] }) {
 }
 
 export function ClaudePanel(p: Props) {
+  const agent = useAgent().short;
   const [draft, setDraft] = useState("");
   const [useContext, setUseContext] = useState(true);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -108,8 +110,8 @@ export function ClaudePanel(p: Props) {
         <textarea
           ref={input}
           rows={1}
-          aria-label="Message Claude"
-          placeholder={ctx ? "Ask about this…" : "Ask Claude about this PR…"}
+          aria-label={`Message ${agent}`}
+          placeholder={ctx ? "Ask about this…" : `Ask ${agent} about this PR…`}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKey}
@@ -127,7 +129,7 @@ export function ClaudePanel(p: Props) {
 
   if (p.compact) {
     return (
-      <section aria-label="Claude" className="chat chat-compact">
+      <section aria-label={agent} className="chat chat-compact">
         <div className="chat-suggest">
           <MessageSquare size={14} className="tone-muted" style={{ flexShrink: 0 }} />
           {suggestions.slice(0, 3).map((s) => (
@@ -140,10 +142,10 @@ export function ClaudePanel(p: Props) {
   }
 
   return (
-    <section aria-label="Claude" className="chat">
+    <section aria-label={agent} className="chat">
       <div className="chat-head">
         <MessageSquare size={14} className="tone-muted" />
-        <span style={{ fontSize: 12, fontWeight: 600 }}>Claude</span>
+        <span style={{ fontSize: 12, fontWeight: 600 }}>{agent}</span>
         <span className="muted" style={{ fontSize: 12 }}>· continues the analysis session</span>
         <span style={{ flex: 1 }} />
         <button type="button" className="tb" aria-label="Clear conversation" title="Clear conversation" onClick={p.onClear} disabled={p.running}><Eraser size={14} /></button>
@@ -164,7 +166,7 @@ export function ClaudePanel(p: Props) {
             <div key={i} className="answer"><Markdown text={b.item.text} /></div>
           ),
         )}
-        {p.running && <div className="muted thinking"><Loader size={13} className="spin" />Claude is working…</div>}
+        {p.running && <div className="muted thinking"><Loader size={13} className="spin" />{agent} is working…</div>}
         {!p.running && (
           <div className="chat-suggest" style={{ paddingTop: 2 }}>
             {suggestions.map((s) => (

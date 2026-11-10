@@ -2,6 +2,7 @@ import { Loader, Save, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { errorText } from "../api";
 import { Markdown } from "./Markdown";
+import { useAgent } from "../harness";
 
 interface Props {
   current: string;
@@ -12,6 +13,7 @@ interface Props {
 
 /** Claude drafts the PR description; the author edits it and saves it to GitHub. */
 export function DescriptionDialog(p: Props) {
+  const agent = useAgent().short;
   const [text, setText] = useState(p.current);
   const [busy, setBusy] = useState<"draft" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export function DescriptionDialog(p: Props) {
         </div>
         <div className="review-foot">
           <button type="button" className="btn" onClick={() => run("draft")} disabled={!!busy}>
-            {busy === "draft" ? <Loader size={14} className="spin" /> : <Sparkles size={14} />}{busy === "draft" ? "Claude is writing…" : "Write with Claude"}
+            {busy === "draft" ? <Loader size={14} className="spin" /> : <Sparkles size={14} />}{busy === "draft" ? `${agent} is writing…` : `Write with ${agent}`}
           </button>
           <span style={{ flex: 1 }} />
           <button type="button" className="btn" onClick={p.onClose} disabled={!!busy}>Cancel</button>

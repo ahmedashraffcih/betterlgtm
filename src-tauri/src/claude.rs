@@ -9,33 +9,19 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::sync::oneshot;
 
 use crate::config::ConfigState;
+use crate::harness::{Harness, Normalizer, Run};
 
 /// Cancel handles for Claude runs that are still streaming, keyed by run id.
 #[derive(Default)]
 pub struct Runs(Mutex<HashMap<String, oneshot::Sender<()>>>);
 
-/// Tools Claude may use. Everything else is denied in print mode, so the session is read-only.
-const ALLOWED_TOOLS: &[&str] = &[
-    "Read",
-    "Grep",
-    "Glob",
-    "LS",
-    "Bash(git log:*)",
-    "Bash(git show:*)",
-    "Bash(git diff:*)",
-    "Bash(git blame:*)",
-    "Bash(git merge-base:*)",
-    "Bash(rg:*)",
-];
-
-/// Added to every session: answers are read in a narrow side panel by someone mid-review.
-const STYLE: &str = "You are helping someone review a pull request inside a desktop app. \
-Answer briefly: lead with the answer, then at most 5 short bullet points. \
-No preamble, no recap, no headings. Use `inline code` for identifiers and file:line for locations.";
-
-/// Runs `claude -p` in `cwd` and forwards every stream-json event to the frontend.
-/// Pass `resume` to continue an earlier session, which is how the chat stays persistent.
+/// Runs the chosen agent in `cwd`, read-only, and forwards its events to the frontend in Claude
+/// Code's shape (see `harness`). Pass `resume` to continue an earlier session, which is how the
+/// chat stays persistent. `schema` is a JSON Schema the final answer must match and
+/// `max_budget_usd` stops the run at that cost; both are Claude Code features and are left out
+/// for the other agents.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn claude_run(
     runs: State<'_, Runs>,
     config: State<'_, ConfigState>,
@@ -43,26 +29,28 @@ pub async fn claude_run(
     cwd: String,
     prompt: String,
     resume: Option<String>,
+    chat: Option<bool>,
+    schema: Option<String>,
+    max_budget_usd: Option<f64>,
     on_event: Channel<Value>,
 ) -> Result<(), String> {
     let config = config.get();
-    let mut cmd = crate::process::command(&config.claude_path);
-    if !config.model.trim().is_empty() {
-        cmd.args(["--model", config.model.trim()]);
-    }
-    if !config.effort.trim().is_empty() {
-        cmd.args(["--effort", config.effort.trim()]);
-    }
-    cmd.arg("-p")
-        .arg(&prompt)
-        .args(["--output-format", "stream-json", "--verbose"])
-        .args(["--append-system-prompt", STYLE])
-        .arg("--allowedTools")
-        .args(ALLOWED_TOOLS)
-        .args(["--disallowedTools", "Edit", "Write", "NotebookEdit"]);
-    if let Some(id) = resume.as_deref() {
-        cmd.args(["--resume", id]);
-    }
+    let harness = Harness::from_id(&config.harness);
+    let name = harness.name();
+    let program = config.agent_path(harness);
+    let mut cmd = crate::process::command(&program);
+    harness.arguments(
+        &mut cmd,
+        &Run {
+            prompt: &prompt,
+            model: &config.model,
+            effort: &config.effort,
+            resume: resume.as_deref(),
+            chat: chat.unwrap_or(false),
+            schema: schema.as_deref(),
+            max_budget_usd,
+        },
+    );
     cmd.current_dir(&cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -71,9 +59,9 @@ pub async fn claude_run(
 
     let mut child = cmd
         .spawn()
-        .map_err(|e| format!("Could not start Claude Code: {e}. Is `claude` installed and on PATH?"))?;
-    let stdout = child.stdout.take().ok_or("No stdout from claude")?;
-    let mut stderr = child.stderr.take().ok_or("No stderr from claude")?;
+        .map_err(|e| format!("Could not start {name}: {e}. Is `{program}` installed and on PATH?"))?;
+    let stdout = child.stdout.take().ok_or("No stdout from the agent")?;
+    let mut stderr = child.stderr.take().ok_or("No stderr from the agent")?;
     let stderr_task = tokio::spawn(async move {
         let mut buf = String::new();
         let _ = stderr.read_to_string(&mut buf).await;
@@ -83,17 +71,17 @@ pub async fn claude_run(
     let (cancel_tx, mut cancel_rx) = oneshot::channel();
     runs.0.lock().unwrap().insert(run_id.clone(), cancel_tx);
 
+    let mut events = Normalizer::new(harness);
     let mut lines = BufReader::new(stdout).lines();
     let mut cancelled = false;
     loop {
         tokio::select! {
             line = lines.next_line() => match line {
                 Ok(Some(line)) if line.trim().is_empty() => {}
-                Ok(Some(line)) => {
-                    let event = serde_json::from_str::<Value>(&line)
-                        .unwrap_or_else(|_| json!({ "type": "raw", "text": line }));
-                    let _ = on_event.send(event);
-                }
+                Ok(Some(line)) => match serde_json::from_str::<Value>(&line) {
+                    Ok(raw) => events.feed(raw).into_iter().for_each(|e| { let _ = on_event.send(e); }),
+                    Err(_) => { let _ = on_event.send(json!({ "type": "raw", "text": line })); }
+                },
                 Ok(None) => break,
                 Err(e) => return Err(e.to_string()),
             },
@@ -111,9 +99,15 @@ pub async fn claude_run(
     if cancelled {
         return Err("Cancelled".into());
     }
-    if !status.success() {
-        return Err(format!("Claude Code exited with {status}: {}", stderr.trim()));
+    if let Some(error) = events.error.take() {
+        return Err(format!("{name}: {error}"));
     }
+    if !status.success() {
+        // Some agents log a lot of unrelated noise before the line that matters; the end is the useful part.
+        let detail: String = stderr.trim().chars().rev().take(1200).collect::<Vec<_>>().into_iter().rev().collect();
+        return Err(format!("{name} exited with {status}: {detail}"));
+    }
+    events.finish().into_iter().for_each(|e| { let _ = on_event.send(e); });
     Ok(())
 }
 

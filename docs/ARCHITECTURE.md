@@ -46,21 +46,43 @@ chat: claude_run --resume <session>    ──▶ ClaudePanel
 
 - `--output-format stream-json --verbose`, so each event (text, tool use, usage) is forwarded to the UI as it happens over a `tauri::ipc::Channel`;
 - `--allowedTools` limited to `Read`, `Grep`, `Glob`, `LS` and a few read-only `git` and `rg` commands, plus `--disallowedTools` for anything that writes;
-- `--append-system-prompt` asking for short, bulleted answers;
+- `--append-system-prompt` asking for short, bulleted answers, for chat messages only;
+- `--json-schema` for the analysis, the double-check, the guided review and the re-check, so the answer arrives as data (`structured_output` on the result event) rather than as JSON inside text;
+- `--max-budget-usd` for automatic analyses, from the spending limit in Settings;
 - `--model` and `--effort` from Settings;
 - `--resume <session id>` for follow-up chat messages, which keeps the conversation going across app restarts.
 
 Runs can be cancelled; the backend keeps a cancel handle per run id.
 
+#### Other agents
+
+Reviews can run with Claude Code, Codex or Gemini CLI (Settings › Agent, and the second onboarding step). `src-tauri/src/harness.rs` holds what differs: each agent's arguments for a read-only, non-interactive run, and a `Normalizer` that turns its JSON stream into the events Claude Code emits, so the frontend reads one shape.
+
+| | Read-only by | Resume | Answer as data | Spending limit |
+|---|---|---|---|---|
+| Claude Code | allowed-tools list | `--resume <id>` | `--json-schema` | `--max-budget-usd` |
+| Codex | `sandbox_mode="read-only"` | `exec resume <id>` | JSON in the text | none |
+| Gemini CLI | `--approval-mode plan` | `--resume <id>` | JSON in the text | none |
+
+Session ids from Codex and Gemini CLI are stored with the agent's name in front (`codex:…`), and a session is only resumed by the agent that started it; after switching agents, the next run starts a fresh session. `src/harness.ts` is the frontend's list, with install and sign-in commands.
+
 ### 4. Turning answers into UI
 
-`src/analysis.ts` builds the prompts and parses Claude's answers. The analysis prompt asks for a fixed structure (verdict, summary, claims, findings with file and line ranges); the parser is tolerant of small deviations. The walkthrough prompt returns ordered sections, each with a summary and the hunks it covers.
+`src/analysis.ts` builds the prompts, holds the schemas and parses Claude's answers. An analysis is three runs (`runAnalysis` in `App.tsx`):
+
+1. **Analysis**: a fixed structure (verdict, summary, claims, findings with file and line ranges). The prompt includes the findings of the PR's previous analysis with what the reviewer did with them, and findings the reviewer dismissed on the repository's other PRs. A finding that repeats an earlier one carries its id, so its state (dismissed, resolved, commented) stays with it.
+2. **Double-check** (on by default): a fresh session, which hasn't seen the analysis's reasoning, tries to disprove each critical, high and medium finding. Refuted findings move to `dropped`; the rest are marked confirmed or not confirmed. If this run fails, the findings stay as they are.
+3. **Guided review**: once the verdict is on screen, the analysis session is resumed in the background to group the changes into ordered sections.
+
+The parsers still read JSON out of plain text, for Claude Code versions without `--json-schema`.
 
 `src/diffUtils.ts` maps findings and sections to hunks of the parsed diff (via `react-diff-view`), and identifies generated files so they can be folded.
 
 ## Frontend state
 
-- **Per-PR sessions** (`src/sessions.ts`): analysis results, walkthrough, chat history, Claude session ids and reviewed hunks, kept in local storage under `better-lgtm.sessions`. A hunk's review state is keyed by its file path and content, so it survives refreshes but resets when the code changes.
+- **Per-PR sessions** (`src/sessions.ts`): analysis results, walkthrough, chat history, Claude session ids and reviewed hunks, kept as one JSON file per pull request in the app's data folder (`src-tauri/src/store.rs`). Only sessions that changed are written, and sessions from local storage (before this) move to disk on first start. The browser preview still uses local storage. A hunk's review state is keyed by its file path and content, so it survives refreshes but resets when the code changes.
+- **Onboarding** (`src/setup.ts`, `src/components/Onboarding.tsx`): `tool_status` reports whether `gh`, `claude` and `git` are installed and signed in. When something is missing, the setup screen replaces the inbox and review, with the install or sign-in command for the platform; it checks again when the window gets focus. On the first run it is followed once by the inbox choices (organizations, notifications, auto-analyze). The browser preview shows these states with `?setup=missing` or `?setup=signedout`.
+- **Sample mode** (`setSampleMode` in `src/api.ts`): routes every backend call except the tool check and settings to the sample data in `src/mock.ts`, so a review can be tried without `gh` or `claude`. The sample's sessions are removed on leaving, and it never touches the inbox cache, notifications or auto-analyze.
 - **Settings** (`src/settings.ts`): theme, organizations, refresh interval, diff options, Claude model and effort, review instructions, tool paths and data folder. Tool paths, data folder and model are pushed to the backend with `set_config`.
 - **Commands** (`src/commands.ts`, `App.tsx`): one list of commands drives the menu bar, keyboard shortcuts and the command palette, so they never disagree.
 

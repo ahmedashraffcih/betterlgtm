@@ -10,6 +10,7 @@ import { allReviewed, changeKeys, changesInRange, filePath, fileStats, findFile,
 import { contextMenu, copyText } from "../contextMenu";
 import { useTokens } from "../highlightAsync";
 import { useElementWidth } from "../hooks";
+import { useAgent } from "../harness";
 
 export type DiffMode = "guided" | "files";
 
@@ -117,6 +118,7 @@ function searchDiff(files: FileData[], query: string, regex: boolean, cs: boolea
 }
 
 export function DiffView(p: Props) {
+  const agent = useAgent().short;
   const [onlyFindings, setOnlyFindings] = useState(false);
   const counts = useMemo(() => {
     const c = new Map<string, number>();
@@ -527,7 +529,7 @@ export function DiffView(p: Props) {
             <span className="muted" style={{ fontSize: 12 }}>Shift-click another line to extend</span>
             <span style={{ flex: 1 }} />
             {!commenting && p.onAskLines && (
-              <button type="button" className="btn sm" onClick={() => p.onAskLines!(path, picked!.start, picked!.end, pickedCode())}><MessageSquare size={13} />Ask Claude</button>
+              <button type="button" className="btn sm" onClick={() => p.onAskLines!(path, picked!.start, picked!.end, pickedCode())}><MessageSquare size={13} />Ask {agent}</button>
             )}
             {!commenting && p.onAddComment && (
               <button type="button" className="btn sm" onClick={() => setCommenting(true)}><MessageSquarePlus size={13} />Add comment</button>

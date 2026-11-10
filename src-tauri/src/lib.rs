@@ -1,7 +1,9 @@
 mod claude;
 mod config;
 mod gh;
+mod harness;
 mod process;
+mod store;
 mod window;
 mod worktree;
 
@@ -42,6 +44,10 @@ pub fn run() {
             worktree::search_worktree,
             claude::claude_run,
             claude::claude_cancel,
+            store::sessions_load,
+            store::session_save,
+            store::session_delete,
+            store::sessions_clear,
             window::enable_mica,
         ])
         .run(tauri::generate_context!())

@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { comboLabel, controlLabel, shortcutLabel, type Command } from "../commands";
+import { useAgent } from "../harness";
 import { Logo } from "./Logo";
 
 /** Keys handled outside the command list. */
@@ -25,7 +26,7 @@ const VIM_KEYS: [string, string][] = [
   ["x", "Mark the current file or section reviewed"],
   ["a", "Add the current finding to the review"],
   ["S", "Submit review"],
-  ["i", "Ask Claude"],
+  ["i", "Ask the coding agent"],
   ["/", "Filter the inbox, or go to anything"],
   ["r", "Refresh pull requests"],
   ["O", "Open on GitHub"],
@@ -33,6 +34,7 @@ const VIM_KEYS: [string, string][] = [
 ];
 
 export function InfoDialog({ kind, commands, vim, onClose }: { kind: "shortcuts" | "about"; commands: Command[]; vim?: boolean; onClose: () => void }) {
+  const agent = useAgent();
   const [version, setVersion] = useState("");
   useEffect(() => {
     if (kind === "about") getVersion().then(setVersion).catch(() => setVersion("dev"));
@@ -73,7 +75,7 @@ export function InfoDialog({ kind, commands, vim, onClose }: { kind: "shortcuts"
             <Logo size={44} />
             <span style={{ fontSize: 15, fontWeight: 600 }}>BetterLGTM</span>
             <span className="muted">Version {version}</span>
-            <span className="muted" style={{ maxWidth: 320 }}>Reviews GitHub pull requests with the GitHub CLI and Claude Code, in a worktree per PR.</span>
+            <span className="muted" style={{ maxWidth: 320 }}>Reviews GitHub pull requests with the GitHub CLI and {agent.name}, in a worktree per PR.</span>
             <button type="button" className="btn sm" onClick={() => openUrl("https://cli.github.com/manual/")}>GitHub CLI manual</button>
           </div>
         )}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { HarnessId } from "./harness";
 
 export type Theme = "system" | "light" | "dark";
 
@@ -28,7 +29,10 @@ export interface Settings {
   hideGenerated: boolean;
   /** Treat lines that differ only in whitespace as unchanged. */
   hideWhitespace: boolean;
-  // Claude
+  // The agent that runs reviews
+  /** Which coding agent reads the code: Claude Code, Codex or Gemini CLI. */
+  harness: HarnessId;
+  /** Model name for the chosen agent. Empty means the agent's own default. */
   model: string;
   effort: string;
   reviewInstructions: string;
@@ -41,9 +45,18 @@ export interface Settings {
   autoAnalyzeDrafts: boolean;
   /** How many analyses auto-analyze runs at once. */
   autoAnalyzeLimit: number;
+  /** Most an automatic analysis may cost, in US dollars as Claude Code counts it. 0 means no limit. */
+  autoAnalyzeBudgetUsd: number;
+  /** A second pass tries to disprove the findings and drops the ones the code doesn't support. */
+  verifyFindings: boolean;
+  /** The first-run choices were made, or skipped. */
+  onboarded: boolean;
   // Tools and storage
   ghPath: string;
   claudePath: string;
+  /** Full paths to the other agents. Empty means the usual command name. */
+  codexPath: string;
+  geminiPath: string;
   dataDir: string;
 }
 
@@ -64,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   diffLayout: "unified",
   hideGenerated: true,
   hideWhitespace: false,
+  harness: "claude",
   model: "",
   effort: "",
   reviewInstructions: "",
@@ -71,8 +85,13 @@ export const DEFAULT_SETTINGS: Settings = {
   autoAnalyze: false,
   autoAnalyzeDrafts: false,
   autoAnalyzeLimit: 1,
+  autoAnalyzeBudgetUsd: 5,
+  verifyFindings: true,
+  onboarded: false,
   ghPath: "gh",
   claudePath: "claude",
+  codexPath: "",
+  geminiPath: "",
   dataDir: "",
 };
 
@@ -81,15 +100,21 @@ const KEY = "better-lgtm.settings";
 function load(): Settings {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    if (saved) return { ...DEFAULT_SETTINGS, ...saved };
+    // Settings saved before onboarding existed belong to someone who already uses the app.
+    if (saved) return { ...DEFAULT_SETTINGS, onboarded: true, ...saved };
     // Carry over values stored separately before the settings page existed.
     const old = (k: string) => JSON.parse(localStorage.getItem(`better-lgtm.${k}`) ?? "null");
-    return {
+    const first: Settings = {
       ...DEFAULT_SETTINGS,
+      // An inbox that has loaded before also means the app is already in use.
+      onboarded: localStorage.getItem("better-lgtm.inboxCache") !== null,
       hiddenOrgs: old("hiddenOrgs") ?? [],
       diffMode: old("diffMode") ?? DEFAULT_SETTINGS.diffMode,
       diffLayout: old("split") ? "split" : "unified",
     };
+    // Saved at once, so a first run that's interrupted is still a first run next time.
+    localStorage.setItem(KEY, JSON.stringify(first));
+    return first;
   } catch {
     return DEFAULT_SETTINGS;
   }

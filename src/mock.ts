@@ -178,7 +178,17 @@ const analysis = {
   findings: [
     { severity: "critical", category: "Correctness", title: "Concurrent retries can double-charge", body: ["`save()` reads and writes the key in two calls", "Two requests arriving together both miss the cache", "Both create a charge"], fix: "Reserve the key with `SET NX` before charging.", confidence: "high", anchors: [{ path: "src/idempotency/store.ts", startLine: 21, endLine: 24 }, { path: "src/http/charges.ts", startLine: 41, endLine: 42 }] },
     { severity: "high", category: "Security", title: "Idempotency keys aren't scoped to the merchant", body: "Another merchant who sends the same key gets the first merchant's cached charge back.", fix: "Prefix the key with the merchant ID.", suggestion: "  const existing = await redis.get(`idem:${merchantId}:${key}`);\n  if (existing) return JSON.parse(existing);\n  await redis.set(`idem:${merchantId}:${key}`, JSON.stringify(res),", confidence: "high", anchors: [{ path: "src/idempotency/store.ts", startLine: 19, endLine: 21 }] },
+    { severity: "medium", category: "Correctness", title: "Missing key header returns 500", body: ["`lookup()` is called with `undefined` when the header is absent"], confidence: "low", anchors: [{ path: "src/http/charges.ts", startLine: 39, endLine: 40 }] },
     { severity: "low", category: "Data handling", title: "Cached response keeps the full charge body for 24 h", body: "The cached body includes card brand and last4.", confidence: "medium", anchors: [{ path: "src/http/charges.ts", startLine: 45, endLine: 45 }] },
+  ],
+};
+
+/** The second pass: confirms the two real findings and disproves the third. */
+const verification = {
+  results: [
+    { index: 0, status: "confirmed", note: "`save()` at src/idempotency/store.ts:21 reads then writes with no lock." },
+    { index: 1, status: "confirmed", note: "The Redis key at src/idempotency/store.ts:19 has no merchant ID." },
+    { index: 2, status: "refuted", note: "src/http/charges.ts:39 skips the lookup when the header is missing." },
   ],
 };
 
@@ -203,6 +213,9 @@ function bigDiff(): string {
 }
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** The agent chosen in Settings, so the sample tool check answers for it. */
+let mockHarness = "claude";
 
 export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}, onEvent?: (e: ClaudeEvent) => void): Promise<unknown> {
   await wait(150);
@@ -242,8 +255,32 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
       return "https://github.com/acme/payments-api/pull/482#pullrequestreview-1";
     case "list_orgs":
       return { login: "you", orgs: ["acme", "globex-labs", "oss-collective"] };
-    case "tool_status":
-      return { gh: "gh version 2.103.3 (2026-10-26)", login: "you", claude: "2.1.318 (Claude Code)", dataDir: "/home/you/.betterlgtm" };
+    case "set_config":
+      mockHarness = String((args.config as { harness?: string } | undefined)?.harness || "claude");
+      return null;
+    case "tool_status": {
+      // The browser preview can show the setup screen: add ?setup=missing or ?setup=signedout to the address.
+      const setup = new URLSearchParams(location.search).get("setup");
+      const picked = {
+        claude: { harness: "claude", agentName: "Claude Code", agent: "2.1.318 (Claude Code)", agentFile: "/home/you/.local/bin/claude", agentAccount: { signedIn: true, method: "claude.ai", plan: "max", email: "you@example.com" } },
+        codex: { harness: "codex", agentName: "Codex", agent: "codex-cli 0.166.0", agentFile: "/home/you/.local/bin/codex", agentAccount: { signedIn: true, method: "ChatGPT" } },
+        gemini: { harness: "gemini", agentName: "Gemini CLI", agent: undefined, agentError: "Could not run `gemini`: No such file or directory (os error 2). Is it installed and on PATH?", agentFile: null, agentAccount: {} },
+      }[mockHarness] ?? { harness: "claude" };
+      const ok = {
+        gh: "gh version 2.103.3 (2026-10-26)", ghFile: "/usr/bin/gh", login: "you",
+        ...picked,
+        agents: [
+          { id: "claude", name: "Claude Code", file: "/home/you/.local/bin/claude" },
+          { id: "codex", name: "Codex", file: "/home/you/.local/bin/codex" },
+          { id: "gemini", name: "Gemini CLI", file: null },
+        ],
+        git: "git version 2.56.0", dataDir: "/home/you/.betterlgtm",
+      };
+      await wait(400);
+      if (setup === "missing") return { ...ok, gh: undefined, login: undefined, ghError: "Could not run `gh`: No such file or directory (os error 2). Is it installed and on PATH?", agent: undefined, agentFile: null, agentAccount: {}, agents: ok.agents.map((a) => ({ ...a, file: null })), ghFile: null, agentError: "Could not run `claude`: No such file or directory (os error 2). Is it installed and on PATH?" };
+      if (setup === "signedout") return { ...ok, login: undefined, loginError: "`gh api user --jq .login` failed: To get started with GitHub CLI, please run: gh auth login", agentAccount: { signedIn: false } };
+      return ok;
+    }
     case "pr_details":
       return args.number === 1290
         ? {
@@ -275,7 +312,8 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
         onEvent?.({ type: "assistant", message: { content: [{ type: "tool_use", name, input: { file_path: "src/idempotency/store.ts", pattern: "redis", command: "git diff origin/main...HEAD" } }] } });
       }
       const prompt = String(args.prompt ?? "");
-      const isAnalysis = prompt.includes("reply with only one JSON block");
+      const isAnalysis = prompt.includes("You are helping a developer review pull request");
+      const isVerify = prompt.includes("double-checking a code review");
       const isGuide = !isAnalysis && prompt.includes("guided review");
       const isRecheck = prompt.includes("Re-check each finding");
       const isSummary = prompt.includes("overall summary for the GitHub review");
@@ -296,12 +334,14 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
         ? "Thanks for adding idempotency keys. Two things need to change before this is safe: concurrent requests with the same key can still both charge the card, and keys aren't scoped to the merchant. Happy to look again once those are fixed."
         : isRecheck
         ? "```json\n" + JSON.stringify(recheck) + "\n```"
+        : isVerify
+        ? "```json\n" + JSON.stringify(verification) + "\n```"
         : isAnalysis
-        ? "```json\n" + JSON.stringify({ ...analysis, walkthrough }) + "\n```"
+        ? "```json\n" + JSON.stringify(analysis) + "\n```"
         : isGuide
           ? "```json\n" + JSON.stringify({ walkthrough }) + "\n```"
           : "ok";
-      onEvent?.({ type: "assistant", message: { content: [{ type: "text", text: isAnalysis || isGuide || isRecheck ? "Done." : "This is a sample answer from the browser preview." }] } });
+      onEvent?.({ type: "assistant", message: { content: [{ type: "text", text: isAnalysis || isGuide || isRecheck || isVerify ? "Done." : "This is a sample answer from the browser preview." }] } });
       onEvent?.({ type: "result", session_id: "mock-session", result, usage: { input_tokens: 12000, output_tokens: 900 } });
       return null;
     }

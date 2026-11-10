@@ -1,6 +1,7 @@
 import { PanelBottom, PanelLeft, Search, Settings2 } from "lucide-react";
 import { comboLabel } from "../commands";
 import { Logo } from "./Logo";
+import { useAgent } from "../harness";
 
 interface Props {
   title: string;
@@ -17,6 +18,7 @@ interface Props {
  * sits under the system title bar. Menus live in the native menu bar (see nativeMenu.ts).
  */
 export function Toolbar({ title, inboxOpen, chatOpen, onToggleInbox, onToggleChat, onOpenSettings, onOpenPalette }: Props) {
+  const agent = useAgent().short;
   const k = (key: string) => comboLabel({ key, ctrl: true });
   return (
     <header className="toolbar" data-tauri-drag-region aria-label="Toolbar">
@@ -31,7 +33,7 @@ export function Toolbar({ title, inboxOpen, chatOpen, onToggleInbox, onToggleCha
       <button type="button" className={inboxOpen ? "tb on" : "tb"} aria-label={`Toggle inbox panel (${k("b")})`} title={`Inbox panel (${k("b")})`} aria-pressed={inboxOpen} onClick={onToggleInbox}>
         <PanelLeft size={16} />
       </button>
-      <button type="button" className={chatOpen ? "tb on" : "tb"} aria-label={`Toggle Claude panel (${k("j")})`} title={`Claude panel (${k("j")})`} aria-pressed={chatOpen} onClick={onToggleChat}>
+      <button type="button" className={chatOpen ? "tb on" : "tb"} aria-label={`Toggle ${agent} panel (${k("j")})`} title={`${agent} panel (${k("j")})`} aria-pressed={chatOpen} onClick={onToggleChat}>
         <PanelBottom size={16} />
       </button>
       <button type="button" className="tb" aria-label={`Settings (${k(",")})`} title={`Settings (${k(",")})`} onClick={onOpenSettings}>

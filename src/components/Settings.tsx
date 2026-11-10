@@ -1,6 +1,7 @@
 import { Building2, CircleCheck, CircleX, Cpu, FolderCog, RefreshCw, SlidersHorizontal, Sparkles, X, type LucideIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, errorText, type ReviewRequest } from "../api";
+import { HARNESSES, HARNESS_IDS, harnessOf, type HarnessId } from "../harness";
 import { DEFAULT_SETTINGS, type Settings as S } from "../settings";
 
 export type SettingsSection = "general" | "orgs" | "review" | "claude" | "tools";
@@ -23,7 +24,7 @@ const SECTIONS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: SlidersHorizontal },
   { id: "orgs", label: "Organizations", icon: Building2 },
   { id: "review", label: "Review", icon: CircleCheck },
-  { id: "claude", label: "Claude", icon: Sparkles },
+  { id: "claude", label: "Agent", icon: Sparkles },
   { id: "tools", label: "Tools & storage", icon: FolderCog },
 ];
 
@@ -139,7 +140,8 @@ function Tools(p: Props) {
     setChecking(true);
     api.toolStatus().then(setStatus).catch((e) => setStatus({ ghError: errorText(e), dataDir: "" })).finally(() => setChecking(false));
   };
-  useEffect(check, [s.ghPath, s.claudePath, s.dataDir]);
+  const agent = harnessOf(s);
+  useEffect(check, [s.ghPath, s.claudePath, s.codexPath, s.geminiPath, s.harness, s.dataDir]);
 
   const Status = ({ ok, text, error }: { ok?: string; text?: string; error?: string }) =>
     ok ? <span className="status-ok" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}><CircleCheck size={13} />{text ?? ok}</span>
@@ -148,7 +150,7 @@ function Tools(p: Props) {
   return (
     <>
       <h1>Tools & storage</h1>
-      <p className="lead">BetterLGTM runs the GitHub CLI and Claude Code installed on this computer. Set full paths if the app can't find them, for example when it's started from a launcher instead of a terminal.</p>
+      <p className="lead">BetterLGTM runs the GitHub CLI and {agent.name} installed on this computer. Set full paths if the app can't find them, for example when it's started from a launcher instead of a terminal.</p>
       <div className="set-group">
         <div className="set-title" style={{ display: "flex", alignItems: "center" }}>
           <span style={{ flex: 1 }}>Commands</span>
@@ -157,8 +159,8 @@ function Tools(p: Props) {
         <Row label="GitHub CLI" hint={status && <Status ok={status.gh} text={status.gh && `${status.gh}${status.login ? ` · signed in as ${status.login}` : ""}`} error={status.ghError} />}>
           <TextSetting mono value={s.ghPath} placeholder="gh" onSave={(v) => p.update({ ghPath: v || DEFAULT_SETTINGS.ghPath })} />
         </Row>
-        <Row label="Claude Code" hint={status && <Status ok={status.claude} error={status.claudeError} />}>
-          <TextSetting mono value={s.claudePath} placeholder="claude" onSave={(v) => p.update({ claudePath: v || DEFAULT_SETTINGS.claudePath })} />
+        <Row label={agent.name} hint={status && status.harness === agent.id && <Status ok={status.agent} error={status.agentError} />}>
+          <TextSetting mono value={s[agent.pathKey]} placeholder={agent.command} onSave={(v) => p.update({ [agent.pathKey]: v || DEFAULT_SETTINGS[agent.pathKey] })} />
         </Row>
       </div>
       <div className="set-group">
@@ -234,45 +236,69 @@ export function Settings(p: Props) {
         )}
         {p.section === "claude" && (
           <>
-            <h1>Claude</h1>
-            <p className="lead">How Claude Code runs for analyses and chat. Claude only gets read-only tools.</p>
+            <h1>Agent</h1>
+            <p className="lead">The coding agent that runs analyses and chat, and how it runs. It only gets to read.</p>
             <div className="set-group">
-              <Row label="Model" hint="Leave on default to use Claude Code's own setting">
-                <select className="set-input" value={["", "opus", "sonnet", "haiku", "fable"].includes(s.model) ? s.model : "custom"} onChange={(e) => p.update({ model: e.target.value === "custom" ? s.model || "claude-" : e.target.value })}>
-                  <option value="">Default</option>
-                  <option value="opus">Opus</option>
-                  <option value="sonnet">Sonnet</option>
-                  <option value="haiku">Haiku</option>
-                  <option value="fable">Fable</option>
-                  <option value="custom">Other…</option>
+              <Row label="Coding agent" hint={harnessOf(s).limits ?? "Runs with read-only tools, and can stop automatic analyses at a spending limit"}>
+                <select className="set-input" aria-label="Coding agent" value={harnessOf(s).id} onChange={(e) => p.update({ harness: e.target.value as HarnessId, model: "" })}>
+                  {HARNESS_IDS.map((id) => <option key={id} value={id}>{HARNESSES[id].name}</option>)}
                 </select>
               </Row>
-              {!["", "opus", "sonnet", "haiku", "fable"].includes(s.model) && (
-                <Row label="Model name" hint="A full model ID, for example claude-opus-5-5">
-                  <TextSetting mono value={s.model} onSave={(v) => p.update({ model: v })} />
+              {harnessOf(s).models.length > 0 ? (
+                <>
+                  <Row label="Model" hint={`Leave on default to use ${harnessOf(s).name}'s own setting`}>
+                    <select className="set-input" value={["", ...harnessOf(s).models.map(([v]) => v)].includes(s.model) ? s.model : "custom"} onChange={(e) => p.update({ model: e.target.value === "custom" ? s.model || "claude-" : e.target.value })}>
+                      <option value="">Default</option>
+                      {harnessOf(s).models.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                      <option value="custom">Other…</option>
+                    </select>
+                  </Row>
+                  {!["", ...harnessOf(s).models.map(([v]) => v)].includes(s.model) && (
+                    <Row label="Model name" hint="A full model ID, for example claude-opus-5-5">
+                      <TextSetting mono value={s.model} onSave={(v) => p.update({ model: v })} />
+                    </Row>
+                  )}
+                </>
+              ) : (
+                <Row label="Model" hint={`A model name ${harnessOf(s).name} accepts. Leave empty to use its own setting`}>
+                  <TextSetting mono value={s.model} placeholder="Default" onSave={(v) => p.update({ model: v })} />
                 </Row>
               )}
+              {harnessOf(s).effort && (
               <Row label="Effort" hint="Higher effort is more thorough, slower and uses more tokens">
                 <select className="set-input" value={s.effort} onChange={(e) => p.update({ effort: e.target.value })}>
                   <option value="">Default</option>
                   {["low", "medium", "high", "xhigh", "max"].map((x) => <option key={x} value={x}>{x[0].toUpperCase() + x.slice(1)}</option>)}
                 </select>
               </Row>
+              )}
+              <Check
+                label="Double-check findings"
+                hint="A second pass tries to disprove each critical, high and medium finding, and drops the ones the code doesn't support. Analyses take longer and use more tokens."
+                checked={s.verifyFindings}
+                onChange={(v) => p.update({ verifyFindings: v })}
+              />
             </div>
             <div className="set-group">
               <div className="set-title">Auto-analyze</div>
               <Check
                 label="Analyze new review requests automatically"
-                hint="Runs in the background for requests that arrive after you turn this on, so results are ready when you open the PR. Uses Claude tokens for every request."
+                hint={`Runs in the background for requests that arrive after you turn this on, so results are ready when you open the PR. Uses ${harnessOf(s).short} tokens for every request.`}
                 checked={s.autoAnalyze}
                 onChange={(v) => p.update({ autoAnalyze: v, ...(v ? { autoAnalyzeSince: Date.now() } : {}) })}
               />
               {s.autoAnalyze && (
                 <>
                   <Check label="Include draft pull requests" checked={s.autoAnalyzeDrafts} onChange={(v) => p.update({ autoAnalyzeDrafts: v })} />
-                  <Row label="Run at once" hint="More at once finishes sooner but uses more of your Claude limits">
+                  <Row label="Run at once" hint={`More at once finishes sooner but uses more of your ${harnessOf(s).short} limits`}>
                     <select className="set-input" value={s.autoAnalyzeLimit} onChange={(e) => p.update({ autoAnalyzeLimit: Number(e.target.value) })}>
                       {[1, 2, 3].map((n) => <option key={n} value={n}>{n === 1 ? "1 analysis" : `${n} analyses`}</option>)}
+                    </select>
+                  </Row>
+                  <Row label="Spending limit" hint="An automatic analysis stops when it has cost this much, as Claude Code counts it">
+                    <select className="set-input" value={s.autoAnalyzeBudgetUsd} onChange={(e) => p.update({ autoAnalyzeBudgetUsd: Number(e.target.value) })}>
+                      {[1, 2, 5, 10, 20].map((n) => <option key={n} value={n}>${n} per analysis</option>)}
+                      <option value={0}>No limit</option>
                     </select>
                   </Row>
                 </>
@@ -283,7 +309,7 @@ export function Settings(p: Props) {
               <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
                 <span className="muted" style={{ fontSize: 12 }}>Added to every analysis. For example: what your team cares about, or what to ignore.</span>
                 <ReviewInstructions value={s.reviewInstructions} onSave={(v) => p.update({ reviewInstructions: v })} />
-                <span className="muted" style={{ fontSize: 12 }}>Claude also follows a repository's own REVIEW.md or review section in CONTRIBUTING.md.</span>
+                <span className="muted" style={{ fontSize: 12 }}>{harnessOf(s).short} also follows a repository's own REVIEW.md or review section in CONTRIBUTING.md.</span>
               </div>
             </div>
             <RepoInstructions {...p} />

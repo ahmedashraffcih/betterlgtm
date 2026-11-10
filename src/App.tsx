@@ -1,15 +1,17 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Check, Code, Download, ExternalLink, History, FileDiff, GitBranch, GitPullRequestArrow, Inbox as InboxIcon, ListChecks, ListOrdered, Loader, Lock, MessageSquare, RefreshCw, RotateCw, Send, Terminal, TriangleAlert } from "lucide-react";
+import { Check, Code, Download, ExternalLink, History, FileDiff, GitBranch, GitPullRequestArrow, Inbox as InboxIcon, ListChecks, ListOrdered, Loader, Lock, MessageSquare, RefreshCw, RotateCw, Send, Terminal, TriangleAlert, Sparkles } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
-import { api, describeToolUse, errorText, type ClaudeEvent, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
-import { anchorLabel, findingId, type Finding, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseWalkthrough, type Anchor } from "./analysis";
+import { api, describeToolUse, errorText, isSampleMode, setSampleMode, type ClaudeEvent, type ToolStatus, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
+import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, anchorLabel, answerOf, applyVerification, carryFindingIds, findingId, worthVerifying, type EarlierFinding, type Finding, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
 import type { OutlineKey, RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import type { DiffMode } from "./components/DiffView";
-import { AnalysisView, CommandPalette, DescriptionDialog, DiffView, FilterDialog, GuidedReview, InfoDialog, preloadViews, Settings, SubmitReview } from "./lazy";
+import { AnalysisView, CommandPalette, DescriptionDialog, DiffView, FilterDialog, GuidedReview, InfoDialog, Onboarding, preloadViews, Settings, SubmitReview } from "./lazy";
+import { AgentContext, harnessOf } from "./harness";
+import { setupBroken } from "./setup";
 import { Inbox, InboxRail, prKey, type InboxView } from "./components/Inbox";
 import { Toolbar } from "./components/Toolbar";
 import { useElementWidth } from "./hooks";
@@ -122,6 +124,7 @@ export default function App() {
   const [inboxLoading, setInboxLoading] = useState(false);
   const [syncedAt, setSyncedAt] = useState<number | null>(inboxCache?.syncedAt ?? null);
   const [settings, updateSettings] = useSettings();
+  const agent = harnessOf(settings).short;
   const updater = useUpdater(settings.autoUpdate);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -138,6 +141,18 @@ export default function App() {
   const [orgs, setOrgs] = useState<{ login: string; orgs: string[] } | null>(inboxCache?.orgs ?? null);
   const [orgsError, setOrgsError] = useState<string | null>(null);
   const [configReady, setConfigReady] = useState(false);
+  /** Whether gh, claude and git are installed and signed in. Null until the first check answers. */
+  const [toolStatus, setToolStatus] = useState<ToolStatus | null>(null);
+  const [toolChecking, setToolChecking] = useState(false);
+  /** The setup screen was left with problems still open ("Continue anyway"); it stays away until asked for. */
+  const [setupSkipped, setSetupSkipped] = useState(false);
+  /** The setup screen was asked for from the Help menu. */
+  const [setupOpen, setSetupOpen] = useState(false);
+  /** Where a first run is: the tools, then the Claude Code that was found, then what the inbox shows. */
+  const [firstStep, setFirstStep] = useState<"tools" | "agent" | "choices">("tools");
+  /** Showing the built-in sample pull requests instead of GitHub's. */
+  const [sample, setSample] = useState(false);
+  const sampleSelect = useRef(false);
   const [inboxOpen, setInboxOpen] = useStoredState("better-lgtm.inboxOpen", true);
   const [chatOpen, setChatOpen] = useStoredState("better-lgtm.chatOpen", true);
   const split = settings.diffLayout === "split";
@@ -161,7 +176,7 @@ export default function App() {
   const [outlineKey, setOutlineKey] = useState<OutlineKey>("s0");
   const [diffTarget, setDiffTarget] = useState<{ path: string | null; range: Anchor | null; finding: number | null }>({ path: null, range: null, finding: null });
 
-  const { sessions, update, clearAll } = useSessions();
+  const { sessions, update, remove: removeSessions, clearAll, ready: sessionsReady } = useSessions();
   const [runs, setRuns] = useState<Record<string, RunState>>({});
   const [chatRunning, setChatRunning] = useState<Record<string, boolean>>({});
   const [chatFocus, setChatFocus] = useState(0);
@@ -176,10 +191,19 @@ export default function App() {
   // The backend needs tool paths, the data folder and Claude options before it runs anything.
   useEffect(() => {
     api
-      .setConfig({ ghPath: settings.ghPath, claudePath: settings.claudePath, dataDir: settings.dataDir, model: settings.model, effort: settings.effort })
+      .setConfig({
+        ghPath: settings.ghPath,
+        claudePath: settings.claudePath,
+        harness: settings.harness,
+        codexPath: settings.codexPath,
+        geminiPath: settings.geminiPath,
+        dataDir: settings.dataDir,
+        model: settings.model,
+        effort: settings.effort,
+      })
       .then(() => setConfigReady(true))
       .catch(() => setConfigReady(true));
-  }, [settings.ghPath, settings.claudePath, settings.dataDir, settings.model, settings.effort]);
+  }, [settings.ghPath, settings.claudePath, settings.harness, settings.codexPath, settings.geminiPath, settings.dataDir, settings.model, settings.effort]);
 
   useEffect(() => {
     if (settings.theme === "system") delete document.documentElement.dataset.theme;
@@ -188,13 +212,16 @@ export default function App() {
 
   const reloadOrgs = useCallback(() => {
     setOrgsError(null);
+    const mode = isSampleMode();
     api
       .listOrgs()
       .then((o) => {
+        // An answer from before the sample was entered or left belongs to the other inbox.
+        if (mode !== isSampleMode()) return;
         setOrgs(o);
-        writeInboxCache({ orgs: o });
+        if (!mode) writeInboxCache({ orgs: o });
       })
-      .catch((e) => setOrgsError(errorText(e)));
+      .catch((e) => mode === isSampleMode() && setOrgsError(errorText(e)));
   }, []);
   useEffect(() => {
     if (configReady) reloadOrgs();
@@ -202,17 +229,20 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     setInboxLoading(true);
+    const mode = isSampleMode();
     try {
       const [review, mine] = await Promise.all([api.listReviewRequests(settings.includeTeams), api.listMyPrs()]);
+      if (mode !== isSampleMode()) return;
       setRequests(review);
       setMyPrs(mine);
       setInboxError(null);
       setInboxLive(true);
       const now = Date.now();
       setSyncedAt(now);
-      writeInboxCache({ requests: review, myPrs: mine, syncedAt: now });
+      // The sample never replaces the saved copy of the real inbox.
+      if (!mode) writeInboxCache({ requests: review, myPrs: mine, syncedAt: now });
     } catch (e) {
-      setInboxError(errorText(e));
+      if (mode === isSampleMode()) setInboxError(errorText(e));
     } finally {
       setInboxLoading(false);
     }
@@ -224,6 +254,40 @@ export default function App() {
     const t = setInterval(refresh, settings.refreshMinutes * 60 * 1000);
     return () => clearInterval(t);
   }, [refresh, configReady, settings.refreshMinutes]);
+
+  // Setup: are the tools installed and signed in? Checked at start, when a tool path changes, and when the inbox fails.
+  const checkTools = useCallback(() => {
+    setToolChecking(true);
+    api
+      .toolStatus()
+      .then(setToolStatus)
+      .catch((e) => setToolStatus({ ghError: errorText(e), agentError: errorText(e), gitError: errorText(e), dataDir: "" }))
+      .finally(() => setToolChecking(false));
+  }, []);
+  useEffect(() => {
+    if (configReady) checkTools();
+  }, [configReady, settings.ghPath, settings.claudePath, settings.harness, settings.codexPath, settings.geminiPath, checkTools]);
+  useEffect(() => {
+    if (inboxError && !isSampleMode()) checkTools();
+  }, [inboxError, checkTools]);
+  const setupIsBroken = !!toolStatus && setupBroken(toolStatus);
+  // Once a problem is fixed, load what couldn't load before.
+  const wasBroken = useRef(false);
+  useEffect(() => {
+    if (wasBroken.current && !setupIsBroken && !isSampleMode()) {
+      reloadOrgs();
+      refresh();
+    }
+    wasBroken.current = setupIsBroken;
+  }, [setupIsBroken]);
+  /** Which onboarding screen replaces the inbox and review, if any. New users see it while the first check runs. */
+  const onboarding: "tools" | "agent" | "choices" | null = sample
+    ? null
+    : (setupIsBroken && !setupSkipped) || setupOpen
+      ? "tools"
+      : !settings.onboarded
+        ? firstStep
+        : null;
 
   // Shortcuts come from the command list (menus and palette use the same list); Escape closes Settings.
   const commandsRef = useRef<Command[]>([]);
@@ -255,16 +319,19 @@ export default function App() {
     (list: ReviewRequest[] | null) =>
       list?.filter(
         (r) =>
-          (settings.showDrafts || !r.isDraft) &&
+          // The sample's organizations aren't yours, so your organization choices don't apply to it.
+          sample ||
+          ((settings.showDrafts || !r.isDraft) &&
           ownerVisible(settings, r.repository.nameWithOwner.split("/")[0], orgs?.orgs ?? null) &&
-          !settings.hiddenRepos.includes(r.repository.nameWithOwner),
+            !settings.hiddenRepos.includes(r.repository.nameWithOwner)),
       ) ?? null,
-    [settings, orgs],
+    [settings, orgs, sample],
   );
   const visibleRequests = useMemo(() => visibleOf(requests), [visibleOf, requests]);
   const visibleMine = useMemo(() => visibleOf(myPrs), [visibleOf, myPrs]);
   const inboxList = inboxView === "mine" ? visibleMine : visibleRequests;
-  useReviewNotifications(visibleRequests, settings.notifications);
+  // Sample pull requests aren't review requests: no notifications, no count on the app icon.
+  useReviewNotifications(sample ? null : visibleRequests, settings.notifications);
   const hiddenCount = inboxView === "mine" ? (myPrs?.length ?? 0) - (visibleMine?.length ?? 0) : (requests?.length ?? 0) - (visibleRequests?.length ?? 0);
   /** The inbox's "hide" button: drops an organization, or personal repositories, from the inbox. */
   /** Shows or hides an organization (or personal repositories) in the inbox, following the organization mode. */
@@ -357,37 +424,127 @@ export default function App() {
     return wt;
   };
 
-  /** Analyzes one PR. Background runs (auto-analyze) leave the current view alone and notify when done. */
+  /** Groups the PR's changes into guided review steps, continuing the analysis session. Returns whether it worked. */
+  const createWalkthrough = async (k: string, wt: string, session: string, maxBudgetUsd?: number) => {
+    setGuideRuns((g) => ({ ...g, [k]: { running: true } }));
+    try {
+      let answer: unknown = "";
+      let sessionId = session;
+      let usage: ClaudeUsage = {};
+      await api.claudeRun(`guide-${k}-${Date.now()}`, wt, buildWalkthroughPrompt(), session, (e) => {
+        if (e.type === "result") {
+          answer = answerOf(e);
+          sessionId = e.session_id ?? sessionId;
+          usage = e;
+        }
+      }, { schema: WALKTHROUGH_SCHEMA, maxBudgetUsd });
+      const steps = parseWalkthrough(answer);
+      if (!steps) throw new Error(`${agent}'s answer didn't contain review steps. Try again.`);
+      update(k, (x) => ({
+        ...x,
+        sessionId,
+        analysis: x.analysis ? { ...x.analysis, walkthrough: steps } : x.analysis,
+        tokens: (x.tokens ?? 0) + tokensOf(usage),
+        costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
+      }));
+      setGuideRuns((g) => ({ ...g, [k]: { running: false } }));
+      return true;
+    } catch (e) {
+      setGuideRuns((g) => ({ ...g, [k]: { running: false, error: errorText(e) } }));
+      return false;
+    }
+  };
+
+  /**
+   * Analyzes one PR: the analysis, a second pass that tries to disprove its findings, then the guided
+   * review in the background. Background runs (auto-analyze) leave the current view alone and notify when done.
+   */
   const runAnalysis = async (k: string, pr: ReviewRequest, details: PrDetails, opts: { since?: string; background?: boolean } = {}) => {
     const runId = `analysis-${k}-${Date.now()}`;
     runIds.current[k] = runId;
     setRun(k, () => ({ running: true, step: "Preparing the worktree…", log: [] }));
+    // Automatic runs share one spending limit across the analysis, the double-check and the guided review.
+    const budget = opts.background && settings.autoAnalyzeBudgetUsd > 0 ? settings.autoAnalyzeBudgetUsd : undefined;
+    let tokens = 0;
+    let cost = 0;
+    let overBudget = false;
+    const left = () => (budget === undefined ? undefined : Math.max(budget - cost, 0));
+    const logTools = (e: ClaudeEvent) => {
+      if (e.type === "result" && e.subtype === "error_max_budget_usd") overBudget = true;
+      if (e.type !== "assistant") return;
+      for (const block of e.message?.content ?? []) {
+        if (block.type === "tool_use" && block.name !== "StructuredOutput") {
+          const line = describeToolUse(block.name ?? "", block.input);
+          setRun(k, (r) => ({ ...r, step: line, log: [...r.log, line] }));
+        }
+      }
+    };
     try {
       const wt = await ensureWorktree(k, pr, details);
       const [issues, threads] = await Promise.all([
         api.linkedIssues(pr.repository.nameWithOwner, pr.number).catch(() => [] as LinkedIssue[]),
         api.reviewThreads(pr.repository.nameWithOwner, pr.number).catch(() => [] as ReviewThread[]),
       ]);
-      setRun(k, (r) => ({ ...r, step: "Claude is reading the change…", log: [...r.log, `Worktree: ${wt}`, ...issues.map((i) => `Linked issue #${i.number}: ${i.title}`)] }));
+      setRun(k, (r) => ({ ...r, step: `${agent} is reading the change…`, log: [...r.log, `Worktree: ${wt}`, ...issues.map((i) => `Linked issue #${i.number}: ${i.title}`)] }));
+      // What the reviewer already did with findings: on this PR's last analysis, and on the repository's other PRs.
+      const before = sessions[k];
+      const earlier: EarlierFinding[] = (before?.analysis?.findings ?? []).map((finding) => ({ finding, state: before?.findingStates?.[findingId(finding)] }));
+      const dismissedInRepo = Object.entries(sessions)
+        .filter(([other]) => other !== k && other.startsWith(`${pr.repository.nameWithOwner}#`))
+        .flatMap(([, s]) => Object.entries(s.findingStates ?? {}))
+        .filter(([, st]) => st.state === "dismissed")
+        .sort((x, y) => y[1].at - x[1].at)
+        .slice(0, 12)
+        .map(([id, st]) => ({ title: id.slice(id.indexOf("|") + 1), reason: st.reason }));
+      const prompt = buildAnalysisPrompt(details, {
+        instructions: [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"),
+        since: opts.since,
+        issues,
+        threads,
+        selfReview: !!orgs?.login && details.author.login === orgs.login,
+        earlier,
+        dismissedInRepo,
+      });
+      let answer: unknown = "";
       let finalText = "";
       let sessionId: string | undefined;
-      let usage: ClaudeUsage = {};
-      await api.claudeRun(runId, wt, buildAnalysisPrompt(details, [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"), opts.since, issues, threads, !!orgs?.login && details.author.login === orgs.login), undefined, (e) => {
+      await api.claudeRun(runId, wt, prompt, undefined, (e) => {
         if (e.session_id) sessionId = e.session_id;
-        if (e.type === "assistant") {
-          for (const block of e.message?.content ?? []) {
-            if (block.type === "tool_use") {
-              const line = describeToolUse(block.name ?? "", block.input);
-              setRun(k, (r) => ({ ...r, step: line, log: [...r.log, line] }));
-            }
-          }
-        }
+        logTools(e);
         if (e.type === "result") {
+          answer = answerOf(e);
           finalText = e.result ?? "";
-          usage = e;
+          tokens += tokensOf(e);
+          cost += e.total_cost_usd ?? 0;
         }
-      });
-      const parsed = parseAnalysis(finalText);
+      }, { schema: ANALYSIS_SCHEMA, maxBudgetUsd: budget });
+      let parsed = parseAnalysis(answer);
+      if (parsed) parsed = carryFindingIds(parsed, earlier.map((x) => x.finding));
+
+      // Second pass, in a fresh session so it doesn't inherit the analysis's reasoning. If it fails, the findings stay as they are.
+      const toCheck = parsed ? parsed.findings.flatMap((f, i) => (worthVerifying(f) ? [i] : [])) : [];
+      if (parsed && settings.verifyFindings && toCheck.length && left() !== 0) {
+        setRun(k, (r) => ({ ...r, step: "Double-checking the findings…", log: [...r.log, `Double-checking ${toCheck.length === 1 ? "1 finding" : `${toCheck.length} findings`}`] }));
+        const verifyId = `verify-${k}-${Date.now()}`;
+        runIds.current[k] = verifyId;
+        try {
+          let verdicts: unknown = "";
+          await api.claudeRun(verifyId, wt, buildVerifyPrompt(details, parsed, toCheck), undefined, (e) => {
+            logTools(e);
+            if (e.type === "result") {
+              verdicts = answerOf(e);
+              tokens += tokensOf(e);
+              cost += e.total_cost_usd ?? 0;
+            }
+          }, { schema: VERIFY_SCHEMA, maxBudgetUsd: left() });
+          const verified = parseVerify(verdicts);
+          if (verified) parsed = applyVerification(parsed, verified);
+          else setRun(k, (r) => ({ ...r, log: [...r.log, "The double-check gave no readable result; the findings are unchanged."] }));
+        } catch (e) {
+          setRun(k, (r) => ({ ...r, log: [...r.log, `Couldn't double-check the findings: ${errorText(e)}`] }));
+        }
+      }
+
       update(k, (s) => ({
         ...s,
         sessionId,
@@ -399,8 +556,8 @@ export default function App() {
         findingChecks: parsed ? undefined : s.findingChecks,
         // Picks are positions in the old list of findings, which a new analysis replaces.
         inReview: parsed ? [] : s.inReview,
-        tokens: (s.tokens ?? 0) + tokensOf(usage),
-        costUsd: (s.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
+        tokens: (s.tokens ?? 0) + tokens,
+        costUsd: (s.costUsd ?? 0) + cost,
       }));
       if (parsed && !opts.background) {
         setGuideStep(0);
@@ -411,9 +568,14 @@ export default function App() {
         const crit = parsed.findings.filter((f) => f.severity === "critical" || f.severity === "high").length;
         notify(`Analysis ready: ${pr.repository.name}#${pr.number}`, `${pr.title}\n${crit ? `${crit} critical or high ${crit === 1 ? "finding" : "findings"}` : `${parsed.findings.length} findings, none critical or high`}`).catch(() => {});
       }
-      setRun(k, (r) => ({ ...r, running: false, step: "", error: parsed ? undefined : "Claude finished, but its answer didn't contain a readable result." }));
+      setRun(k, (r) => ({ ...r, running: false, step: "", error: parsed ? undefined : `${agent} finished, but its answer didn't contain a readable result.` }));
+      // The verdict is on screen; the guided review follows on its own.
+      if (parsed && !parsed.walkthrough && sessionId && left() !== 0) void createWalkthrough(k, wt, sessionId, left());
     } catch (e) {
-      setRun(k, (r) => ({ ...r, running: false, error: errorText(e) }));
+      const error = overBudget
+        ? `Stopped at the $${budget} limit for automatic analyses. Start the review yourself, or raise the limit in Settings › Agent.`
+        : errorText(e);
+      setRun(k, (r) => ({ ...r, running: false, error }));
     }
   };
   const startAnalysis = async (opts: { since?: string } = {}) => {
@@ -449,7 +611,7 @@ export default function App() {
             costUsd: (s.costUsd ?? 0) + (e.total_cost_usd ?? 0),
           }));
         }
-      });
+      }, { chat: true });
     } catch (e) {
       push({ role: "error", text: errorText(e) });
     } finally {
@@ -466,49 +628,56 @@ export default function App() {
     setGuideStep(0);
   };
 
+  /** Swaps the inbox between GitHub and the built-in sample, starting from an empty list either way. */
+  const switchInbox = (toSample: boolean) => {
+    setSampleMode(toSample);
+    setSample(toSample);
+    setSelected(null);
+    setRequests(null);
+    setMyPrs(null);
+    setOrgs(null);
+    setInboxError(null);
+    setInboxLive(false);
+    setInboxView("review");
+    setSettingsOpen(false);
+    setSetupOpen(false);
+    reloadOrgs();
+    refresh();
+  };
+  /** Shows the sample pull requests and opens the first one. Needs no tools: nothing reaches GitHub or Claude. */
+  const enterSample = () => {
+    sampleSelect.current = true;
+    switchInbox(true);
+  };
+  const leaveSample = () => {
+    // The sample's reviews aren't worth keeping, and its next visit should start clean.
+    removeSessions([...(requests ?? []), ...(myPrs ?? [])].map(prKey));
+    switchInbox(false);
+    checkTools();
+  };
+  useEffect(() => {
+    if (!sample || !sampleSelect.current || !requests?.length) return;
+    sampleSelect.current = false;
+    selectPr(requests[0]);
+  }, [sample, requests]);
+
   const openAnchor = (a: Anchor, finding: number | null) => {
     setDiffTarget({ path: a.path, range: a, finding });
     setDiffMode("files");
     setTab("diff");
   };
 
-  /** Asks the analysis session to group the changes into steps, for analyses made before the guided review existed. */
+  /** Creates the guided review on request: for older analyses, or when the automatic one failed. */
   const generateWalkthrough = async () => {
     const s = key ? sessions[key] : undefined;
     if (!key || !s?.worktree || !s.sessionId) return;
-    const k = key;
-    setGuideRuns((g) => ({ ...g, [k]: { running: true } }));
-    try {
-      let text = "";
-      let sessionId = s.sessionId;
-      let usage: ClaudeUsage = {};
-      await api.claudeRun(`guide-${k}-${Date.now()}`, s.worktree, buildWalkthroughPrompt(), s.sessionId, (e) => {
-        if (e.type === "result") {
-          text = e.result ?? "";
-          sessionId = e.session_id ?? sessionId;
-          usage = e;
-        }
-      });
-      const steps = parseWalkthrough(text);
-      if (!steps) throw new Error("Claude's answer didn't contain review steps. Try again.");
-      update(k, (x) => ({
-        ...x,
-        sessionId,
-        analysis: x.analysis ? { ...x.analysis, walkthrough: steps } : x.analysis,
-        tokens: (x.tokens ?? 0) + tokensOf(usage),
-        costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
-      }));
-      setGuideStep(0);
-      setGuideRuns((g) => ({ ...g, [k]: { running: false } }));
-    } catch (e) {
-      setGuideRuns((g) => ({ ...g, [k]: { running: false, error: errorText(e) } }));
-    }
+    if (await createWalkthrough(key, s.worktree, s.sessionId)) setGuideStep(0);
   };
 
   /** Claude drafts the overall review summary, continuing the PR's session so it knows the change. */
   const draftSummary = async (event: string, comments: Finding[], notes: string) => {
     const s = key ? sessions[key] : undefined;
-    if (!key || !s?.worktree) throw new Error("Start the review first, so Claude has the code.");
+    if (!key || !s?.worktree) throw new Error(`Start the review first, so ${agent} has the code.`);
     const k = key;
     let text = "";
     let sessionId = s.sessionId;
@@ -521,7 +690,7 @@ export default function App() {
       }
     });
     update(k, (x) => ({ ...x, sessionId, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
-    if (!text.trim()) throw new Error("Claude didn't return a summary. Try again.");
+    if (!text.trim()) throw new Error(`${agent} didn't return a summary. Try again.`);
     return text.trim();
   };
 
@@ -539,7 +708,7 @@ export default function App() {
       }
     });
     update(k, (x) => ({ ...x, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
-    if (!text.trim()) throw new Error("Claude didn't return a description. Try again.");
+    if (!text.trim()) throw new Error(`${agent} didn't return a description. Try again.`);
     return text.trim();
   };
   const saveDescription = async (body: string) => {
@@ -571,7 +740,7 @@ export default function App() {
       }
     });
     update(k, (x) => ({ ...x, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
-    if (!text.trim()) throw new Error("Claude didn't return a reply. Try again.");
+    if (!text.trim()) throw new Error(`${agent} didn't return a reply. Try again.`);
     return text.trim();
   };
   const replyToThread = async (t: ReviewThread, body: string) => {
@@ -595,18 +764,18 @@ export default function App() {
     setRecheckRuns((r) => ({ ...r, [k]: { running: true } }));
     try {
       const wt = await ensureWorktree(k, selected, details);
-      let text = "";
+      let answer: unknown = "";
       let sessionId = s.sessionId;
       let usage: ClaudeUsage = {};
       await api.claudeRun(`recheck-${k}-${Date.now()}`, wt, buildRecheckPrompt(findings, from), s.sessionId, (e) => {
         if (e.type === "result") {
-          text = e.result ?? "";
+          answer = answerOf(e);
           sessionId = e.session_id ?? sessionId;
           usage = e;
         }
-      });
-      const results = parseRecheck(text);
-      if (!results) throw new Error("Claude's answer didn't say which findings are fixed. Try again.");
+      }, { schema: RECHECK_SCHEMA });
+      const results = parseRecheck(answer);
+      if (!results) throw new Error(`${agent}'s answer didn't say which findings are fixed. Try again.`);
       update(k, (x) => ({
         ...x,
         sessionId,
@@ -784,7 +953,8 @@ export default function App() {
   // Auto-analyze: review requests that arrived after it was turned on, a few at a time.
   const autoTried = useRef(new Set<string>());
   const autoQueue = useMemo(() => {
-    if (!settings.autoAnalyze || !visibleRequests || !inboxLive) return [];
+    // Until saved sessions are read, every PR looks like it was never analyzed.
+    if (!settings.autoAnalyze || !visibleRequests || !inboxLive || !sessionsReady || sample) return [];
     const since = settings.autoAnalyzeSince ?? Date.now();
     return visibleRequests.filter((pr) => {
       const k = prKey(pr);
@@ -792,7 +962,7 @@ export default function App() {
       if (pr.isDraft && !settings.autoAnalyzeDrafts) return false;
       return new Date(waitingSince(pr)).getTime() >= since;
     });
-  }, [settings.autoAnalyze, settings.autoAnalyzeSince, settings.autoAnalyzeDrafts, visibleRequests, sessions, runs, inboxLive]);
+  }, [settings.autoAnalyze, settings.autoAnalyzeSince, settings.autoAnalyzeDrafts, visibleRequests, sessions, runs, inboxLive, sessionsReady, sample]);
   useEffect(() => {
     const free = settings.autoAnalyzeLimit - analyzing.size;
     for (const pr of autoQueue.slice(0, Math.max(0, free))) {
@@ -900,12 +1070,12 @@ export default function App() {
     { id: "github", menu: "File", label: "Open pull request on GitHub", enabled: !!selected, run: () => selected && openUrl(selected.url), separatorBefore: true },
     { id: "editor", menu: "File", label: "Open worktree in VS Code", enabled: !!session?.worktree, run: openInEditor },
     { id: "settings", menu: "File", label: "Settings…", keys: { key: ",", ctrl: true }, run: () => openSettings("general"), separatorBefore: true },
-    { id: "quit", menu: "File", label: "Quit", keys: { key: "q", ctrl: true }, run: () => (flushSessions(), getCurrentWindow().close()), separatorBefore: true },
+    { id: "quit", menu: "File", label: "Quit", keys: { key: "q", ctrl: true }, run: () => getCurrentWindow().close(), separatorBefore: true },
 
     { id: "filters", menu: "View", label: "Sort and filter…", run: () => setFiltersOpen(true) },
     { id: "palette", menu: "View", label: "Go to…", keys: { key: "k", ctrl: true }, run: () => setPaletteOpen(true) },
     { id: "inbox", menu: "View", label: "Inbox panel", checked: inboxOpen, keys: { key: "b", ctrl: true }, run: () => setInboxOpen(!inboxOpen), separatorBefore: true },
-    { id: "chat", menu: "View", label: "Claude panel", checked: chatOpen, keys: { key: "j", ctrl: true }, run: () => setChatOpen(!chatOpen) },
+    { id: "chat", menu: "View", label: `${agent} panel`, checked: chatOpen, keys: { key: "j", ctrl: true }, run: () => setChatOpen(!chatOpen) },
     { id: "tab-analysis", menu: "View", label: "Analysis", checked: !!selected && tab === "analysis", enabled: !!selected, keys: { key: "1", ctrl: true }, run: () => setTab("analysis"), separatorBefore: true },
     { id: "tab-diff", menu: "View", label: "Diff", checked: !!selected && tab === "diff", enabled: !!selected, keys: { key: "2", ctrl: true }, run: () => setTab("diff") },
     { id: "find", menu: "View", label: "Find in diff…", enabled: !!details, keys: { key: "f", ctrl: true }, run: findInDiff },
@@ -922,10 +1092,12 @@ export default function App() {
     { id: "prev", menu: "Review", label: "Previous finding", hint: comboLabel({ key: "N", shift: true }), enabled: !!analysis?.findings.length, run: () => stepFinding(-1) },
     { id: "describe", menu: "Review", label: "Edit description…", enabled: !!details && !!orgs?.login && details.author.login === orgs.login, run: () => setDescOpen(true) },
     { id: "submit", menu: "Review", label: "Submit review…", keys: { key: "Enter", ctrl: true, shift: true }, enabled: !!details, run: () => setReviewOpen(true), separatorBefore: true },
-    { id: "ask", menu: "Review", label: "Ask Claude", keys: { key: "l", ctrl: true }, enabled: !!selected, run: () => { setChatOpen(true); setChatFocus((n) => n + 1); }, separatorBefore: true },
+    { id: "ask", menu: "Review", label: `Ask ${agent}`, keys: { key: "l", ctrl: true }, enabled: !!selected, run: () => { setChatOpen(true); setChatFocus((n) => n + 1); }, separatorBefore: true },
     { id: "clear-chat", menu: "Review", label: "Clear conversation", enabled: !!session?.chat.length, run: () => key && update(key, (s) => ({ ...s, chat: [] })) },
 
     { id: "shortcuts", menu: "Help", label: "Keyboard shortcuts", keys: { key: "/", ctrl: true }, run: () => setInfoDialog("shortcuts") },
+    { id: "sample", menu: "Help", label: sample ? "Leave the sample" : "Try a sample pull request", run: () => (sample ? leaveSample() : enterSample()), separatorBefore: true },
+    { id: "setup", menu: "Help", label: "Check setup…", enabled: !sample, run: () => { setSettingsOpen(false); setSetupOpen(true); checkTools(); } },
     { id: "updates", menu: "Help", label: "Check for updates…", enabled: updater.supported, run: () => updater.checkNow(true), separatorBefore: true },
     { id: "about", menu: "Help", label: "About BetterLGTM", run: () => setInfoDialog("about") },
   ];
@@ -947,10 +1119,19 @@ export default function App() {
       listen(SETTINGS_EV.ready, () => emitTo(SETTINGS_LABEL, SETTINGS_EV.data, settingsDataRef.current)),
       listen(SETTINGS_EV.reloadOrgs, () => settingsActions.current.reloadOrgs()),
       listen(SETTINGS_EV.clearData, () => settingsActions.current.clearAll()),
-      // Settings belongs to the main window: close it with the main window, so the app quits.
-      getCurrentWindow().onCloseRequested(() => closeSettingsWindow()),
     ];
     return () => un.forEach((p) => p.then((f) => f()));
+  }, []);
+  useEffect(() => {
+    if (!inTauri) return;
+    // One handler: the window closes as soon as any close handler returns, so the save can't have its own.
+    const un = getCurrentWindow().onCloseRequested(async () => {
+      // Save what's pending, but never hold the window open for long.
+      await Promise.race([flushSessions(), new Promise((done) => setTimeout(done, 1500))]);
+      // Settings belongs to the main window: close it with the main window, so the app quits.
+      if (useSettingsWindow) await closeSettingsWindow();
+    });
+    return () => void un.then((f) => f());
   }, []);
   // With the system title bar, the window title names the open pull request.
   const windowTitle = selected ? `${selected.repository.nameWithOwner} #${selected.number} · ${selected.title}` : "BetterLGTM";
@@ -1030,14 +1211,50 @@ export default function App() {
       ]
     : [];
 
+  /** With nothing in the list, the middle of the window says why and what to do instead. */
+  const emptyInbox = !!inboxList && inboxList.length === 0;
   const main = !selected ? (
     <div className="empty">
-      <div>
+      <div style={{ maxWidth: 440 }}>
         <InboxIcon size={40} strokeWidth={1.4} style={{ opacity: 0.7 }} />
-        <h1 style={{ margin: "8px 0 4px", fontSize: 15, color: "var(--text)" }}>Select a pull request</h1>
-        <p style={{ margin: 0 }}>
-          {!visibleRequests ? "Loading review requests…" : visibleRequests.length === 1 ? "1 pull request is waiting for your review." : `${visibleRequests.length} pull requests are waiting for your review.`}
-        </p>
+        {inboxError && !inboxList?.length ? (
+          <>
+            <h1 style={{ margin: "8px 0 4px", fontSize: 15, color: "var(--text)" }}>Couldn't load your pull requests</h1>
+            <p className="selectable" style={{ margin: 0 }}>{inboxError}</p>
+            <div className="empty-actions">
+              <button type="button" className="btn primary" onClick={refresh}><RefreshCw size={14} className={inboxLoading ? "spin" : undefined} />Try again</button>
+              <button type="button" className="btn" onClick={() => { setSetupOpen(true); checkTools(); }}>Check setup</button>
+            </div>
+          </>
+        ) : emptyInbox ? (
+          <>
+            <h1 style={{ margin: "8px 0 4px", fontSize: 15, color: "var(--text)" }}>{inboxView === "mine" ? "You have no open pull requests" : "Nothing is waiting for your review"}</h1>
+            <p style={{ margin: 0 }}>
+              {inboxView === "mine"
+                ? "Pull requests you open show up here, with what's blocking each one from merging."
+                : "Pull requests where your review is requested show up here on their own. You can review any other pull request too."}
+              {hiddenCount > 0 && <> {hiddenCount === 1 ? "1 is" : `${hiddenCount} are`} hidden by your organization settings. <button type="button" className="link" onClick={() => openSettings("orgs")}>Change</button></>}
+            </p>
+            <div className="empty-actions">
+              <button type="button" className="btn primary" onClick={() => setPaletteOpen(true)}><GitPullRequestArrow size={14} />Open a pull request…</button>
+              {inboxView === "review" && !!visibleMine?.length && (
+                <button type="button" className="btn" onClick={() => setInboxView("mine")}>Your pull requests ({visibleMine.length})</button>
+              )}
+              {inboxView === "mine" && !!visibleRequests?.length && (
+                <button type="button" className="btn" onClick={() => setInboxView("review")}>To review ({visibleRequests.length})</button>
+              )}
+              {!sample && <button type="button" className="btn" onClick={enterSample}><Sparkles size={14} />Try a sample</button>}
+            </div>
+            <p style={{ margin: "10px 0 0", fontSize: 12 }}>To open one, paste its GitHub link or type <code>owner/repo#123</code>.</p>
+          </>
+        ) : (
+          <>
+            <h1 style={{ margin: "8px 0 4px", fontSize: 15, color: "var(--text)" }}>Select a pull request</h1>
+            <p style={{ margin: 0 }}>
+              {!visibleRequests ? "Loading review requests…" : visibleRequests.length === 1 ? "1 pull request is waiting for your review." : `${visibleRequests.length} pull requests are waiting for your review.`}
+            </p>
+          </>
+        )}
       </div>
     </div>
   ) : (
@@ -1092,7 +1309,7 @@ export default function App() {
             {checks ? (
               <span className="muted">{` · ${Object.values(checks.results).filter((r) => r.status === "fixed").length} of ${analysis?.findings.length ?? 0} findings fixed`}</span>
             ) : recheck?.running ? (
-              <span className="muted"> · Claude is re-checking the findings…</span>
+              <span className="muted"> · {agent} is re-checking the findings…</span>
             ) : null}
             {hasNewCommits && lastReview && session?.analysisSince === lastReview.commitId && <span className="muted"> · analysis covers them</span>}
           </span>
@@ -1211,6 +1428,7 @@ export default function App() {
   );
 
   return (
+    <AgentContext.Provider value={harnessOf(settings)}>
     <div className="app" ref={appRef}>
       <Toolbar
         title={selected ? `${selected.repository.nameWithOwner} #${selected.number} · ${selected.title}` : "Jump to a PR, file or finding"}
@@ -1221,6 +1439,34 @@ export default function App() {
         onOpenSettings={() => openSettings("general")}
         onOpenPalette={() => setPaletteOpen(true)}
       />
+      {sample && (
+        <div className="since-bar" role="status">
+          <Sparkles size={14} className="tone-accent" />
+          <span style={{ flex: 1 }}><strong>Sample pull requests.</strong> Nothing here reaches GitHub or uses a coding agent; reviews you submit go nowhere.</span>
+          <button type="button" className="btn sm" onClick={leaveSample}>Leave the sample</button>
+        </div>
+      )}
+      {onboarding && !settingsOpen && (
+        <div className="main-pane" style={{ flex: 1, minHeight: 0 }}>
+          <Suspense fallback={null}>
+            <Onboarding
+              step={onboarding}
+              status={toolStatus}
+              checking={toolChecking}
+              firstRun={!settings.onboarded}
+              settings={settings}
+              update={updateSettings}
+              orgs={orgs}
+              onCheck={checkTools}
+              onSetPaths={() => openSettings("tools")}
+              onSample={enterSample}
+              onContinue={() => { setSetupOpen(false); setSetupSkipped(setupIsBroken); setFirstStep("agent"); }}
+              onStep={setFirstStep}
+              onDone={() => updateSettings({ onboarded: true })}
+            />
+          </Suspense>
+        </div>
+      )}
       {settingsOpen && (
         <div className="main-pane" style={{ flex: 1, minHeight: 0 }}>
           <Suspense fallback={null}>
@@ -1239,7 +1485,7 @@ export default function App() {
           </Suspense>
         </div>
       )}
-      <div style={{ flex: 1, minHeight: 0, display: settingsOpen ? "none" : "flex" }}>
+      <div style={{ flex: 1, minHeight: 0, display: settingsOpen || onboarding ? "none" : "flex" }}>
         {inboxMode === "rail" && (
           <div className="inbox-pane" style={{ width: 52, flexShrink: 0, borderRight: "1px solid var(--line)" }}>
             <InboxRail
@@ -1320,10 +1566,11 @@ export default function App() {
         {key && (
           <span className="sb">
             {run?.running || chatRunning[key] ? <Loader size={13} className="spin tone-accent" /> : <MessageSquare size={13} />}
-            Claude {run?.running || chatRunning[key] ? "working" : "idle"}{session?.tokens ? ` · ${Math.round(session.tokens / 1000)}k tokens` : ""}
+            {harnessOf(settings).name} {run?.running || chatRunning[key] ? "working" : "idle"}{session?.tokens ? ` · ${Math.round(session.tokens / 1000)}k tokens` : ""}
           </span>
         )}
         {details && <span className="sb opt ellipsis"><GitBranch size={13} />{details.headRefName} @ {details.headRefOid.slice(0, 7)}</span>}
+        {sample && <span className="sb"><Sparkles size={13} />Sample</span>}
         <span className="sb opt"><Lock size={13} />Read-only</span>
       </footer>
       <Suspense fallback={null}>
@@ -1383,6 +1630,7 @@ export default function App() {
       {infoDialog && <InfoDialog kind={infoDialog} commands={commands} vim={settings.vimKeys} onClose={() => setInfoDialog(null)} />}
       </Suspense>
     </div>
+    </AgentContext.Provider>
   );
 }
 

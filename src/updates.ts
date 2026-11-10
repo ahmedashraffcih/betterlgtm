@@ -99,5 +99,5 @@ export function useUpdater(auto: boolean) {
     }
   }, [state]);
 
-  return { state, checkNow, install, restart: () => (flushSessions(), relaunch()), supported: inTauri };
+  return { state, checkNow, install, restart: () => flushSessions().then(() => relaunch()), supported: inTauri };
 }

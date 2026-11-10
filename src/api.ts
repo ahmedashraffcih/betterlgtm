@@ -3,8 +3,45 @@ import { inTauri, mockInvoke } from "./mock";
 
 // Outside Tauri (browser preview during development, or a VITE_MOCK=1 build) the backend is replaced by sample data.
 const useMock = !inTauri && (import.meta.env.DEV || import.meta.env.VITE_MOCK === "1");
-const invoke = <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
+/** The backend itself, whatever the sample mode: tool checks and settings are always about this computer. */
+const real = <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> =>
   useMock ? (mockInvoke(cmd, args) as Promise<T>) : tauriInvoke<T>(cmd, args);
+
+// Sample mode: the app shows the built-in sample pull requests, so someone can try a review
+// before gh and claude are set up. Nothing reaches GitHub or Claude while it's on.
+let sample = false;
+export function setSampleMode(on: boolean) {
+  sample = on;
+}
+export const isSampleMode = () => sample;
+const invoke = <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> => (sample ? (mockInvoke(cmd, args) as Promise<T>) : real<T>(cmd, args));
+
+/** Whether the tools the app runs are installed and signed in. */
+export interface ToolStatus {
+  gh?: string;
+  ghError?: string;
+  /** The GitHub account gh is signed in to. */
+  login?: string;
+  /** Set when gh runs but GitHub didn't answer for the account: signed out, or offline. */
+  loginError?: string;
+  /** The file the gh command resolves to. */
+  ghFile?: string | null;
+  /** The agent chosen to run reviews (claude, codex or gemini) and its name. */
+  harness?: string;
+  agentName?: string;
+  /** The chosen agent's version, or why it couldn't run. */
+  agent?: string;
+  agentError?: string;
+  /** The file the agent's command resolves to. */
+  agentFile?: string | null;
+  /** How the agent is signed in, so it's clear which account the analyses use. `signedIn` is missing when it can't say. */
+  agentAccount?: { signedIn?: boolean | null; method?: string | null; plan?: string | null; email?: string | null };
+  /** Every agent the app can run and where each was found on this computer; `file` is null when it wasn't. */
+  agents?: { id: string; name: string; file: string | null }[];
+  git?: string;
+  gitError?: string;
+  dataDir: string;
+}
 
 export interface ReviewRequest {
   number: number;
@@ -111,10 +148,21 @@ export interface ClaudeEvent {
   session_id?: string;
   message?: { content?: Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown> }> };
   result?: string;
+  /** The answer as data, when the run was given a schema. */
+  structured_output?: unknown;
   is_error?: boolean;
   total_cost_usd?: number;
   usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
   text?: string;
+}
+
+export interface ClaudeRunOptions {
+  /** A chat answer: adds the short-answer style for the side panel. */
+  chat?: boolean;
+  /** JSON Schema the final answer must match; it arrives as `structured_output` on the result. */
+  schema?: object;
+  /** Stops the run when it has cost this much. */
+  maxBudgetUsd?: number;
 }
 
 export const api = {
@@ -132,9 +180,9 @@ export const api = {
   searchWorktree: (cwd: string, pattern: string, regex: boolean, caseSensitive: boolean) =>
     invoke<{ path: string; line: number; text: string }[]>("search_worktree", { cwd, pattern, regex, caseSensitive }),
   listOrgs: () => invoke<{ login: string; orgs: string[] }>("list_orgs"),
-  setConfig: (config: { ghPath: string; claudePath: string; dataDir: string; model: string; effort: string }) => invoke<void>("set_config", { config }),
-  toolStatus: () =>
-    invoke<{ gh?: string; ghError?: string; login?: string; claude?: string; claudeError?: string; dataDir: string }>("tool_status"),
+  setConfig: (config: { ghPath: string; claudePath: string; harness: string; codexPath: string; geminiPath: string; dataDir: string; model: string; effort: string }) =>
+    real<void>("set_config", { config }),
+  toolStatus: () => real<ToolStatus>("tool_status"),
   prDetails: (repo: string, number: number) => invoke<PrDetails>("pr_details", { repo, number }),
   prDiff: (repo: string, number: number) => invoke<string>("pr_diff", { repo, number }),
   prBodyHtml: (repo: string, number: number) => invoke<string>("pr_body_html", { repo, number }),
@@ -142,19 +190,29 @@ export const api = {
     invoke<string>("submit_review", { repo, number, ...review }),
   prepareWorktree: (repo: string, number: number, baseRef: string) =>
     invoke<string>("prepare_worktree", { repo, number, baseRef }),
-  claudeRun: (
-    runId: string,
-    cwd: string,
-    prompt: string,
-    resume: string | undefined,
-    onEvent: (e: ClaudeEvent) => void,
-  ) => {
-    if (useMock) {
+  claudeRun: (runId: string, cwd: string, prompt: string, resume: string | undefined, onEvent: (e: ClaudeEvent) => void, opts: ClaudeRunOptions = {}) => {
+    if (useMock || sample) {
       return mockInvoke("claude_run", { runId, cwd, prompt }, onEvent) as Promise<void>;
     }
-    const channel = new Channel<ClaudeEvent>();
-    channel.onmessage = onEvent;
-    return invoke<void>("claude_run", { runId, cwd, prompt, resume: resume ?? null, onEvent: channel });
+    const start = (schema?: object) => {
+      const channel = new Channel<ClaudeEvent>();
+      channel.onmessage = onEvent;
+      return invoke<void>("claude_run", {
+        runId,
+        cwd,
+        prompt,
+        resume: resume ?? null,
+        chat: !!opts.chat,
+        schema: schema ? JSON.stringify(schema) : null,
+        maxBudgetUsd: opts.maxBudgetUsd && opts.maxBudgetUsd > 0 ? opts.maxBudgetUsd : null,
+        onEvent: channel,
+      });
+    };
+    // A Claude Code from before --json-schema stops at once; run again and read the JSON from its text.
+    return start(opts.schema).catch((e) => {
+      if (opts.schema && /unknown option.*json-schema/i.test(errorText(e))) return start();
+      throw e;
+    });
   },
   claudeCancel: (runId: string) => invoke<void>("claude_cancel", { runId }),
 };

@@ -25,8 +25,9 @@ export const DescriptionDialog = view(() => import("./components/DescriptionDial
 export const InfoDialog = view(() => import("./components/InfoDialog").then((m) => m.InfoDialog));
 export const CommandPalette = view(() => import("./components/CommandPalette").then((m) => m.CommandPalette));
 export const MarkdownRenderer = view(() => import("./components/MarkdownRenderer").then((m) => m.default));
+export const Onboarding = view(() => import("./components/Onboarding").then((m) => m.Onboarding));
 
-const all = [AnalysisView, GuidedReview, DiffView, Settings, SubmitReview, FilterDialog, DescriptionDialog, InfoDialog, CommandPalette, MarkdownRenderer];
+const all = [AnalysisView, GuidedReview, DiffView, Settings, SubmitReview, FilterDialog, DescriptionDialog, InfoDialog, CommandPalette, MarkdownRenderer, Onboarding];
 
 export function preloadViews() {
   const run = () => all.forEach((v) => v.preload().catch(() => {}));

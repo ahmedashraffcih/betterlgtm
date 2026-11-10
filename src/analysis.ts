@@ -31,6 +31,12 @@ export interface Finding {
   confidence?: "high" | "medium" | "low";
   notInDescription?: boolean;
   anchors: Anchor[];
+  /** Set when the finding repeats one from an earlier analysis, so the reviewer's state stays with it. */
+  id?: string;
+  /** Position of the earlier finding this one repeats, as Claude reported it. Turned into `id`. */
+  previous?: number;
+  /** The result of the second pass that tried to disprove the finding. */
+  check?: { status: "confirmed" | "uncertain"; note: string };
 }
 
 /** One step of the guided review: related changes across files, read together. */
@@ -57,6 +63,8 @@ export interface Analysis {
   risks?: Risk[];
   /** Whether the main changes are covered by tests. */
   tests?: TestCheck[];
+  /** Findings the second pass disproved, with the reason. Not shown as findings. */
+  dropped?: { finding: Finding; note: string }[];
 }
 
 export interface Risk {
@@ -83,25 +91,134 @@ const WALKTHROUGH_RULES = `Group the changes into review steps for a guided revi
 
 const WALKTHROUGH_SHAPE = `"walkthrough": [{ "title": "...", "why": ["..."], "changes": [{ "path": "src/x.ts", "startLine": 10, "endLine": 40 }] }]`;
 
+// Schemas for `claude --json-schema`. They fix the structure; the prompts explain what goes in each field.
+const TEXT = { type: "string" };
+const LINES = { type: "array", items: TEXT };
+const ANCHORS = {
+  type: "array",
+  items: { type: "object", properties: { path: TEXT, startLine: { type: "integer" }, endLine: { type: "integer" } }, required: ["path", "startLine", "endLine"] },
+};
+const RECOMMENDATION = {
+  type: "object",
+  properties: { decision: { enum: ["approve", "comment", "request_changes"] }, reason: TEXT },
+  required: ["decision", "reason"],
+};
+
+export const WALKTHROUGH_SCHEMA = {
+  type: "object",
+  properties: {
+    walkthrough: { type: "array", items: { type: "object", properties: { title: TEXT, why: LINES, changes: ANCHORS }, required: ["title", "why", "changes"] } },
+  },
+  required: ["walkthrough"],
+};
+
+export const ANALYSIS_SCHEMA = {
+  type: "object",
+  properties: {
+    summary: LINES,
+    guidelines: LINES,
+    risks: { type: "array", items: { type: "object", properties: { area: TEXT, why: TEXT, anchors: ANCHORS }, required: ["area", "why"] } },
+    tests: {
+      type: "array",
+      items: { type: "object", properties: { change: TEXT, covered: { enum: ["yes", "partly", "no"] }, tests: LINES, note: TEXT }, required: ["change", "covered"] },
+    },
+    recommendation: RECOMMENDATION,
+    claims: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { text: TEXT, verdict: { enum: ["implemented", "partial", "contradicted", "missing"] }, note: TEXT, finding: { type: "integer" }, source: TEXT, anchors: ANCHORS },
+        required: ["text", "verdict", "anchors"],
+      },
+    },
+    findings: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          severity: { enum: ["critical", "high", "medium", "low"] },
+          category: TEXT,
+          title: TEXT,
+          body: LINES,
+          fix: TEXT,
+          suggestion: TEXT,
+          confidence: { enum: ["high", "medium", "low"] },
+          notInDescription: { type: "boolean" },
+          previous: { type: "integer" },
+          anchors: ANCHORS,
+        },
+        required: ["severity", "category", "title", "body", "anchors"],
+      },
+    },
+  },
+  required: ["summary", "recommendation", "claims", "findings"],
+};
+
+export const RECHECK_SCHEMA = {
+  type: "object",
+  properties: {
+    results: {
+      type: "array",
+      items: { type: "object", properties: { index: { type: "integer" }, status: { enum: ["fixed", "open", "changed", "unclear"] }, note: TEXT }, required: ["index", "status", "note"] },
+    },
+  },
+  required: ["results"],
+};
+
+export const VERIFY_SCHEMA = {
+  type: "object",
+  properties: {
+    results: {
+      type: "array",
+      items: { type: "object", properties: { index: { type: "integer" }, status: { enum: ["confirmed", "refuted", "uncertain"] }, note: TEXT }, required: ["index", "status", "note"] },
+    },
+    recommendation: RECOMMENDATION,
+  },
+  required: ["results"],
+};
+
+/** Asks the analysis session to group the PR's changes into guided review steps. */
 export function buildWalkthroughPrompt(): string {
   return `${WALKTHROUGH_RULES}
 
 Use the PR you analyzed earlier in this session (git diff against the base branch).
-Reply with only one JSON block: \`\`\`json { ${WALKTHROUGH_SHAPE} } \`\`\``;
+Give the result as one JSON object: { ${WALKTHROUGH_SHAPE} }`;
 }
+
+/** A finding from the PR's previous analysis, with what the reviewer did with it. */
+export interface EarlierFinding {
+  finding: Finding;
+  state?: FindingState;
+}
+
+export interface AnalysisOptions {
+  /** The reviewer's own instructions, global and for this repository. */
+  instructions?: string;
+  /** A re-review: focus on what changed after this commit. */
+  since?: string;
+  issues?: LinkedIssue[];
+  threads?: ReviewThread[];
+  /** The reviewer wrote this PR. */
+  selfReview?: boolean;
+  /** Findings of the previous analysis of this PR. */
+  earlier?: EarlierFinding[];
+  /** Findings the reviewer dismissed on other PRs in this repository. */
+  dismissedInRepo?: { title: string; reason?: string }[];
+}
+
+const STATE_NOTE: Record<FindingStateKind, string> = {
+  dismissed: "dismissed by the reviewer",
+  resolved: "marked resolved by the reviewer",
+  commented: "already posted as a review comment",
+};
+
+const oneLine = (text: string, max: number) => text.replace(/\s+/g, " ").trim().slice(0, max);
 
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
-/** With `since`, a re-review: focus on what changed after the commit the reviewer last reviewed. */
-export function buildAnalysisPrompt(
-  pr: PrDetails,
-  extraInstructions = "",
-  since?: string,
-  issues: LinkedIssue[] = [],
-  threads: ReviewThread[] = [],
-  selfReview = false,
-): string {
-  const extra = extraInstructions.trim() ? `\n\nThe reviewer's own instructions (follow them):\n${extraInstructions.trim()}` : "";
+export function buildAnalysisPrompt(pr: PrDetails, o: AnalysisOptions = {}): string {
+  const { since, issues = [], threads = [], earlier = [], dismissedInRepo = [] } = o;
+  const extra = o.instructions?.trim() ? `\n\nThe reviewer's own instructions (follow them):\n${o.instructions.trim()}` : "";
   const focus = since
     ? `\n\nThis is a re-review. The reviewer last reviewed commit ${since}. Focus on what changed since then: git diff ${since} HEAD (and git log ${since}..HEAD). Use the full PR diff only for context. Report findings only for code changed since ${since}, and check description claims only where the new commits affect them. Mention in the summary that this covers the changes since the last review.`
     : "";
@@ -114,10 +231,24 @@ export function buildAnalysisPrompt(
     ? `\n\nReviewers have already raised these points on the PR. Don't report them again as findings; only add what they missed:\n` +
       open.map((t) => `- ${t.path}${t.line ? `:${t.line}` : ""} (${t.comments[0].author}): ${t.comments[0].body.replace(/\s+/g, " ").slice(0, 300)}`).join("\n")
     : "";
-  const self = selfReview
+  const before = earlier.length
+    ? `\n\nAn earlier analysis of this PR reported these findings:\n` +
+      earlier
+        .map(({ finding: f, state }, i) => {
+          const note = state ? ` [${STATE_NOTE[state.state]}${state.reason ? `: ${oneLine(state.reason, 120)}` : ""}]` : "";
+          return `[${i}] (${f.severity}) ${f.title} — ${f.anchors.map(anchorLabel).join(", ") || "no location"}${note}`;
+        })
+        .join("\n") +
+      `\nCheck the code again rather than trusting this list. When a finding of yours is the same problem as one of these, keep its title and set "previous" to its number. Leave out the ones that are fixed. Don't report a dismissed one again unless the code changed in a way that makes it matter.`
+    : "";
+  const habits = dismissedInRepo.length
+    ? `\n\nOn other pull requests in this repository, the reviewer dismissed these findings. Don't report the same kind of point here unless it is clearly more serious:\n` +
+      dismissedInRepo.map((d) => `- ${oneLine(d.title, 100)}${d.reason ? ` (${oneLine(d.reason, 120)})` : ""}`).join("\n")
+    : "";
+  const self = o.selfReview
     ? `\n\nThis is the reviewer's own pull request: they wrote it and want to check it before asking others to review. Address them as the author ("you"). In "recommendation", approve means it's ready to ask for reviews, comment means it's worth another look first, and request_changes means fix these before asking anyone.`
     : "";
-  return baseAnalysisPrompt(pr) + linked + discussed + self + focus + extra;
+  return baseAnalysisPrompt(pr) + linked + discussed + before + habits + self + focus + extra;
 }
 
 function baseAnalysisPrompt(pr: PrDetails): string {
@@ -143,7 +274,6 @@ Do this, using only read-only commands:
    CI or deployment config, dependencies, public APIs, money or personal data. One line on why it matters here.
 3b. In "tests", for each significant behavior change, say whether changed or existing tests exercise it
    (yes, partly, no) and name the test files. Read the tests; don't run anything.
-4. ${WALKTHROUGH_RULES.replace(/\n/g, "\n   ")}
 
 Don't read generated files (lockfiles, build output, snapshots, generated code) line by line;
 only mention them if their change is unexpected, for example a lockfile change with no dependency change.
@@ -153,12 +283,12 @@ The reviewer skims. Be brief and concrete:
 - No filler, no hedging, no repeating the title. Say what breaks and why it matters.
 - Use \`inline code\` for identifiers. No headings, no bold.
 - Limits: title up to 8 words; summary 2–4 bullets; finding body 1–3 bullets; fix one line;
-  claim note one line; recommendation reason one line; reading-order "why" up to 8 words.
+  claim note one line; recommendation reason one line; risk "why" one line.
 When a finding's fix is a small, certain change to exactly the lines of its first anchor, add "suggestion":
 the full replacement text for those lines (startLine to endLine of the new file), with the original indentation and
 no diff markers. Leave it out when the fix touches other lines or you aren't sure.
 Line numbers refer to the new version of the file. Paths are relative to the repository root.
-When you are done, reply with only one JSON block in this shape:
+When you are done, give the result as one JSON object in this shape:
 
 \`\`\`json
 {
@@ -171,8 +301,7 @@ When you are done, reply with only one JSON block in this shape:
                "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
   "findings": [{ "severity": "critical|high|medium|low", "category": "Correctness|Security|Behavior change|Tests|Data handling|Performance|Maintainability",
                  "title": "...", "body": ["...", "..."], "fix": "...", "suggestion": "replacement lines", "confidence": "high|medium|low", "notInDescription": false,
-                 "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }],
-  ${WALKTHROUGH_SHAPE}
+                 "anchors": [{ "path": "src/x.ts", "startLine": 10, "endLine": 14 }] }]
 }
 \`\`\`
 "text" on a claim is the claim as the description states it, shortened to one line.
@@ -213,29 +342,42 @@ function parseSteps(v: unknown): WalkStep[] | undefined {
   return steps.length ? steps : undefined;
 }
 
-/** JSON blocks in Claude's answer, last first; the answer itself if it has none. */
-function jsonCandidates(text: string): string[] {
-  const blocks = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map((m) => m[1]);
-  return blocks.length ? blocks.reverse() : [text];
+/** What a run answered: the data when it was given a schema, otherwise its text. */
+export const answerOf = (e: { structured_output?: unknown; result?: string | null }): unknown => e.structured_output ?? e.result ?? "";
+
+/**
+ * The objects an answer could be: the data itself when the run had a schema, otherwise the JSON blocks
+ * in the text (last first) or the text as a whole. Older Claude Code versions only give text.
+ */
+function candidates(answer: unknown): Record<string, any>[] {
+  if (answer && typeof answer === "object") return [answer as Record<string, any>];
+  if (typeof answer !== "string") return [];
+  const blocks = [...answer.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map((m) => m[1]);
+  const out: Record<string, any>[] = [];
+  for (const raw of blocks.length ? blocks.reverse() : [answer]) {
+    try {
+      const data = JSON.parse(raw.trim());
+      if (data && typeof data === "object") out.push(data);
+    } catch {
+      // not JSON: try the next block
+    }
+  }
+  return out;
 }
 
-export function parseWalkthrough(text: string): WalkStep[] | null {
-  for (const raw of jsonCandidates(text)) {
-    try {
-      const steps = parseSteps(JSON.parse(raw.trim()).walkthrough);
-      if (steps) return steps;
-    } catch {
-      // try the next block
-    }
+export function parseWalkthrough(answer: unknown): WalkStep[] | null {
+  for (const data of candidates(answer)) {
+    const steps = parseSteps(data.walkthrough);
+    if (steps) return steps;
   }
   return null;
 }
 
-/** Pulls the last JSON block out of Claude's final answer. Returns null when there is none. */
-export function parseAnalysis(text: string): Analysis | null {
-  for (const raw of jsonCandidates(text)) {
+/** Reads the analysis out of Claude's final answer. Returns null when there is none. */
+export function parseAnalysis(answer: unknown): Analysis | null {
+  for (const data of candidates(answer)) {
     try {
-      const data = JSON.parse(raw.trim());
+      if (!Array.isArray(data.findings) && !Array.isArray(data.claims)) continue;
       const findings = asArray<Finding>(data.findings).filter((f) => f && typeof f === "object").map((f) => ({
         ...f,
         severity: asSeverity(f.severity),
@@ -245,6 +387,9 @@ export function parseAnalysis(text: string): Analysis | null {
         fix: f.fix ? asText(f.fix) : undefined,
         suggestion: typeof f.suggestion === "string" && f.suggestion.trim() ? f.suggestion.replace(/\n$/, "") : undefined,
         anchors: asAnchors(f.anchors),
+        previous: Number.isInteger(f.previous) ? f.previous : undefined,
+        id: undefined,
+        check: undefined,
       }));
       const order = findings.map((_, i) => i).sort((a, b) => SEVERITY_RANK[findings[a].severity] - SEVERITY_RANK[findings[b].severity]);
       const remap = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
@@ -271,7 +416,7 @@ export function parseAnalysis(text: string): Analysis | null {
         walkthrough: parseSteps(data.walkthrough),
       };
     } catch {
-      // try the next block
+      // not the shape of an analysis: try the next one
     }
   }
   return null;
@@ -319,27 +464,108 @@ Statuses:
 - changed: the code changed but the problem is only partly addressed, or it moved.
 - unclear: you can't tell from the code.
 
-Reply with only this JSON, one entry per finding, and a note of one short sentence saying why:
+Give the result as this JSON, one entry per finding, and a note of one short sentence saying why:
 {"results": [{"index": 0, "status": "fixed", "note": "..."}]}`;
 }
 
-export function parseRecheck(text: string): Record<number, FindingCheck> | null {
-  const statuses: CheckStatus[] = ["fixed", "open", "changed", "unclear"];
-  for (const raw of jsonCandidates(text)) {
-    try {
-      const data = JSON.parse(raw.trim());
-      const results: Record<number, FindingCheck> = {};
-      for (const r of asArray<{ index: unknown; status: unknown; note: unknown }>(data.results)) {
-        if (typeof r.index === "number" && statuses.includes(r.status as CheckStatus)) {
-          results[r.index] = { status: r.status as CheckStatus, note: asText(r.note) };
-        }
+/** Results by finding index, keeping only entries with one of `statuses`. */
+function parseResults<S extends string>(answer: unknown, statuses: readonly S[]): Record<number, { status: S; note: string }> | null {
+  for (const data of candidates(answer)) {
+    const results: Record<number, { status: S; note: string }> = {};
+    for (const r of asArray<{ index: unknown; status: unknown; note: unknown }>(data.results)) {
+      if (r && typeof r.index === "number" && statuses.includes(r.status as S)) {
+        results[r.index] = { status: r.status as S, note: asText(r.note) };
       }
-      if (Object.keys(results).length) return results;
-    } catch {
-      // try the next candidate
     }
+    if (Object.keys(results).length) return results;
   }
   return null;
+}
+
+export function parseRecheck(answer: unknown): Record<number, FindingCheck> | null {
+  return parseResults<CheckStatus>(answer, ["fixed", "open", "changed", "unclear"]);
+}
+
+export type VerifyStatus = "confirmed" | "refuted" | "uncertain";
+
+/** Findings worth a second pass: the ones that would change the reviewer's decision. */
+export const worthVerifying = (f: Finding) => f.severity !== "low";
+
+/**
+ * Asks a fresh session to try to disprove the findings. It hasn't seen the analysis's reasoning,
+ * so it doesn't inherit its mistakes. `indexes` are positions in `a.findings`.
+ */
+export function buildVerifyPrompt(pr: PrDetails, a: Analysis, indexes: number[]): string {
+  const list = indexes
+    .map((i) => {
+      const f = a.findings[i];
+      const where = f.anchors.map((x) => `${x.path}:${x.startLine}${x.endLine > x.startLine ? `-${x.endLine}` : ""}`).join(", ") || "no location";
+      return `[${i}] (${f.severity}, ${f.category || "uncategorized"}) ${f.title} — ${where}\n${f.body}${f.fix ? `\nSuggested fix: ${f.fix}` : ""}`;
+    })
+    .join("\n\n");
+  const rec = a.recommendation ? `\n\nThe reviewer's recommendation was "${a.recommendation.decision}" (${a.recommendation.reason}). If the findings you refute change it, give the new one in "recommendation" (approve, comment or request_changes, with a one-line reason). Otherwise leave "recommendation" out.` : "";
+  return `You are double-checking a code review of pull request #${pr.number} "${pr.title}".
+The PR head is checked out in the current directory (detached HEAD). The base branch is origin/${pr.baseRefName}.
+See the change with: git diff origin/${pr.baseRefName}...HEAD
+
+Another reviewer reported the findings below. Assume each one may be wrong and try to disprove it, using only read-only commands:
+- Read the code at the location and around it. Check that the lines say what the finding claims.
+- Follow callers and callees. Look for guards, validation, types, configuration or tests that already handle the case.
+- Check whether the problem already existed before this PR and the PR doesn't touch it.
+
+${list}
+
+Statuses:
+- confirmed: you read the code and the problem is real as described.
+- refuted: the code shows the finding is wrong or already handled. Name the file:line that shows it.
+- uncertain: you can't tell from the code either way.
+Use refuted only when you can point to code that disproves the finding. A real problem you consider minor is still confirmed.${rec}
+
+Give the result as this JSON, one entry per finding, and a note of one short sentence saying why:
+{"results": [{"index": 0, "status": "confirmed", "note": "..."}]}`;
+}
+
+export function parseVerify(answer: unknown): { results: Record<number, { status: VerifyStatus; note: string }>; recommendation?: Analysis["recommendation"] } | null {
+  const results = parseResults<VerifyStatus>(answer, ["confirmed", "refuted", "uncertain"]);
+  if (!results) return null;
+  const rec = candidates(answer).map((d) => d.recommendation).find((r) => r && ["approve", "comment", "request_changes"].includes(r.decision));
+  return { results, recommendation: rec ? { decision: rec.decision, reason: String(rec.reason ?? "") } : undefined };
+}
+
+/** Applies the second pass: refuted findings move to `dropped`, the others keep the result as `check`. */
+export function applyVerification(a: Analysis, v: NonNullable<ReturnType<typeof parseVerify>>): Analysis {
+  const dropped = a.findings.flatMap((f, i) => (v.results[i]?.status === "refuted" ? [{ finding: f, note: v.results[i].note }] : []));
+  const remap = new Map<number, number>();
+  const findings: Finding[] = [];
+  a.findings.forEach((f, i) => {
+    const r = v.results[i];
+    if (r?.status === "refuted") return;
+    remap.set(i, findings.length);
+    findings.push(r ? { ...f, check: { status: r.status as "confirmed" | "uncertain", note: r.note } } : f);
+  });
+  return {
+    ...a,
+    findings,
+    dropped: dropped.length ? dropped : undefined,
+    // A claim explained by a dropped finding keeps its verdict but loses the link.
+    claims: a.claims.map((c) => ({ ...c, finding: typeof c.finding === "number" ? remap.get(c.finding) : undefined })),
+    recommendation: dropped.length && v.recommendation ? v.recommendation : a.recommendation,
+  };
+}
+
+/** Gives a finding that repeats an earlier one that finding's id, so the reviewer's state stays with it. */
+export function carryFindingIds(a: Analysis, earlier: Finding[]): Analysis {
+  const used = new Set<string>();
+  return {
+    ...a,
+    findings: a.findings.map(({ previous, ...f }) => {
+      const prev = typeof previous === "number" ? earlier[previous] : undefined;
+      const id = prev ? findingId(prev) : undefined;
+      if (!id || used.has(id)) return f;
+      used.add(id);
+      return { ...f, id };
+    }),
+  };
 }
 
 export type FindingStateKind = "dismissed" | "resolved" | "commented";
@@ -351,8 +577,8 @@ export interface FindingState {
   at: number;
 }
 
-/** Identifies a finding across analysis runs: its first file and its title. */
-export const findingId = (f: Finding) => `${f.anchors[0]?.path ?? ""}|${f.title.trim().toLowerCase()}`;
+/** Identifies a finding across analysis runs: the id carried over from an earlier run, or its first file and its title. */
+export const findingId = (f: Finding) => f.id ?? `${f.anchors[0]?.path ?? ""}|${f.title.trim().toLowerCase()}`;
 
 /** Asks Claude to write the overall summary for the review the user is about to post. */
 export function buildSummaryPrompt(event: string, comments: Finding[], notes: string): string {

@@ -15,6 +15,7 @@ import { prRisk } from "../risk";
 import { MergeStatus } from "./MergeStatus";
 import { useElementWidth } from "../hooks";
 import { GithubHtml, Markdown } from "./Markdown";
+import { useAgent } from "../harness";
 
 /** s0 = overview, d0 = PR description, c = claim, f = finding. */
 export type OutlineKey = `s${number}` | `d${number}` | `f${number}` | `c${number}` | `t${number}`;
@@ -126,6 +127,7 @@ function ThreadReply(p: {
   onReply: (t: ReviewThread, body: string) => Promise<void>;
   onResolve?: (t: ReviewThread, resolve: boolean) => Promise<void>;
 }) {
+  const agent = useAgent().short;
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<"draft" | "reply" | "resolve" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +148,7 @@ function ThreadReply(p: {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         {p.onDraft && (
           <button type="button" className="btn sm" disabled={!!busy} onClick={() => act("draft", async () => setText(await p.onDraft!(p.thread)))}>
-            {busy === "draft" ? <Loader size={13} className="spin" /> : <Sparkles size={13} />}{busy === "draft" ? "Drafting…" : "Draft reply with Claude"}
+            {busy === "draft" ? <Loader size={13} className="spin" /> : <Sparkles size={13} />}{busy === "draft" ? "Drafting…" : `Draft reply with ${agent}`}
           </button>
         )}
         <span style={{ flex: 1 }} />
@@ -171,6 +173,7 @@ function ago(ts?: number) {
 }
 
 export function AnalysisView(p: Props) {
+  const agent = useAgent().short;
   const [showVerified, setShowVerified] = useState(false);
   const [showMinor, setShowMinor] = useState(false);
   const [showDismissed, setShowDismissed] = useState(false);
@@ -210,7 +213,7 @@ export function AnalysisView(p: Props) {
       { label: "Open", run: () => select(k) },
       { label: p.inReview.includes(i) ? "Remove from review" : "Add to review", run: () => p.onToggleReview(i), separatorBefore: true },
       st ? { label: "Reopen", run: () => p.onState(i, null) } : { label: "Resolve", run: () => p.onState(i, { state: "resolved", at: Date.now() }) },
-      { label: "Ask Claude", run: () => p.onAsk(`About finding ${i + 1} ("${f.title}"): `), separatorBefore: true },
+      { label: `Ask ${agent}`, run: () => p.onAsk(`About finding ${i + 1} ("${f.title}"): `), separatorBefore: true },
       { label: "Copy title", run: () => copyText(f.title) },
     ]);
   };
@@ -477,6 +480,18 @@ function Overview(p: Props & { analysis: Analysis }) {
         })}
         {a.findings.length === 0 && <span className="stat"><CircleCheck size={13} className="tone-ok" />No findings</span>}
       </div>
+      {a.dropped && a.dropped.length > 0 && (
+        <details className="muted" style={{ fontSize: 12 }}>
+          <summary style={{ cursor: "default" }}>
+            {a.dropped.length === 1 ? "1 finding was dropped after a double-check" : `${a.dropped.length} findings were dropped after a double-check`}
+          </summary>
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+            {a.dropped.map((d, i) => (
+              <li key={i}><span style={{ color: "var(--text)" }}>{d.finding.title}</span>{d.note ? `: ${d.note}` : ""}</li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       <section style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <h2 className="section-title">Needs your attention</h2>
@@ -527,6 +542,7 @@ function Overview(p: Props & { analysis: Analysis }) {
 }
 
 function Detail(p: Props & { analysis: Analysis }) {
+  const agent = useAgent().short;
   const a = p.analysis;
   const kind = p.selected[0];
   const idx = Number(p.selected.slice(1));
@@ -563,7 +579,7 @@ function Detail(p: Props & { analysis: Analysis }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <h2 style={{ margin: 0, flex: 1, fontSize: 17, fontWeight: 600 }}>PR description</h2>
           <span className="muted" style={{ fontSize: 12 }}>by {p.pr.author.login}</span>
-          {p.ownPr && p.onEditDescription && <button type="button" className="btn sm" onClick={p.onEditDescription}><Sparkles size={13} />Edit with Claude</button>}
+          {p.ownPr && p.onEditDescription && <button type="button" className="btn sm" onClick={p.onEditDescription}><Sparkles size={13} />Edit with {agent}</button>}
           <button type="button" className="btn sm" onClick={() => openUrl(p.pr.url)}><ExternalLink size={13} />GitHub</button>
         </div>
         <GithubHtml html={p.bodyHtml} fallback={p.pr.body} />
@@ -585,6 +601,11 @@ function Detail(p: Props & { analysis: Analysis }) {
             <Cat size={14} />{f.category}{f.confidence ? ` · ${f.confidence} confidence` : ""}
           </span>
           {f.notInDescription && <span className="tag"><FileX size={12} />Not in description</span>}
+          {f.check && (
+            <span className={`check-badge ${f.check.status === "confirmed" ? "check-ok" : ""}`} title={f.check.note}>
+              {f.check.status === "confirmed" ? "Double-checked" : "Not confirmed"}
+            </span>
+          )}
           <CheckBadge check={p.checks?.[idx]} />
           <StateBadge state={p.states?.[idx]} />
           <span style={{ flex: 1 }} />
@@ -595,6 +616,11 @@ function Detail(p: Props & { analysis: Analysis }) {
         {p.checks?.[idx] && (
           <p className={`check-note check-${CHECK[p.checks[idx].status].tone}`}>
             <strong>After the new commits:</strong> {p.checks[idx].note || CHECK[p.checks[idx].status].label}
+          </p>
+        )}
+        {f.check?.status === "uncertain" && (
+          <p className="check-note check-muted">
+            <strong>A second pass couldn't confirm this:</strong> {f.check.note || "the code didn't settle it either way."}
           </p>
         )}
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, lineHeight: 1.35 }}>{f.title}</h2>
@@ -622,7 +648,7 @@ function Detail(p: Props & { analysis: Analysis }) {
           <button type="button" data-key="add-review" className={inReview ? "btn in-review" : "btn"} aria-pressed={inReview} onClick={() => p.onToggleReview(idx)}>
             {inReview ? <CircleCheck size={14} /> : <MessageSquarePlus size={14} />}{inReview ? "In review" : "Add to review"}
           </button>
-          <button type="button" className="btn" onClick={() => p.onAsk(`About finding ${idx + 1} ("${f.title}"): `)}><MessageSquare size={14} />Ask Claude</button>
+          <button type="button" className="btn" onClick={() => p.onAsk(`About finding ${idx + 1} ("${f.title}"): `)}><MessageSquare size={14} />Ask {agent}</button>
           {p.states?.[idx]?.state !== "dismissed" && p.states?.[idx]?.state !== "resolved" && <FindingActions state={p.states?.[idx]} onState={(st) => p.onState(idx, st)} />}
         </div>
         {(p.states?.[idx]?.state === "dismissed" || p.states?.[idx]?.state === "resolved") && <FindingActions state={p.states?.[idx]} onState={(st) => p.onState(idx, st)} />}
@@ -670,6 +696,7 @@ function Detail(p: Props & { analysis: Analysis }) {
 }
 
 function StartPanel(p: Props) {
+  const agent = useAgent().short;
   const run = p.run;
   return (
     <div className="scroll selectable" style={{ padding: "24px 28px", height: "100%" }}>
@@ -677,13 +704,13 @@ function StartPanel(p: Props) {
         {p.ownPr && <MergeStatus pr={p.pr} threads={p.threads ?? []} />}
         <div className="verdict" style={{ alignItems: "center" }}>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>{run?.running ? "Reviewing with Claude…" : p.ownPr ? "Review your own pull request" : "Start the review"}</span>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>{run?.running ? `Reviewing with ${agent}…` : p.ownPr ? "Review your own pull request" : "Start the review"}</span>
             <span className="muted" style={{ fontSize: 13 }}>
               {run?.running
                 ? run.step
                 : p.ownPr
-                  ? "Catch problems before reviewers do: Claude checks your description against the code and lists what to fix first. Claude can only read."
-                  : "Checks out the PR in its own worktree, then Claude compares the description with the code and lists what to look at. Claude can only read."}
+                  ? `Catch problems before reviewers do: ${agent} checks your description against the code and lists what to fix first. ${agent} can only read.`
+                  : `Checks out the PR in its own worktree, then ${agent} compares the description with the code and lists what to look at. ${agent} can only read.`}
             </span>
           </div>
           {run?.running ? (
@@ -695,13 +722,13 @@ function StartPanel(p: Props) {
         {run?.error && <p style={{ margin: 0, color: "var(--crit)" }}>{run.error}</p>}
         {p.analysisRaw && !run?.running && (
           <details>
-            <summary className="muted">Claude's last answer couldn't be read as a result. Show it</summary>
+            <summary className="muted">{agent}'s last answer couldn't be read as a result. Show it</summary>
             <pre className="mono" style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{p.analysisRaw}</pre>
           </details>
         )}
         {run && run.log.length > 0 && (
           <details open={run.running}>
-            <summary className="muted" style={{ fontSize: 12 }}>What Claude has done ({run.log.length})</summary>
+            <summary className="muted" style={{ fontSize: 12 }}>What {agent} has done ({run.log.length})</summary>
             <div className="mono" style={{ marginTop: 6, padding: "8px 10px", borderRadius: 6, background: "var(--sunken)", fontSize: 11, lineHeight: 1.8, color: "var(--muted)", maxHeight: 240, overflow: "auto" }}>
               {run.log.map((l, i) => <div key={i} className="ellipsis">{l}</div>)}
             </div>
@@ -710,7 +737,7 @@ function StartPanel(p: Props) {
         <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h2 className="section-title" style={{ flex: 1 }}>PR description by {p.pr.author.login}</h2>
-            {p.ownPr && p.onEditDescription && <button type="button" className="btn sm" onClick={p.onEditDescription}><Sparkles size={13} />Edit with Claude</button>}
+            {p.ownPr && p.onEditDescription && <button type="button" className="btn sm" onClick={p.onEditDescription}><Sparkles size={13} />Edit with {agent}</button>}
             <button type="button" className="btn sm" onClick={() => openUrl(p.pr.url)}><ExternalLink size={13} />GitHub</button>
           </div>
           <div className="excerpt" style={{ padding: "12px 16px" }}>

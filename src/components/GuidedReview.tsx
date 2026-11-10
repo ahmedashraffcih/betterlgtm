@@ -8,6 +8,7 @@ import { useElementWidth } from "../hooks";
 import { fileIcon } from "../icons";
 import { DiffModeSwitch, type DiffMode } from "./DiffView";
 import { Markdown } from "./Markdown";
+import { useAgent } from "../harness";
 
 interface Props {
   files: FileData[];
@@ -127,6 +128,7 @@ function StepFile(p: { part: FilePart; findings: Finding[]; split: boolean; revi
 }
 
 export function GuidedReview(p: Props) {
+  const agent = useAgent().short;
   const [rootRef, width] = useElementWidth<HTMLDivElement>();
   const narrow = width > 0 && width < 700;
   const canSplit = width === 0 || width >= 900;
@@ -214,7 +216,7 @@ export function GuidedReview(p: Props) {
           <div style={{ maxWidth: 380, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
             <Sparkles size={32} strokeWidth={1.4} className="tone-accent" />
             <h2 style={{ margin: 0, fontSize: 15, color: "var(--text)" }}>Guided review</h2>
-            <p style={{ margin: 0 }}>Claude groups related changes across files into sections, explains each one, and orders them so each builds on the last.</p>
+            <p style={{ margin: 0 }}>{agent} groups related changes across files into sections, explains each one, and orders them so each builds on the last.</p>
             {p.generating?.running ? (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Loader size={14} className="spin" />Grouping the changes…</span>
             ) : p.canGenerate ? (
