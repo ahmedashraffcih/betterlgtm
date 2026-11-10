@@ -2,6 +2,13 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.5.1] — 2026-11-10
+
+- **Guided review skips generated files**: lockfiles, build output, snapshots and generated code are left out of the sections and the progress count. The Files view still shows them.
+- **Your own generated files**: add globs in **Settings › Review › More generated files**. The agent skips them too.
+- **Tests hidden by default**: the guided review leaves test and spec files out and the Files view folds them; the agent still reads them. Turn it off in **Settings › Review**.
+- **Fixed**: tabs in diffs and code blocks were 8 columns wide; they're now 2.
+
 ## [0.5.0] — 2026-11-10
 
 - **Choose your coding agent**: reviews can run with Claude Code, Codex or Gemini CLI (experimental). Pick one during setup or in **Settings › Agent**; buttons and messages name the agent you chose.
