@@ -39,7 +39,7 @@ If the `HOMEBREW_TAP_TOKEN` secret is missing, the workflow logs a warning and d
 4. **Write the first cask.** Run the workflow for the current release:
 
    ```bash
-   gh workflow run homebrew.yml -R drmas/betterlgtm -f tag=v0.5.0
+   gh workflow run homebrew.yml -R drmas/betterlgtm -f tag=v0.5.1
    ```
 
 5. **Check it.**

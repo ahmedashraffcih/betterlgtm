@@ -718,6 +718,10 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
     </div>
     <ol class="visual releases">
       <li>
+        <h3><span class="ver">0.5.1</span> Generated files and tests out of the way</h3>
+        <p>The guided review skips lockfiles, build output and tests, you can add your own generated-file globs, and tabs show two columns wide.</p>
+      </li>
+      <li>
         <h3><span class="ver">0.5.0</span> Choose your coding agent</h3>
         <p>Review with Claude Code, Codex or Gemini CLI, set up on first run with a sample review to try, and findings that are double-checked against the code.</p>
       </li>
@@ -779,25 +783,25 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 
 <section id="download" class="wrap download">
   <h2>Download BetterLGTM</h2>
-  <p class="sub">Free. <span id="version">Version 0.5.0.</span> The app updates itself from here on.</p>
+  <p class="sub">Free. <span id="version">Version 0.5.1.</span> The app updates itself from here on.</p>
   <div class="platforms">
     <div class="platform">
       <h3>macOS</h3>
-      <a class="dl primary" data-asset="mac-arm" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_aarch64.dmg"><span>Apple silicon</span><span class="meta">.dmg, 3.3 MB</span></a>
-      <a class="dl" data-asset="mac-intel" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_x64.dmg"><span>Intel</span><span class="meta">.dmg, 3.6 MB</span></a>
+      <a class="dl primary" data-asset="mac-arm" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.1/BetterLGTM_0.5.1_aarch64.dmg"><span>Apple silicon</span><span class="meta">.dmg, 3.3 MB</span></a>
+      <a class="dl" data-asset="mac-intel" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.1/BetterLGTM_0.5.1_x64.dmg"><span>Intel</span><span class="meta">.dmg, 3.6 MB</span></a>
       <p>Signed and notarized by Apple.</p>
     </div>
     <div class="platform">
       <h3>Windows</h3>
-      <a class="dl" data-asset="win-exe" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_x64-setup.exe"><span>Installer</span><span class="meta">.exe, 2.7 MB</span></a>
-      <a class="dl" data-asset="win-msi" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_x64_en-US.msi"><span>Windows Installer</span><span class="meta">.msi, 3.6 MB</span></a>
+      <a class="dl" data-asset="win-exe" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.1/BetterLGTM_0.5.1_x64-setup.exe"><span>Installer</span><span class="meta">.exe, 2.7 MB</span></a>
+      <a class="dl" data-asset="win-msi" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.1/BetterLGTM_0.5.1_x64_en-US.msi"><span>Windows Installer</span><span class="meta">.msi, 3.6 MB</span></a>
       <p>Not signed yet. If SmartScreen warns, choose More info › Run anyway.</p>
     </div>
     <div class="platform">
       <h3>Linux</h3>
-      <a class="dl" data-asset="appimage" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_amd64.AppImage"><span>AppImage</span><span class="meta">79 MB</span></a>
-      <a class="dl" data-asset="deb" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_amd64.deb"><span>Debian, Ubuntu</span><span class="meta">.deb, 4.4 MB</span></a>
-      <a class="dl" data-asset="rpm" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM-0.5.0-1.x86_64.rpm"><span>Fedora</span><span class="meta">.rpm, 4.4 MB</span></a>
+      <a class="dl" data-asset="appimage" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.1/BetterLGTM_0.5.1_amd64.AppImage"><span>AppImage</span><span class="meta">79 MB</span></a>
+      <a class="dl" data-asset="deb" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.1/BetterLGTM_0.5.1_amd64.deb"><span>Debian, Ubuntu</span><span class="meta">.deb, 4.4 MB</span></a>
+      <a class="dl" data-asset="rpm" href="https://github.com/drmas/betterlgtm/releases/download/v0.5.1/BetterLGTM-0.5.1-1.x86_64.rpm"><span>Fedora</span><span class="meta">.rpm, 4.4 MB</span></a>
       <p>Needs WebKitGTK 4.1.</p>
     </div>
   </div>
@@ -844,7 +848,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
     document.querySelectorAll(".dl.primary").forEach(function (el) { el.classList.remove("primary"); });
     link(hero[0]).classList.add("primary");
   }
-  setHero("0.5.0");
+  setHero("0.5.1");
   document.getElementById("brew-copy").addEventListener("click", function () {
     var button = this;
     navigator.clipboard.writeText(document.getElementById("brew-cmd").textContent).then(function () {
