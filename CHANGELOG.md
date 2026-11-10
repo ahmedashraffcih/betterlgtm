@@ -2,6 +2,16 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.5.0] — 2026-11-10
+
+- **Choose your coding agent**: reviews can run with Claude Code, Codex or Gemini CLI (experimental). Pick one during setup or in **Settings › Agent**; buttons and messages name the agent you chose.
+- **Onboarding**: the first run checks the GitHub CLI, the coding agent and Git, shows the command to fix anything missing, lets you pick the agent and what the inbox shows, and offers a sample review that needs none of them.
+- **Double-checked findings**: each finding is checked again in a fresh session, and the ones it disproves are moved to a collapsed list.
+- **Sharper analyses**: the analysis knows the findings from your last review and the ones you dismissed in the repository, and the guided review is written in the background so findings show sooner.
+- **Spending limit**: automatic analyses stop at a limit you set ($5 by default, Claude Code only).
+- **Reviews saved to disk**: review sessions move from the window's storage to the app data folder, so large reviews no longer run out of space. Existing sessions move over on first launch.
+- **Empty inbox**: when nothing is waiting, the inbox says why and what to try.
+
 ## [0.4.3] — 2026-11-09
 
 - **Fixed**: on macOS the main window didn't close from the red close button or ⌘W. ⌘Q still quit the app.
