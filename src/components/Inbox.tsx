@@ -169,7 +169,7 @@ export function Inbox(p: Props) {
             Mine<span className="cnt">{p.counts.mine}</span>
           </button>
         </div>
-        <button type="button" className="tb" aria-label="Refresh" title="Refresh" onClick={p.onRefresh}>
+        <button type="button" data-cmd="refresh" className="tb" aria-label="Refresh" title="Refresh" onClick={p.onRefresh}>
           <RefreshCw size={14} className={p.loading ? "spin" : undefined} />
         </button>
         {p.onCollapse && (

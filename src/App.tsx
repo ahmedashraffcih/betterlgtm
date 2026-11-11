@@ -16,6 +16,7 @@ import { Inbox, InboxRail, prKey, type InboxView } from "./components/Inbox";
 import { Toolbar } from "./components/Toolbar";
 import { useElementWidth } from "./hooks";
 import { comboLabel, matches, shortcutLabel, type Command } from "./commands";
+import { ShortcutHints } from "./components/ShortcutHints";
 import { runOnce, useNativeMenu } from "./nativeMenu";
 import { closeSettingsWindow, EV as SETTINGS_EV, openSettingsWindow, SETTINGS_LABEL, useSettingsWindow, type SettingsData } from "./settingsWindow";
 import { emitTo, listen } from "@tauri-apps/api/event";
@@ -1094,8 +1095,8 @@ export default function App() {
   const canAnalyze = !!(details && !run?.running);
   const commands: Command[] = [
     { id: "refresh", menu: "File", label: "Refresh pull requests", keys: { key: "r", ctrl: true }, altKeys: [{ key: "F5" }], run: refresh },
-    { id: "github", menu: "File", label: "Open pull request on GitHub", enabled: !!selected, run: () => selected && openUrl(selected.url), separatorBefore: true },
-    { id: "editor", menu: "File", label: "Open worktree in VS Code", enabled: !!session?.worktree, run: openInEditor },
+    { id: "github", menu: "File", label: "Open pull request on GitHub", keys: { key: "o", ctrl: true, shift: true }, enabled: !!selected, run: () => selected && openUrl(selected.url), separatorBefore: true },
+    { id: "editor", menu: "File", label: "Open worktree in VS Code", keys: { key: "e", ctrl: true }, enabled: !!session?.worktree, run: openInEditor },
     { id: "settings", menu: "File", label: "Settings…", keys: { key: ",", ctrl: true }, run: () => openSettings("general"), separatorBefore: true },
     { id: "quit", menu: "File", label: "Quit", keys: { key: "q", ctrl: true }, run: () => getCurrentWindow().close(), separatorBefore: true },
 
@@ -1292,18 +1293,18 @@ export default function App() {
             {details?.title ?? selected.title} <span className="muted" style={{ fontWeight: 400 }}>#{selected.number}</span>
           </h1>
           <div className="seg" role="group" aria-label="View">
-            <button type="button" className={tab === "analysis" ? "on" : ""} aria-pressed={tab === "analysis"} onClick={() => setTab("analysis")} title="Analysis">
+            <button type="button" data-cmd="tab-analysis" className={tab === "analysis" ? "on" : ""} aria-pressed={tab === "analysis"} onClick={() => setTab("analysis")} title="Analysis">
               <ListChecks size={13} /><span className="lbl-text">Analysis</span>{critHigh > 0 && <span className="cnt crit">{critHigh}</span>}
             </button>
-            <button type="button" className={tab === "diff" ? "on" : ""} aria-pressed={tab === "diff"} onClick={() => setTab("diff")} title="Diff">
+            <button type="button" data-cmd="tab-diff" className={tab === "diff" ? "on" : ""} aria-pressed={tab === "diff"} onClick={() => setTab("diff")} title="Diff">
               <FileDiff size={13} /><span className="lbl-text">Diff</span><span className="cnt">{files.length}</span>
             </button>
           </div>
-          <button type="button" className="tb" aria-label="Open on GitHub" title="Open on GitHub" onClick={() => openUrl(selected.url)}><ExternalLink size={15} /></button>
-          <button type="button" className="btn" disabled={!session?.worktree} aria-label="Open in editor" title={session?.worktree ?? "The worktree is created when the review starts"} onClick={openInEditor}>
+          <button type="button" data-cmd="github" className="tb" aria-label="Open on GitHub" title="Open on GitHub" onClick={() => openUrl(selected.url)}><ExternalLink size={15} /></button>
+          <button type="button" data-cmd="editor" className="btn" disabled={!session?.worktree} aria-label="Open in editor" title={session?.worktree ?? "The worktree is created when the review starts"} onClick={openInEditor}>
             <Code size={14} /><span className="lbl-text">Open in editor</span>
           </button>
-          <button type="button" className="btn primary" disabled={!details} aria-label="Submit review" title="Submit review on GitHub" onClick={() => setReviewOpen(true)}>
+          <button type="button" data-cmd="submit" className="btn primary" disabled={!details} aria-label="Submit review" title="Submit review on GitHub" onClick={() => setReviewOpen(true)}>
             <Send size={14} /><span className="lbl-text">Submit review…</span>{(session?.inReview.length ?? 0) + (session?.draftComments?.length ?? 0) > 0 && <span className="cnt on-primary">{(session?.inReview.length ?? 0) + (session?.draftComments?.length ?? 0)}</span>}
           </button>
         </div>
@@ -1602,6 +1603,7 @@ export default function App() {
         <span className="sb opt"><Lock size={13} />Read-only</span>
       </footer>
       <Suspense fallback={null}>
+      <ShortcutHints commandsRef={commandsRef} />
       {paletteOpen && <CommandPalette items={paletteItems} extra={openPrItem} onClose={() => setPaletteOpen(false)} />}
       {descOpen && details && (
         <DescriptionDialog key={key} current={details.body ?? ""} onDraft={draftDescription} onSave={saveDescription} onClose={() => setDescOpen(false)} />
