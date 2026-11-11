@@ -56,15 +56,16 @@ Runs can be cancelled; the backend keeps a cancel handle per run id.
 
 #### Other agents
 
-Reviews can run with Claude Code, Codex or Gemini CLI (Settings › Agent, and the second onboarding step). `src-tauri/src/harness.rs` holds what differs: each agent's arguments for a read-only, non-interactive run, and a `Normalizer` that turns its JSON stream into the events Claude Code emits, so the frontend reads one shape.
+Reviews can run with Claude Code, Codex, Gemini CLI or Copilot CLI (Settings › Agent, and the second onboarding step). `src-tauri/src/harness.rs` holds what differs: each agent's arguments for a read-only, non-interactive run, and a `Normalizer` that turns its JSON stream into the events Claude Code emits, so the frontend reads one shape.
 
 | | Read-only by | Resume | Answer as data | Spending limit |
 |---|---|---|---|---|
 | Claude Code | allowed-tools list | `--resume <id>` | `--json-schema` | `--max-budget-usd` |
 | Codex | `sandbox_mode="read-only"` | `exec resume <id>` | JSON in the text | none |
 | Gemini CLI | `--approval-mode plan` | `--resume <id>` | JSON in the text | none |
+| Copilot CLI | `--available-tools` and `--allow-tool` lists; a prompt run denies the rest | `--resume=<id>` | JSON in the text | none |
 
-Session ids from Codex and Gemini CLI are stored with the agent's name in front (`codex:…`), and a session is only resumed by the agent that started it; after switching agents, the next run starts a fresh session. `src/harness.ts` is the frontend's list, with install and sign-in commands.
+Session ids from Codex, Gemini CLI and Copilot CLI are stored with the agent's name in front (`codex:…`), and a session is only resumed by the agent that started it; after switching agents, the next run starts a fresh session. `src/harness.ts` is the frontend's list, with install and sign-in commands.
 
 ### 4. Turning answers into UI
 

@@ -14,6 +14,7 @@ pub enum Harness {
     Claude,
     Codex,
     Gemini,
+    Copilot,
 }
 
 /// Claude Code's tools. Everything else is denied in print mode, so the session is read-only.
@@ -29,6 +30,15 @@ const CLAUDE_TOOLS: &[&str] = &[
     "Bash(git merge-base:*)",
     "Bash(rg:*)",
 ];
+
+/// Copilot CLI's tools. Only these are offered to the model, so no MCP server or editing tool is
+/// there to call; `bash` runs only the allowed commands and ones Copilot deems read-only, and
+/// files only inside the worktree, since a prompt run denies everything that would ask.
+const COPILOT_TOOLS: &[&str] = &["view", "grep", "glob", "bash"];
+const COPILOT_ALLOWED: &[&str] = &["shell(git log)", "shell(git show)", "shell(git diff)", "shell(git blame)", "shell(git merge-base)", "shell(rg)"];
+const COPILOT_DENIED: &[&str] = &["write", "memory", "url"];
+/// Settings from the environment that would approve what the lists above leave to be denied.
+const COPILOT_UNSAFE_ENV: &[&str] = &["COPILOT_ALLOW_ALL", "COPILOT_ASSISTED_APPROVAL"];
 
 /// Added to chat runs only: answers are read in a narrow side panel by someone mid-review.
 /// Analyses, drafts and other runs describe their own output in the prompt.
@@ -51,12 +61,13 @@ pub struct Run<'a> {
 }
 
 impl Harness {
-    pub const ALL: [Harness; 3] = [Harness::Claude, Harness::Codex, Harness::Gemini];
+    pub const ALL: [Harness; 4] = [Harness::Claude, Harness::Codex, Harness::Gemini, Harness::Copilot];
 
     pub fn from_id(id: &str) -> Harness {
         match id.trim() {
             "codex" => Harness::Codex,
             "gemini" => Harness::Gemini,
+            "copilot" => Harness::Copilot,
             _ => Harness::Claude,
         }
     }
@@ -66,6 +77,7 @@ impl Harness {
             Harness::Claude => "claude",
             Harness::Codex => "codex",
             Harness::Gemini => "gemini",
+            Harness::Copilot => "copilot",
         }
     }
 
@@ -74,6 +86,7 @@ impl Harness {
             Harness::Claude => "Claude Code",
             Harness::Codex => "Codex",
             Harness::Gemini => "Gemini CLI",
+            Harness::Copilot => "Copilot CLI",
         }
     }
 
@@ -167,6 +180,29 @@ impl Harness {
                     cmd.args(["--resume", id]);
                 }
             }
+            Harness::Copilot => {
+                // `=` keeps the prompt from being read as one more tool name after the lists.
+                for key in COPILOT_UNSAFE_ENV {
+                    cmd.env_remove(key);
+                }
+                cmd.arg(format!("--prompt={prompt}"))
+                    .args(["--output-format", "json", "--no-ask-user", "--disable-builtin-mcps", "--disallow-temp-dir"])
+                    .arg("--available-tools")
+                    .args(COPILOT_TOOLS)
+                    .arg("--allow-tool")
+                    .args(COPILOT_ALLOWED)
+                    .arg("--deny-tool")
+                    .args(COPILOT_DENIED);
+                if !model.is_empty() {
+                    cmd.args(["--model", model]);
+                }
+                if !effort.is_empty() {
+                    cmd.args(["--reasoning-effort", effort]);
+                }
+                if let Some(id) = resume {
+                    cmd.arg(format!("--resume={id}"));
+                }
+            }
         }
     }
 }
@@ -194,13 +230,15 @@ pub struct Normalizer {
     /// Gemini CLI streams a message in pieces; they collect here until it's complete.
     partial: String,
     finished: bool,
+    /// Copilot CLI reports tokens in checkpoints along the way; the last one counts.
+    usage: Value,
     /// What the agent said went wrong, which is clearer than its stderr.
     pub error: Option<String>,
 }
 
 impl Normalizer {
     pub fn new(harness: Harness) -> Self {
-        Self { harness, session: None, answer: String::new(), partial: String::new(), finished: false, error: None }
+        Self { harness, session: None, answer: String::new(), partial: String::new(), finished: false, usage: json!({}), error: None }
     }
 
     /// The events to forward for one line of the agent's output.
@@ -209,6 +247,7 @@ impl Normalizer {
             Harness::Claude => vec![raw],
             Harness::Codex => self.codex(&raw),
             Harness::Gemini => self.gemini(&raw),
+            Harness::Copilot => self.copilot(&raw),
         }
     }
 
@@ -219,7 +258,8 @@ impl Normalizer {
         }
         let mut out = self.flush();
         if !self.answer.is_empty() {
-            out.push(self.result(json!({})));
+            let usage = self.usage.clone();
+            out.push(self.result(usage));
         }
         out
     }
@@ -334,6 +374,70 @@ impl Normalizer {
             _ => Vec::new(),
         }
     }
+
+    fn copilot(&mut self, e: &Value) -> Vec<Value> {
+        let data = &e["data"];
+        match e["type"].as_str().unwrap_or("") {
+            "session.start" => data["sessionId"].as_str().map(|id| vec![self.init(id)]).unwrap_or_default(),
+            "assistant.message" => {
+                let text = data["content"].as_str().unwrap_or("").trim();
+                if text.is_empty() {
+                    return Vec::new();
+                }
+                self.answer = text.to_string();
+                vec![text_event(text)]
+            }
+            "tool.execution_start" => {
+                let args = &data["arguments"];
+                // Named as Claude Code names them, so the progress lines read the same.
+                vec![match data["toolName"].as_str().unwrap_or("Tool") {
+                    "view" => tool_event("Read", json!({ "file_path": args["path"] })),
+                    "grep" => tool_event("Grep", json!({ "pattern": args["pattern"] })),
+                    "glob" => tool_event("Glob", json!({ "pattern": args["pattern"] })),
+                    "bash" => tool_event("Bash", json!({ "command": args["command"] })),
+                    other => tool_event(other, args.clone()),
+                }]
+            }
+            "session.usage_checkpoint" => {
+                let (mut input, mut output, mut read, mut write) = (0, 0, 0, 0);
+                for m in data["providerModelMetrics"].as_array().into_iter().flatten() {
+                    let u = &m["metrics"]["usage"];
+                    let n = |k: &str| u[k].as_u64().unwrap_or(0);
+                    input += n("inputTokens");
+                    output += n("outputTokens");
+                    read += n("cacheReadTokens");
+                    write += n("cacheWriteTokens");
+                }
+                // Input tokens include cached ones; Claude Code reports those apart.
+                self.usage = json!({
+                    "input_tokens": input.saturating_sub(read + write),
+                    "cache_read_input_tokens": read,
+                    "cache_creation_input_tokens": write,
+                    "output_tokens": output,
+                });
+                Vec::new()
+            }
+            "session.error" => {
+                self.error = Some(data["message"].as_str().unwrap_or("The run failed.").to_string());
+                Vec::new()
+            }
+            "result" => {
+                // A resumed session announces no id until here.
+                if self.session.is_none()
+                    && let Some(id) = e["sessionId"].as_str()
+                {
+                    self.session = Some(self.harness.tag(id));
+                }
+                if e["exitCode"].as_i64().is_some_and(|c| c != 0) {
+                    self.error.get_or_insert_with(|| "The run failed.".to_string());
+                    return Vec::new();
+                }
+                let usage = self.usage.clone();
+                vec![self.result(usage)]
+            }
+            _ => Vec::new(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -404,6 +508,62 @@ mod tests {
         assert_eq!(out[4]["result"], "Done.");
         assert_eq!(out[4]["session_id"], "gemini:s1");
         assert_eq!(out[4]["usage"]["input_tokens"], 60);
+    }
+
+    #[test]
+    fn copilot_stream_becomes_claude_events() {
+        // Recorded from Copilot CLI 1.0.109, trimmed to the fields read.
+        let (out, n) = feed_all(
+            Harness::Copilot,
+            &[
+                r#"{"type":"session.start","data":{"sessionId":"3764643a","selectedModel":"claude-opus-5.5"}}"#,
+                r#"{"type":"assistant.message_delta","data":{"messageId":"m0","deltaContent":"Di"},"ephemeral":true}"#,
+                r#"{"type":"assistant.message","data":{"messageId":"m0","content":"","toolRequests":[{"name":"bash","arguments":{"command":"git log -1"}}]}}"#,
+                r#"{"type":"tool.execution_start","data":{"toolName":"bash","arguments":{"command":"git --no-pager log -1","description":"Show latest commit"}}}"#,
+                r#"{"type":"tool.execution_start","data":{"toolName":"view","arguments":{"path":"/repo/docs/HOMEBREW.md"}}}"#,
+                r#"{"type":"assistant.message","data":{"messageId":"m1","content":"Points the docs at 0.5.1.","toolRequests":[]}}"#,
+                r#"{"type":"session.usage_checkpoint","data":{"providerModelMetrics":[{"metrics":{"usage":{"inputTokens":27726,"outputTokens":1365,"cacheReadTokens":21755,"cacheWriteTokens":5963}}}]}}"#,
+                r#"{"type":"result","sessionId":"3764643a","exitCode":0,"usage":{"premiumRequests":15}}"#,
+            ],
+        );
+        assert_eq!(out.len(), 5);
+        assert_eq!(out[0]["session_id"], "copilot:3764643a");
+        assert_eq!(out[1]["message"]["content"][0]["input"]["command"], "git --no-pager log -1");
+        assert_eq!(out[2]["message"]["content"][0]["name"], "Read");
+        assert_eq!(out[2]["message"]["content"][0]["input"]["file_path"], "/repo/docs/HOMEBREW.md");
+        let result = &out[4];
+        assert_eq!(result["result"], "Points the docs at 0.5.1.");
+        assert_eq!(result["session_id"], "copilot:3764643a");
+        assert_eq!(result["usage"]["input_tokens"], 8);
+        assert_eq!(result["usage"]["cache_read_input_tokens"], 21755);
+        assert!(n.error.is_none());
+    }
+
+    #[test]
+    fn copilot_run_cannot_be_widened_from_the_environment() {
+        let mut cmd = Command::new("copilot");
+        cmd.env("COPILOT_ALLOW_ALL", "true");
+        Harness::Copilot.arguments(&mut cmd, &Run { prompt: "p", model: "", effort: "", resume: None, chat: false, schema: None, max_budget_usd: None });
+        let removed: Vec<_> = cmd.as_std().get_envs().filter(|(_, v)| v.is_none()).map(|(k, _)| k.to_string_lossy().into_owned()).collect();
+        assert!(removed.contains(&"COPILOT_ALLOW_ALL".to_string()));
+        assert!(removed.contains(&"COPILOT_ASSISTED_APPROVAL".to_string()));
+    }
+
+    #[test]
+    fn copilot_resume_and_failure() {
+        // A resumed session only names itself in the result.
+        let (out, _) = feed_all(Harness::Copilot, &[r#"{"type":"assistant.message","data":{"content":"ok"}}"#, r#"{"type":"result","sessionId":"abc","exitCode":0}"#]);
+        assert_eq!(out[1]["session_id"], "copilot:abc");
+        let (out, n) = feed_all(
+            Harness::Copilot,
+            &[
+                r#"{"type":"session.start","data":{"sessionId":"s"}}"#,
+                r#"{"type":"session.error","data":{"errorType":"query","message":"Execution failed: Model \"x\" is not available."}}"#,
+                r#"{"type":"result","sessionId":"s","exitCode":1}"#,
+            ],
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(n.error.as_deref(), Some("Execution failed: Model \"x\" is not available."));
     }
 
     #[test]

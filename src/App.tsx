@@ -202,13 +202,14 @@ export default function App() {
         harness: settings.harness,
         codexPath: settings.codexPath,
         geminiPath: settings.geminiPath,
+        copilotPath: settings.copilotPath,
         dataDir: settings.dataDir,
         model: settings.model,
         effort: settings.effort,
       })
       .then(() => setConfigReady(true))
       .catch(() => setConfigReady(true));
-  }, [settings.ghPath, settings.claudePath, settings.harness, settings.codexPath, settings.geminiPath, settings.dataDir, settings.model, settings.effort]);
+  }, [settings.ghPath, settings.claudePath, settings.harness, settings.codexPath, settings.geminiPath, settings.copilotPath, settings.dataDir, settings.model, settings.effort]);
 
   useEffect(() => {
     if (settings.theme === "system") delete document.documentElement.dataset.theme;
@@ -271,7 +272,7 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (configReady) checkTools();
-  }, [configReady, settings.ghPath, settings.claudePath, settings.harness, settings.codexPath, settings.geminiPath, checkTools]);
+  }, [configReady, settings.ghPath, settings.claudePath, settings.harness, settings.codexPath, settings.geminiPath, settings.copilotPath, checkTools]);
   useEffect(() => {
     if (inboxError && !isSampleMode()) checkTools();
   }, [inboxError, checkTools]);

@@ -26,7 +26,7 @@ export interface ToolStatus {
   loginError?: string;
   /** The file the gh command resolves to. */
   ghFile?: string | null;
-  /** The agent chosen to run reviews (claude, codex or gemini) and its name. */
+  /** The agent chosen to run reviews (claude, codex, gemini or copilot) and its name. */
   harness?: string;
   agentName?: string;
   /** The chosen agent's version, or why it couldn't run. */
@@ -180,7 +180,7 @@ export const api = {
   searchWorktree: (cwd: string, pattern: string, regex: boolean, caseSensitive: boolean) =>
     invoke<{ path: string; line: number; text: string }[]>("search_worktree", { cwd, pattern, regex, caseSensitive }),
   listOrgs: () => invoke<{ login: string; orgs: string[] }>("list_orgs"),
-  setConfig: (config: { ghPath: string; claudePath: string; harness: string; codexPath: string; geminiPath: string; dataDir: string; model: string; effort: string }) =>
+  setConfig: (config: { ghPath: string; claudePath: string; harness: string; codexPath: string; geminiPath: string; copilotPath: string; dataDir: string; model: string; effort: string }) =>
     real<void>("set_config", { config }),
   toolStatus: () => real<ToolStatus>("tool_status"),
   prDetails: (repo: string, number: number) => invoke<PrDetails>("pr_details", { repo, number }),

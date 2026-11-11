@@ -141,7 +141,7 @@ function Tools(p: Props) {
     api.toolStatus().then(setStatus).catch((e) => setStatus({ ghError: errorText(e), dataDir: "" })).finally(() => setChecking(false));
   };
   const agent = harnessOf(s);
-  useEffect(check, [s.ghPath, s.claudePath, s.codexPath, s.geminiPath, s.harness, s.dataDir]);
+  useEffect(check, [s.ghPath, s.claudePath, s.codexPath, s.geminiPath, s.copilotPath, s.harness, s.dataDir]);
 
   const Status = ({ ok, text, error }: { ok?: string; text?: string; error?: string }) =>
     ok ? <span className="status-ok" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}><CircleCheck size={13} />{text ?? ok}</span>
