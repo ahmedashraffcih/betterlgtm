@@ -8,6 +8,7 @@ import { commentLines } from "../diffUtils";
 import type { DraftComment } from "./DiffView";
 import { SEVERITY } from "../icons";
 import { useAgent } from "../harness";
+import { bucket, track } from "../telemetry";
 
 interface Props {
   repo: string;
@@ -133,6 +134,7 @@ export function SubmitReview(p: Props) {
         body,
         comments: [...p.drafts.map((d) => ({ path: d.path, line: d.line, ...(d.start_line ? { start_line: d.start_line } : {}), body: d.body })), ...inline.map((i) => ({ ...i.where!, body: i.suggest && i.canSuggest ? `${i.text}\n\n\`\`\`suggestion\n${i.finding.suggestion}\n\`\`\`` : i.text }))],
       });
+      track("review_submitted", { event, comments: bucket(inline.length + p.drafts.length), findings_posted: bucket(chosen.length), has_summary: !!summary.trim() });
       p.onSubmitted(url, chosen.map((i) => i.index));
     } catch (e) {
       setError(errorText(e));

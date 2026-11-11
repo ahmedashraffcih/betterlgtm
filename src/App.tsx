@@ -33,6 +33,7 @@ import { useUpdater } from "./updates";
 import { LruCache, readInboxCache, writeInboxCache } from "./cache";
 import { waitingSince } from "./risk";
 import { notify, useReviewNotifications } from "./notify";
+import { bucket, minutes, track } from "./telemetry";
 
 interface Loaded {
   key: string;
@@ -192,6 +193,7 @@ export default function App() {
   const analysis = session?.analysis;
 
   useEffect(preloadViews, []);
+  useEffect(() => track("app_opened", { harness: settings.harness, auto_analyze: settings.autoAnalyze, onboarded: settings.onboarded }), []);
 
   // The backend needs tool paths, the data folder and Claude options before it runs anything.
   useEffect(() => {
@@ -453,6 +455,7 @@ export default function App() {
         costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
       setGuideRuns((g) => ({ ...g, [k]: { running: false } }));
+      track("walkthrough_ready", { harness: settings.harness, sections: bucket(steps.length) });
       return true;
     } catch (e) {
       setGuideRuns((g) => ({ ...g, [k]: { running: false, error: errorText(e) } }));
@@ -473,6 +476,7 @@ export default function App() {
     let tokens = 0;
     let cost = 0;
     let overBudget = false;
+    const started = Date.now();
     const left = () => (budget === undefined ? undefined : Math.max(budget - cost, 0));
     const logTools = (e: ClaudeEvent) => {
       if (e.type === "result" && e.subtype === "error_max_budget_usd") overBudget = true;
@@ -575,6 +579,17 @@ export default function App() {
         notify(`Analysis ready: ${pr.repository.name}#${pr.number}`, `${pr.title}\n${crit ? `${crit} critical or high ${crit === 1 ? "finding" : "findings"}` : `${parsed.findings.length} findings, none critical or high`}`).catch(() => {});
       }
       setRun(k, (r) => ({ ...r, running: false, step: "", error: parsed ? undefined : `${agent} finished, but its answer didn't contain a readable result.` }));
+      track(parsed ? "analysis_finished" : "analysis_failed", {
+        harness: settings.harness,
+        background: !!opts.background,
+        since_last_review: !!opts.since,
+        verified: settings.verifyFindings,
+        decision: parsed?.recommendation?.decision,
+        high_findings: parsed ? bucket(parsed.findings.filter((f) => f.severity === "critical" || f.severity === "high").length) : undefined,
+        findings: parsed ? bucket(parsed.findings.length) : undefined,
+        duration_min: minutes(Date.now() - started),
+        reason: parsed ? undefined : "unreadable",
+      });
       // The verdict is on screen; the guided review follows on its own.
       if (parsed && !parsed.walkthrough && sessionId && left() !== 0) void createWalkthrough(k, wt, sessionId, left());
     } catch (e) {
@@ -582,6 +597,7 @@ export default function App() {
         ? `Stopped at the $${budget} limit for automatic analyses. Start the review yourself, or raise the limit in Settings › Agent.`
         : errorText(e);
       setRun(k, (r) => ({ ...r, running: false, error }));
+      track("analysis_failed", { harness: settings.harness, background: !!opts.background, reason: overBudget ? "budget" : "error", duration_min: minutes(Date.now() - started) });
     }
   };
   const startAnalysis = async (opts: { since?: string } = {}) => {
@@ -598,6 +614,7 @@ export default function App() {
     push({ role: "user", text, context: context?.label });
     const prompt = context ? `${context.prompt}\n\n${text}` : text;
     setChatRunning((c) => ({ ...c, [k]: true }));
+    track("chat_sent", { harness: settings.harness, with_context: !!context });
     const runId = `chat-${k}-${Date.now()}`;
     runIds.current[`chat-${k}`] = runId;
     try {
@@ -636,6 +653,7 @@ export default function App() {
 
   /** Swaps the inbox between GitHub and the built-in sample, starting from an empty list either way. */
   const switchInbox = (toSample: boolean) => {
+    if (toSample) track("sample_opened");
     setSampleMode(toSample);
     setSample(toSample);
     setSelected(null);
@@ -715,6 +733,7 @@ export default function App() {
     });
     update(k, (x) => ({ ...x, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
     if (!text.trim()) throw new Error(`${agent} didn't return a description. Try again.`);
+    track("description_drafted", { harness: settings.harness });
     return text.trim();
   };
   const saveDescription = async (body: string) => {
@@ -747,6 +766,7 @@ export default function App() {
     });
     update(k, (x) => ({ ...x, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
     if (!text.trim()) throw new Error(`${agent} didn't return a reply. Try again.`);
+    track("reply_drafted", { harness: settings.harness });
     return text.trim();
   };
   const replyToThread = async (t: ReviewThread, body: string) => {
@@ -790,6 +810,7 @@ export default function App() {
         costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
       setRecheckRuns((r) => ({ ...r, [k]: { running: false } }));
+      track("findings_rechecked", { harness: settings.harness, findings: bucket(findings.length) });
     } catch (e) {
       setRecheckRuns((r) => ({ ...r, [k]: { running: false, error: errorText(e) } }));
     }
@@ -1469,7 +1490,7 @@ export default function App() {
               onSample={enterSample}
               onContinue={() => { setSetupOpen(false); setSetupSkipped(setupIsBroken); setFirstStep("agent"); }}
               onStep={setFirstStep}
-              onDone={() => updateSettings({ onboarded: true })}
+              onDone={() => { updateSettings({ onboarded: true }); track("onboarding_finished", { harness: settings.harness }); }}
             />
           </Suspense>
         </div>

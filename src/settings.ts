@@ -12,6 +12,8 @@ export interface Settings {
   vimKeys: boolean;
   /** Desktop notifications and the dock or taskbar count for review requests. */
   notifications: boolean;
+  /** Send anonymous usage counts (app opens, reviews, actions) with no PR content. See telemetry.ts. */
+  usageStats: boolean;
   // Organizations and review requests
   orgMode: "all" | "selected";
   /** Used in "all" mode: organizations left out of the inbox. */
@@ -70,6 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoUpdate: true,
   vimKeys: true,
   notifications: true,
+  usageStats: true,
   orgMode: "all",
   hiddenOrgs: [],
   selectedOrgs: [],

@@ -107,6 +107,7 @@ On macOS, use <kbd>Cmd</kbd> in place of <kbd>Ctrl</kbd>.
 ## Privacy and safety
 
 - **Local only.** GitHub is reached through your `gh` and the model through your own agent CLI. BetterLGTM has no backend and never sees your tokens.
+- **Anonymous usage stats.** Release builds send counts of app opens, analyses, submitted reviews and a few other actions to PostHog, with the app version, operating system and a random ID made on your computer. They never include code, findings, chat, PR descriptions, or repository, organization, PR or account names. Turn it off in **Settings › General › Share anonymous usage stats**. Builds from source send nothing. The full list of events is in [`src/telemetry.ts`](src/telemetry.ts).
 - **Read-only agents.** Claude Code runs with only these tools allowed: `Read`, `Grep`, `Glob`, `LS`, and `git log`, `git show`, `git diff`, `git blame`, `git merge-base` and `rg` through Bash. Codex runs in its read-only sandbox, and may search the web. Gemini CLI runs in its read-only plan mode. None of them can edit files or post anything to GitHub. Reviews are posted by the app, through your `gh`, only when you press the submit button.
 - **Costs.** Analyses use your agent's plan or API usage. The status bar shows the tokens used per PR.
 
@@ -117,7 +118,7 @@ On macOS, use <kbd>Cmd</kbd> in place of <kbd>Ctrl</kbd>.
 | Clones | `~/.betterlgtm/clones/<owner>/<repo>` (blobless) |
 | Worktrees | `~/.betterlgtm/worktrees/<owner>/<repo>/pr-<n>` |
 | Analyses and chat history | `sessions/` in the app's data folder, one file per PR |
-| Settings | The app's local storage |
+| Settings and the anonymous install ID | The app's local storage |
 
 You can change the data folder in Settings and clear everything from there.
 

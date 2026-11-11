@@ -214,6 +214,7 @@ export function Settings(p: Props) {
               </Row>
               <Check label="Notify me about review requests" hint="A desktop notification when a review is requested or requested again, and a count on the app icon. Hidden organizations are left out." checked={s.notifications} onChange={(v) => p.update({ notifications: v })} />
               <Check label="Vim-style keys" hint="j/k to move, h/l to switch panes, gg/G, n/N for findings and more. Press ? for the full list." checked={s.vimKeys} onChange={(v) => p.update({ vimKeys: v })} />
+              <Check label="Share anonymous usage stats" hint="Counts of app opens, reviews and actions, with the app version and system. Never code, findings, chat, or repository, PR or account names." checked={s.usageStats} onChange={(v) => p.update({ usageStats: v })} />
               <Check label="Check for app updates automatically" hint="New versions download only when you choose Install" checked={s.autoUpdate} onChange={(v) => p.update({ autoUpdate: v })} />
             </div>
           </>
