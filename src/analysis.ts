@@ -589,6 +589,51 @@ export interface FindingState {
 /** Identifies a finding across analysis runs: the id carried over from an earlier run, or its first file and its title. */
 export const findingId = (f: Finding) => f.id ?? `${f.anchors[0]?.path ?? ""}|${f.title.trim().toLowerCase()}`;
 
+/**
+ * A prompt to paste into the coding agent that wrote the PR, so it can fix the chosen findings on the author's branch.
+ * Dismissed findings go in as "intended", so the agent doesn't undo them.
+ */
+export function buildHandoffPrompt(o: {
+  pr: { number: number; headRefName: string };
+  head?: string;
+  analysis: Analysis;
+  states?: Record<number, FindingState>;
+  /** Indexes of the findings to fix. */
+  findings: number[];
+  /** Also list the description claims that don't match the code. */
+  claims: boolean;
+}): string {
+  const { analysis: a, states = {} } = o;
+  const where = (anchors: Anchor[]) =>
+    anchors.map((x) => (x.startLine === x.endLine ? `${x.path}:${x.startLine}` : `${x.path}:${x.startLine}-${x.endLine}`)).join(", ") || "no location";
+  const all = a.findings.map((f, i) => ({ f, i }));
+  const picked = all.filter(({ i }) => o.findings.includes(i));
+  const dismissed = all.filter(({ i }) => states[i]?.state === "dismissed" && !o.findings.includes(i));
+  const claims = o.claims ? a.claims.filter((c) => c.verdict !== "implemented") : [];
+  const VERDICT_TEXT: Record<Verdict, string> = { implemented: "implemented", partial: "partly implemented", contradicted: "contradicted by the code", missing: "missing" };
+
+  const finding = ({ f, i }: { f: Finding; i: number }) =>
+    [
+      `### ${i + 1}. ${f.title} (${f.severity})`,
+      `Where: ${where(f.anchors)}`,
+      f.body,
+      f.fix && `Fix: ${f.fix}`,
+      f.suggestion && `Suggested replacement for the first location:\n\`\`\`\n${f.suggestion}\n\`\`\``,
+      f.check && `Double-check: ${f.check.status}. ${f.check.note}`,
+    ].filter(Boolean).join("\n");
+
+  const head = o.head ? ` The review ran on commit ${o.head.slice(0, 7)}; if the branch has moved since, check each point against the current code.` : "";
+  return [
+    `Fix the review findings below on pull request #${o.pr.number}, branch \`${o.pr.headRefName}\`.${head}`,
+    picked.length ? `## Findings\n\n${picked.map(finding).join("\n\n")}` : "",
+    claims.length ? `## Description claims that don't match the code\n\n${claims.map((c) => `- "${c.text}": ${VERDICT_TEXT[c.verdict]}${c.note ? `. ${c.note}` : ""}`).join("\n")}` : "",
+    dismissed.length
+      ? `## Intended, don't change\n\nI dismissed these on purpose. Leave this behaviour as it is.\n\n${dismissed.map(({ f, i }) => `- ${f.title} (${where(f.anchors)})${states[i]?.reason ? `: ${states[i].reason}` : ""}`).join("\n")}`
+      : "",
+    `Check each finding against the code before changing anything; some may be wrong. When you're done, say which ones you didn't fix and why.`,
+  ].filter(Boolean).join("\n\n");
+}
+
 /** Asks Claude to write the overall summary for the review the user is about to post. */
 export function buildSummaryPrompt(event: string, comments: Finding[], notes: string): string {
   const decision = { APPROVE: "approve", REQUEST_CHANGES: "request changes", COMMENT: "comment without a decision" }[event] ?? "comment";

@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { FileData } from "react-diff-view";
-import { anchorLabel, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck, type FindingState } from "../analysis";
+import { anchorLabel, buildHandoffPrompt, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck, type FindingState } from "../analysis";
 import { contextMenu, copyText } from "../contextMenu";
 import { errorText, type PrDetails, type ReviewThread } from "../api";
 import { categoryIcon, SEVERITY, VERDICT } from "../icons";
@@ -48,6 +48,8 @@ interface Props {
   threads?: ReviewThread[];
   /** The PR is yours: self-review wording and what's blocking merge. */
   ownPr?: boolean;
+  /** The commit the analysis ran on. */
+  analysisHead?: string;
   onEditDescription?: () => void;
   onThreadDraft?: (t: ReviewThread) => Promise<string>;
   onThreadReply?: (t: ReviewThread, body: string) => Promise<void>;
@@ -217,6 +219,7 @@ export function AnalysisView(p: Props) {
       st ? { label: "Reopen", run: () => p.onState(i, null) } : { label: "Resolve", run: () => p.onState(i, { state: "resolved", at: Date.now() }) },
       { label: `Ask ${agent}`, run: () => p.onAsk(`About finding ${i + 1} ("${f.title}"): `), separatorBefore: true },
       { label: "Copy title", run: () => copyText(f.title) },
+      ...(p.ownPr ? [{ label: "Copy for agent", run: () => copyText(buildHandoffPrompt({ pr: p.pr, head: p.analysisHead, analysis: a, states: p.states, findings: [i], claims: false })) }] : []),
     ]);
   };
   const Row = ({ k, sub, Icon, tone, text, meta, check, state }: { k: OutlineKey; sub?: boolean; Icon: LucideIcon; tone: string; text: string; meta?: string; check?: FindingCheck; state?: FindingState }) => (

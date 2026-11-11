@@ -1,8 +1,9 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Loader, MessageSquare, Send, Sparkles, X } from "lucide-react";
+import { Check, ClipboardCopy, ExternalLink, Loader, MessageSquare, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FileData } from "react-diff-view";
-import { anchorLabel, type Analysis, type Finding, type FindingCheck, type FindingState } from "../analysis";
+import { anchorLabel, buildHandoffPrompt, type Analysis, type Finding, type FindingCheck, type FindingState } from "../analysis";
+import { copyText } from "../contextMenu";
 import { api, errorText, type PrDetails, type ReviewEvent } from "../api";
 import { commentLines } from "../diffUtils";
 import type { DraftComment } from "./DiffView";
@@ -19,6 +20,8 @@ interface Props {
   inReview: number[];
   /** GitHub doesn't let you approve or request changes on your own pull request. */
   ownPr: boolean;
+  /** The commit the analysis ran on. */
+  analysisHead?: string;
   /** Re-check results after new commits; fixed findings start unchecked. */
   checks?: Record<number, FindingCheck>;
   /** Dismissed, resolved or already-commented findings start unchecked. */
@@ -84,6 +87,7 @@ export function SubmitReview(p: Props) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
+  const [copied, setCopied] = useState(false);
   const draft = async () => {
     if (!p.onDraftSummary) return;
     setDrafting(true);
@@ -140,6 +144,14 @@ export function SubmitReview(p: Props) {
       setError(errorText(e));
       setSending(false);
     }
+  };
+
+  /** On your own PR the fix usually happens in your coding agent, not in a comment. */
+  const copyForAgent = () => {
+    if (!p.analysis) return;
+    copyText(buildHandoffPrompt({ pr: p.details, head: p.analysisHead, analysis: p.analysis, states: p.states, findings: chosen.map((i) => i.index), claims: true }));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   const action = EVENTS.find(([e]) => e === event)![1];
@@ -247,11 +259,18 @@ export function SubmitReview(p: Props) {
               </button>
             ))}
           </div>
-          <span style={{ flex: 1 }} />
-          <button type="button" className="btn" onClick={p.onClose} disabled={sending}>Cancel</button>
-          <button type="button" className="btn primary" onClick={submit} disabled={sending || empty} title={empty ? "Add a comment or a summary first" : undefined}>
-            <Send size={14} />{sending ? "Posting…" : action}
-          </button>
+          {/* One group, so in a narrow window the buttons wrap together. */}
+          <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+            {p.ownPr && p.analysis && (
+              <button type="button" className="btn" onClick={copyForAgent} disabled={sending} title="Copy the checked findings as a prompt for your coding agent">
+                {copied ? <Check size={14} className="tone-ok" /> : <ClipboardCopy size={14} />}{copied ? "Copied" : "Copy for agent"}
+              </button>
+            )}
+            <button type="button" className="btn" onClick={p.onClose} disabled={sending}>Cancel</button>
+            <button type="button" className="btn primary" onClick={submit} disabled={sending || empty} title={empty ? "Add a comment or a summary first" : undefined}>
+              <Send size={14} />{sending ? "Posting…" : action}
+            </button>
+          </div>
         </div>
         {error && <p className="selectable review-error">{error}</p>}
       </div>

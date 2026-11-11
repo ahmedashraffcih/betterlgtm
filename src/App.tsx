@@ -1402,6 +1402,7 @@ export default function App() {
             onState={setFindingState}
             threads={loaded && loaded.key === key ? loaded.threads : []}
             ownPr={!!orgs?.login && details.author.login === orgs.login}
+            analysisHead={analysisHead}
             onEditDescription={() => setDescOpen(true)}
             onThreadDraft={session?.worktree || selected ? draftReply : undefined}
             onThreadReply={replyToThread}
@@ -1653,6 +1654,7 @@ export default function App() {
           files={files}
           inReview={session?.inReview ?? []}
           ownPr={!!orgs?.login && details.author.login === orgs.login}
+          analysisHead={analysisHead}
           checks={checks?.results}
           states={findingStates}
           drafts={session?.draftComments ?? []}
