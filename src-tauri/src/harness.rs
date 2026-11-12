@@ -60,6 +60,16 @@ pub struct Run<'a> {
     pub max_budget_usd: Option<f64>,
 }
 
+/// The agent for one run: the configured one, or a different agent asked for just this run (such as a
+/// double-check by another agent). The flag says the override is in effect.
+pub fn run_agent(configured: &str, override_id: Option<&str>) -> (Harness, bool) {
+    let base = Harness::from_id(configured);
+    match override_id.map(Harness::from_id) {
+        Some(h) if h != base => (h, true),
+        _ => (base, false),
+    }
+}
+
 impl Harness {
     pub const ALL: [Harness; 4] = [Harness::Claude, Harness::Codex, Harness::Gemini, Harness::Copilot];
 
@@ -579,5 +589,20 @@ mod tests {
     fn shell_wrapper_is_removed() {
         assert_eq!(shell_command("/usr/bin/bash -lc 'git diff a...b'"), "git diff a...b");
         assert_eq!(shell_command("git status"), "git status");
+    }
+
+    #[test]
+    fn run_agent_uses_the_configured_agent_without_an_override() {
+        assert_eq!(run_agent("claude", None), (Harness::Claude, false));
+    }
+
+    #[test]
+    fn run_agent_takes_a_different_override() {
+        assert_eq!(run_agent("claude", Some("codex")), (Harness::Codex, true));
+    }
+
+    #[test]
+    fn run_agent_ignores_an_override_that_matches_the_configured_agent() {
+        assert_eq!(run_agent("codex", Some("codex")), (Harness::Codex, false));
     }
 }

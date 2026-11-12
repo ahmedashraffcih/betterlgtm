@@ -9,7 +9,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::sync::oneshot;
 
 use crate::config::ConfigState;
-use crate::harness::{Harness, Normalizer, Run};
+use crate::harness::{Normalizer, Run, run_agent};
 
 /// Cancel handles for Claude runs that are still streaming, keyed by run id.
 #[derive(Default)]
@@ -32,10 +32,11 @@ pub async fn claude_run(
     chat: Option<bool>,
     schema: Option<String>,
     max_budget_usd: Option<f64>,
+    harness: Option<String>,
     on_event: Channel<Value>,
 ) -> Result<(), String> {
     let config = config.get();
-    let harness = Harness::from_id(&config.harness);
+    let (harness, overridden) = run_agent(&config.harness, harness.as_deref());
     let name = harness.name();
     let program = config.agent_path(harness);
     let mut cmd = crate::process::command(&program);
@@ -43,8 +44,9 @@ pub async fn claude_run(
         &mut cmd,
         &Run {
             prompt: &prompt,
-            model: &config.model,
-            effort: &config.effort,
+            // The model and effort settings belong to the configured agent; another agent runs with its own defaults.
+            model: if overridden { "" } else { &config.model },
+            effort: if overridden { "" } else { &config.effort },
             resume: resume.as_deref(),
             chat: chat.unwrap_or(false),
             schema: schema.as_deref(),
