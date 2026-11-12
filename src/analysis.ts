@@ -1,4 +1,5 @@
 import type { LinkedIssue, PrDetails, ReviewThread } from "./api";
+import type { HarnessId } from "./harness";
 
 export type Verdict = "implemented" | "partial" | "contradicted" | "missing";
 export type Severity = "critical" | "high" | "medium" | "low";
@@ -19,7 +20,7 @@ export interface Claim {
   /** Where the claim comes from when it isn't the description, such as "#311". */
   source?: string;
   /** The second pass's look at the verdict. `previous` is set when it changed the verdict. */
-  check?: { status: "confirmed" | "changed" | "uncertain"; previous?: Verdict; note: string };
+  check?: { status: "confirmed" | "changed" | "uncertain"; previous?: Verdict; note: string; by?: HarnessId };
 }
 
 /** A change the description doesn't mention. Not necessarily a problem. */
@@ -54,7 +55,8 @@ export interface Finding {
   /** Position of the earlier finding this one repeats, as Claude reported it. Turned into `id`. */
   previous?: number;
   /** The result of the second pass that tried to disprove the finding. */
-  check?: { status: "confirmed" | "uncertain"; note: string };
+  /** The second pass. "disputed": an agent other than the one that reported it refuted it; `by` names that agent. */
+  check?: { status: "confirmed" | "uncertain" | "disputed"; note: string; by?: HarnessId };
 }
 
 /** One step of the guided review: related changes across files, read together. */
@@ -83,6 +85,8 @@ export interface Analysis {
   tests?: TestCheck[];
   /** Findings the second pass disproved, with the reason. Not shown as findings. */
   dropped?: { finding: Finding; note: string }[];
+  /** The double-check by another agent couldn't run or gave no readable answer; the findings are unchecked. */
+  verifyFailed?: { by: HarnessId; error: string };
   /** Changes the description doesn't mention. Missing in analyses from older versions. */
   unmentioned?: Unmentioned[];
   /** Dismissals from other PRs in the repository that the analysis was told about. */
@@ -640,16 +644,19 @@ export function parseVerify(answer: unknown): {
 /**
  * Applies the second pass: refuted findings move to `dropped`, the others keep the result as `check`.
  * A claim whose verdict the code shows to be wrong takes the new verdict, and keeps the old one in `check`.
+ * With `by`, another agent did the checking: a finding it refutes is two agents disagreeing, so it stays,
+ * marked disputed, for the reviewer to decide, and doesn't change the recommendation.
  */
-export function applyVerification(a: Analysis, v: NonNullable<ReturnType<typeof parseVerify>>): Analysis {
-  const dropped = a.findings.flatMap((f, i) => (v.results[i]?.status === "refuted" ? [{ finding: f, note: v.results[i].note }] : []));
+export function applyVerification(a: Analysis, v: NonNullable<ReturnType<typeof parseVerify>>, by?: HarnessId): Analysis {
+  const dropped = by ? [] : a.findings.flatMap((f, i) => (v.results[i]?.status === "refuted" ? [{ finding: f, note: v.results[i].note }] : []));
   const remap = new Map<number, number>();
   const findings: Finding[] = [];
   a.findings.forEach((f, i) => {
     const r = v.results[i];
-    if (r?.status === "refuted") return;
+    if (r?.status === "refuted" && !by) return;
     remap.set(i, findings.length);
-    findings.push(r ? { ...f, check: { status: r.status as "confirmed" | "uncertain", note: r.note } } : f);
+    const status = r?.status === "refuted" ? "disputed" : (r?.status as "confirmed" | "uncertain");
+    findings.push(r ? { ...f, check: { status, note: r.note, ...(by ? { by } : {}) } } : f);
   });
   let changed = 0;
   const claims = a.claims.map((c, i): Claim => {
@@ -657,10 +664,11 @@ export function applyVerification(a: Analysis, v: NonNullable<ReturnType<typeof 
     const base = { ...c, finding: typeof c.finding === "number" ? remap.get(c.finding) : undefined };
     const r = v.claims[i];
     if (!r) return base;
-    if (r.verdict === "uncertain") return { ...base, check: { status: "uncertain", note: r.note } };
-    if (r.verdict === c.verdict) return { ...base, check: { status: "confirmed", note: r.note } };
+    const who = by ? { by } : {};
+    if (r.verdict === "uncertain") return { ...base, check: { status: "uncertain", note: r.note, ...who } };
+    if (r.verdict === c.verdict) return { ...base, check: { status: "confirmed", note: r.note, ...who } };
     changed++;
-    return { ...base, verdict: r.verdict, check: { status: "changed", previous: c.verdict, note: r.note } };
+    return { ...base, verdict: r.verdict, check: { status: "changed", previous: c.verdict, note: r.note, ...who } };
   });
   return {
     ...a,

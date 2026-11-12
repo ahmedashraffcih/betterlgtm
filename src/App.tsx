@@ -580,12 +580,17 @@ export default function App() {
           }, { schema: crossAgent === "codex" ? VERIFY_SCHEMA_STRICT : VERIFY_SCHEMA, maxBudgetUsd: left(), harness: crossAgent });
           const verified = parseVerify(verdicts);
           if (verified) {
-            parsed = applyVerification(parsed, verified);
+            parsed = applyVerification(parsed, verified, crossAgent);
             const changed = parsed.claims.filter((c) => c.check?.status === "changed").length;
             if (changed) setRun(k, (r) => ({ ...r, log: [...r.log, `The double-check changed ${changed === 1 ? "1 claim verdict" : `${changed} claim verdicts`}`] }));
-          } else setRun(k, (r) => ({ ...r, log: [...r.log, "The double-check gave no readable result; the findings and claims are unchanged."] }));
+          } else {
+            setRun(k, (r) => ({ ...r, log: [...r.log, "The double-check gave no readable result; the findings and claims are unchanged."] }));
+            // Another agent failing must show on the findings, not only in the log: they look checked otherwise.
+            if (crossAgent) parsed = { ...parsed, verifyFailed: { by: crossAgent, error: "No readable result" } };
+          }
         } catch (e) {
           setRun(k, (r) => ({ ...r, log: [...r.log, `Couldn't double-check the findings: ${errorText(e)}`] }));
+          if (crossAgent) parsed = { ...parsed, verifyFailed: { by: crossAgent, error: errorText(e) } };
         }
       }
 
