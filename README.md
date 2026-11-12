@@ -53,10 +53,10 @@ Download the installer for your platform from [Releases](https://github.com/drma
 
 | Platform | File |
 |---|---|
-| macOS, Apple silicon | [`BetterLGTM_0.6.1_aarch64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_aarch64.dmg) |
-| macOS, Intel | [`BetterLGTM_0.6.1_x64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_x64.dmg) |
-| Windows | [`BetterLGTM_0.6.1_x64-setup.exe`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_x64-setup.exe) or [`.msi`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_x64_en-US.msi) |
-| Linux | [`.AppImage`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_amd64.AppImage), [`.deb`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_amd64.deb) or [`.rpm`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM-0.6.1-1.x86_64.rpm) |
+| macOS, Apple silicon | [`BetterLGTM_0.6.2_aarch64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.6.2/BetterLGTM_0.6.2_aarch64.dmg) |
+| macOS, Intel | [`BetterLGTM_0.6.2_x64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.6.2/BetterLGTM_0.6.2_x64.dmg) |
+| Windows | [`BetterLGTM_0.6.2_x64-setup.exe`](https://github.com/drmas/betterlgtm/releases/download/v0.6.2/BetterLGTM_0.6.2_x64-setup.exe) or [`.msi`](https://github.com/drmas/betterlgtm/releases/download/v0.6.2/BetterLGTM_0.6.2_x64_en-US.msi) |
+| Linux | [`.AppImage`](https://github.com/drmas/betterlgtm/releases/download/v0.6.2/BetterLGTM_0.6.2_amd64.AppImage), [`.deb`](https://github.com/drmas/betterlgtm/releases/download/v0.6.2/BetterLGTM_0.6.2_amd64.deb) or [`.rpm`](https://github.com/drmas/betterlgtm/releases/download/v0.6.2/BetterLGTM-0.6.2-1.x86_64.rpm) |
 
 On macOS you can also install it with [Homebrew](https://brew.sh):
 
