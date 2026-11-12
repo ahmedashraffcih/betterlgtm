@@ -2,12 +2,13 @@ import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { comboLabel, controlLabel, shortcutLabel, type Command } from "../commands";
+import { comboLabel, controlLabel, isMac, shortcutLabel, type Command } from "../commands";
 import { useAgent } from "../harness";
 import { Logo } from "./Logo";
 
 /** Keys handled outside the command list. */
 const OTHER_KEYS: [string, string][] = [
+  [`Hold ${isMac ? "⌘" : "Ctrl"}`, "Show the shortcut on each button"],
   [comboLabel({ key: "Enter" }), "Send a chat message"],
   [comboLabel({ key: "Enter", shift: true }), "New line in a chat message"],
   ["Esc", "Leave a text field; close menus, dialogs and Settings"],

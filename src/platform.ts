@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isMac, isWindows } from "./commands";
 import { inTauri } from "./mock";
 import { isSettingsWindow } from "./settingsWindow";
+import type { Theme } from "./settings";
 
 export const os = isMac ? "mac" : isWindows ? "windows" : "linux";
 
@@ -34,4 +36,25 @@ export function setupPlatform() {
       })
       .catch(() => {});
   }
+}
+
+/**
+ * Apply the theme to the page and to the window. The window matters on macOS: the sidebar is native
+ * material behind a transparent page, and it follows the window's appearance, not the page's colours.
+ */
+export function applyTheme(theme: Theme) {
+  const root = document.documentElement;
+  if (theme === "system") delete root.dataset.theme;
+  else root.dataset.theme = theme;
+  if (inTauri) getCurrentWindow().setTheme(theme === "system" ? null : theme).catch(() => {});
+}
+
+/**
+ * Zoom the page, like a browser's zoom: text, code and spacing all scale together. In the app the
+ * webview zooms itself; in a plain browser (sample data) CSS zoom stands in.
+ */
+export function applyZoom(zoom: number) {
+  const z = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  if (inTauri) getCurrentWebview().setZoom(z).catch(() => {});
+  else document.documentElement.style.zoom = z === 1 ? "" : String(z);
 }

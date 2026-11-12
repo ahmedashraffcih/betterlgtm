@@ -1,4 +1,5 @@
 import { relaunch } from "@tauri-apps/plugin-process";
+import { track } from "./telemetry";
 import { flushSessions } from "./sessions";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -73,6 +74,7 @@ export function useUpdater(auto: boolean) {
         }
       });
       setState({ kind: "ready", version: update.version });
+      track("update_installed", { to_version: update.version });
     } catch (e) {
       setState({ kind: "error", message: String(e), manual: true });
     } finally {

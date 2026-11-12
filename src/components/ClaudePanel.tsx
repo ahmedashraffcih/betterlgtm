@@ -109,6 +109,7 @@ export function ClaudePanel(p: Props) {
       <div className="composer-row">
         <textarea
           ref={input}
+          data-cmd="ask"
           rows={1}
           aria-label={`Message ${agent}`}
           placeholder={ctx ? "Ask about this…" : `Ask ${agent} about this PR…`}

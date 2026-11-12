@@ -24,19 +24,19 @@ export function Toolbar({ title, inboxOpen, chatOpen, onToggleInbox, onToggleCha
     <header className="toolbar" data-tauri-drag-region aria-label="Toolbar">
       <Logo />
       <div data-tauri-drag-region style={{ flex: 1, display: "flex", justifyContent: "center", padding: "0 16px", minWidth: 0 }}>
-        <button type="button" className="cmdk" onClick={onOpenPalette} title={`Go to… (${k("k")})`}>
+        <button type="button" data-cmd="palette" className="cmdk" onClick={onOpenPalette} title={`Go to… (${k("k")})`}>
           <Search size={14} />
           <span className="ellipsis" style={{ flex: 1 }}>{title}</span>
           <span className="kbd-hint" style={{ fontSize: 11 }}>{k("k")}</span>
         </button>
       </div>
-      <button type="button" className={inboxOpen ? "tb on" : "tb"} aria-label={`Toggle inbox panel (${k("b")})`} title={`Inbox panel (${k("b")})`} aria-pressed={inboxOpen} onClick={onToggleInbox}>
+      <button type="button" data-cmd="inbox" className={inboxOpen ? "tb on" : "tb"} aria-label={`Toggle inbox panel (${k("b")})`} title={`Inbox panel (${k("b")})`} aria-pressed={inboxOpen} onClick={onToggleInbox}>
         <PanelLeft size={16} />
       </button>
-      <button type="button" className={chatOpen ? "tb on" : "tb"} aria-label={`Toggle ${agent} panel (${k("j")})`} title={`${agent} panel (${k("j")})`} aria-pressed={chatOpen} onClick={onToggleChat}>
+      <button type="button" data-cmd="chat" className={chatOpen ? "tb on" : "tb"} aria-label={`Toggle ${agent} panel (${k("j")})`} title={`${agent} panel (${k("j")})`} aria-pressed={chatOpen} onClick={onToggleChat}>
         <PanelBottom size={16} />
       </button>
-      <button type="button" className="tb" aria-label={`Settings (${k(",")})`} title={`Settings (${k(",")})`} onClick={onOpenSettings}>
+      <button type="button" data-cmd="settings" className="tb" aria-label={`Settings (${k(",")})`} title={`Settings (${k(",")})`} onClick={onOpenSettings}>
         <Settings2 size={16} />
       </button>
     </header>

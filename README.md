@@ -29,10 +29,10 @@ It runs on your machine with the `gh` and agent command-line tools you already h
 - **Review inbox.** Pull requests where your review is requested, directly or through a team, grouped by organization and refreshed on a timer. Switch to **Mine** for your own open pull requests. Each row shows CI, review state, size and a risk estimate, and **Sort and filter** sorts by risk, waiting time, size or last update, filters by CI, risk, review decision and analysis, and picks which organizations and repositories to show. Your choices are kept. A desktop notification and a count on the app icon tell you when a review is requested or requested again. Hide the organizations you don't care about.
 - **A worktree per PR.** Each pull request is checked out next to a shared clone, so the agent reads real files, not just the diff, and your own working copy is never touched.
 - **Auto-analyze (optional).** New review requests can be analyzed in the background, so results are waiting when you open them. A spending limit ($5 by default, Claude Code only) stops any that run long.
-- **Description check.** Each claim in the PR description is marked as matching, partly implemented, or contradicted by the code.
+- **Description check.** Each claim in the PR description is marked as matching, partly implemented, or contradicted by the code, and the double-check corrects verdicts the code doesn't support. Changes the description doesn't mention are listed next to the claims, with their lines.
 - **Findings.** Bugs, risks and gaps, ranked by severity and linked to the exact diff lines. Resolve or dismiss them, and post fixes as suggestions the author can apply. Each finding is checked again in a fresh session: confirmed ones are marked **Double-checked**, and ones it disproves are set aside where you can still see them.
 - **Risk and tests.** The risk level and its reasons, the sensitive areas touched, and whether each change is tested.
-- **Context.** The issues the PR closes and the conversations already on it, so findings don't repeat what reviewers said, along with what your last review found and what you dismissed in the same repository.
+- **Context.** The issues the PR closes and the conversations already on it, so findings don't repeat what reviewers said, along with what your last review found and what you dismissed in the same repository. The overview lists which of those dismissals were used, and only the same point in the same file is held back.
 - **Guided review.** Related edits grouped into sections with a line on what each does, in one continuous scroll. Mark a change, a file or a whole section as reviewed and see your progress.
 - **Since your last review.** When new commits land after you reviewed, see just those changes and analyze only them.
 - **Re-check findings.** After the author pushes, the agent checks which findings are fixed and which are still open.
@@ -53,10 +53,10 @@ Download the installer for your platform from [Releases](https://github.com/drma
 
 | Platform | File |
 |---|---|
-| macOS, Apple silicon | [`BetterLGTM_0.5.0_aarch64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_aarch64.dmg) |
-| macOS, Intel | [`BetterLGTM_0.5.0_x64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_x64.dmg) |
-| Windows | [`BetterLGTM_0.5.0_x64-setup.exe`](https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_x64-setup.exe) or [`.msi`](https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_x64_en-US.msi) |
-| Linux | [`.AppImage`](https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_amd64.AppImage), [`.deb`](https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM_0.5.0_amd64.deb) or [`.rpm`](https://github.com/drmas/betterlgtm/releases/download/v0.5.0/BetterLGTM-0.5.0-1.x86_64.rpm) |
+| macOS, Apple silicon | [`BetterLGTM_0.6.1_aarch64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_aarch64.dmg) |
+| macOS, Intel | [`BetterLGTM_0.6.1_x64.dmg`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_x64.dmg) |
+| Windows | [`BetterLGTM_0.6.1_x64-setup.exe`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_x64-setup.exe) or [`.msi`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_x64_en-US.msi) |
+| Linux | [`.AppImage`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_amd64.AppImage), [`.deb`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM_0.6.1_amd64.deb) or [`.rpm`](https://github.com/drmas/betterlgtm/releases/download/v0.6.1/BetterLGTM-0.6.1-1.x86_64.rpm) |
 
 On macOS you can also install it with [Homebrew](https://brew.sh):
 
@@ -108,6 +108,7 @@ On macOS, use <kbd>Cmd</kbd> in place of <kbd>Ctrl</kbd>.
 ## Privacy and safety
 
 - **Local only.** GitHub is reached through your `gh` and the model through your own agent CLI. BetterLGTM has no backend and never sees your tokens.
+- **Anonymous usage stats.** Release builds send counts of app opens, analyses, submitted reviews and a few other actions to PostHog, with the app version, operating system and a random ID made on your computer. They never include code, findings, chat, PR descriptions, or repository, organization, PR or account names. Turn it off in **Settings › General › Share anonymous usage stats**. Builds from source send nothing. The full list of events is in [`src/telemetry.ts`](src/telemetry.ts).
 - **Read-only agents.** Claude Code runs with only these tools allowed: `Read`, `Grep`, `Glob`, `LS`, and `git log`, `git show`, `git diff`, `git blame`, `git merge-base` and `rg` through Bash. Codex runs in its read-only sandbox, and may search the web. Gemini CLI runs in its read-only plan mode. Copilot CLI is offered only its file reading, search and shell tools, and its shell runs only the same git commands, `rg` and commands it considers read-only; MCP servers are turned off. None of them can edit files or post anything to GitHub. Reviews are posted by the app, through your `gh`, only when you press the submit button.
 - **Costs.** Analyses use your agent's plan or API usage. The status bar shows the tokens used per PR.
 
@@ -118,7 +119,7 @@ On macOS, use <kbd>Cmd</kbd> in place of <kbd>Ctrl</kbd>.
 | Clones | `~/.betterlgtm/clones/<owner>/<repo>` (blobless) |
 | Worktrees | `~/.betterlgtm/worktrees/<owner>/<repo>/pr-<n>` |
 | Analyses and chat history | `sessions/` in the app's data folder, one file per PR |
-| Settings | The app's local storage |
+| Settings and the anonymous install ID | The app's local storage |
 
 You can change the data folder in Settings and clear everything from there.
 

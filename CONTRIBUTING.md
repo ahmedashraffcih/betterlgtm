@@ -61,7 +61,7 @@ npx tsc --noEmit
 ```
 
 - Match the style of the code around your change. Keep comments to the why, not the what.
-- Claude must stay read-only. Don't add tools to `ALLOWED_TOOLS` in `src-tauri/src/claude.rs` that can write files, run arbitrary commands or reach the network.
+- Claude must stay read-only. Don't add tools to `CLAUDE_TOOLS` in `src-tauri/src/harness.rs` that can write files, run arbitrary commands or reach the network.
 - Never store GitHub or Anthropic credentials. Authentication belongs to `gh` and `claude`.
 - Check your change in a narrow window (around 600 px) and in both themes.
 - UI text uses sentence case and plain words. Buttons say what they do.

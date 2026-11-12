@@ -426,7 +426,7 @@ export function DiffView(p: Props) {
           ) : (
             <span className="mono ellipsis" style={{ flex: 1, fontSize: 12 }}>{file ? path : "No changes"}</span>
           )}
-          <button type="button" className={searchOpen ? "tb on" : "tb"} aria-pressed={searchOpen} aria-label="Search the diff" title="Search the diff" data-key="diff-search" onClick={() => setSearchOpen(!searchOpen)}>
+          <button type="button" className={searchOpen ? "tb on" : "tb"} aria-pressed={searchOpen} aria-label="Search the diff" title="Search the diff" data-key="diff-search" data-cmd="find" onClick={() => setSearchOpen(!searchOpen)}>
             <Search size={14} />
           </button>
           <button

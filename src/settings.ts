@@ -6,12 +6,16 @@ export type Theme = "system" | "light" | "dark";
 export interface Settings {
   // General
   theme: Theme;
+  /** Page zoom, as a factor: 1 is 100%. */
+  zoom: number;
   refreshMinutes: number;
   autoUpdate: boolean;
   /** Single-letter, vim-style keys (j/k, h/l, gg, …) when no text field has focus. */
   vimKeys: boolean;
   /** Desktop notifications and the dock or taskbar count for review requests. */
   notifications: boolean;
+  /** Send anonymous usage counts (app opens, reviews, actions) with no PR content. See telemetry.ts. */
+  usageStats: boolean;
   // Organizations and review requests
   orgMode: "all" | "selected";
   /** Used in "all" mode: organizations left out of the inbox. */
@@ -67,10 +71,12 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
+  zoom: 1,
   refreshMinutes: 5,
   autoUpdate: true,
   vimKeys: true,
   notifications: true,
+  usageStats: true,
   orgMode: "all",
   hiddenOrgs: [],
   selectedOrgs: [],
@@ -158,4 +164,13 @@ export function ownerVisible(s: Settings, owner: string, orgs: string[] | null):
   const isOrg = orgs ? orgs.includes(owner) : true;
   if (!isOrg) return s.includePersonal;
   return s.orgMode === "all" ? !s.hiddenOrgs.includes(owner) : s.selectedOrgs.includes(owner);
+}
+
+/** Zoom steps offered in Settings and walked by Zoom in and Zoom out. */
+export const ZOOM_STEPS = [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.5, 1.75, 2];
+
+/** The next zoom step up (1) or down (-1) from `z`, staying within the steps. */
+export function stepZoom(z: number, dir: 1 | -1): number {
+  const next = dir > 0 ? ZOOM_STEPS.find((s) => s > z + 0.001) : [...ZOOM_STEPS].reverse().find((s) => s < z - 0.001);
+  return next ?? z;
 }

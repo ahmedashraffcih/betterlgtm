@@ -9,8 +9,16 @@ fn parse(out: &str) -> Result<Value, String> {
     serde_json::from_str(out).map_err(|e| format!("Unexpected output from gh: {e}"))
 }
 
+/// PRs per search request. GitHub stops a GraphQL query after about 10 s and answers with an HTML
+/// 502 page; 100 PRs with their file paths is enough work to hit that, 25 is well under it.
+const SEARCH_PAGE: usize = 25;
+/// Most PRs one search lists, so a large team queue costs a few requests rather than dozens.
+const SEARCH_CAP: usize = 200;
+
 /// Fields for inbox rows: enough to show CI, review state, size and risk without a call per PR.
-const SEARCH_QUERY: &str = "query($q: String!) { search(query: $q, type: ISSUE, first: 100) { nodes { ... on PullRequest {
+const SEARCH_QUERY: &str = "query($q: String!, $first: Int!, $after: String) { search(query: $q, type: ISSUE, first: $first, after: $after) {
+pageInfo { hasNextPage endCursor }
+nodes { ... on PullRequest {
   number title url isDraft updatedAt createdAt
   author { login } repository { name nameWithOwner }
   additions deletions changedFiles reviewDecision
@@ -20,36 +28,72 @@ const SEARCH_QUERY: &str = "query($q: String!) { search(query: $q, type: ISSUE, 
   timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 1) { nodes { ... on ReviewRequestedEvent { createdAt } } }
 } } } }";
 
-/// Open PRs matching a GitHub search, flattened for the inbox.
+/// A readable error for a failed search. When GitHub gives up on a query it returns an HTML page,
+/// which `gh` reports as a JSON error about `<`; say what happened instead.
+fn search_error(err: String) -> String {
+    if err.contains("invalid character '<'") || err.contains("HTTP 502") || err.contains("HTTP 504") {
+        "GitHub took too long to answer the PR search and gave up on it. Try again in a moment.".into()
+    } else {
+        err
+    }
+}
+
+/// One inbox row from a search node, or `None` for nodes that aren't PRs.
+fn pr_row(n: &Value) -> Option<Value> {
+    n["number"].is_number().then(|| {
+        serde_json::json!({
+            "number": n["number"],
+            "title": n["title"],
+            "url": n["url"],
+            "isDraft": n["isDraft"],
+            "updatedAt": n["updatedAt"],
+            "createdAt": n["createdAt"],
+            "author": { "login": n["author"]["login"].as_str().unwrap_or("ghost") },
+            "repository": n["repository"],
+            "additions": n["additions"],
+            "deletions": n["deletions"],
+            "changedFiles": n["changedFiles"],
+            "reviewDecision": n["reviewDecision"],
+            "labels": n["labels"]["nodes"],
+            "ci": n["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"],
+            "files": n["files"]["nodes"].as_array().map(|f| f.iter().map(|x| x["path"].clone()).collect::<Vec<_>>()),
+            "requestedAt": n["timelineItems"]["nodes"][0]["createdAt"],
+        })
+    })
+}
+
+/// Open PRs matching a GitHub search, flattened for the inbox. Fetched a page at a time, up to
+/// `SEARCH_CAP` PRs.
 async fn search_prs(gh: &str, query: &str) -> Result<Value, String> {
     let q = format!("is:pr is:open archived:false {query}");
-    let out = run(gh, &["api", "graphql", "-f", &format!("query={SEARCH_QUERY}"), "-f", &format!("q={q}")], None).await?;
-    let data = parse(&out)?;
-    let nodes = data["data"]["search"]["nodes"].as_array().cloned().unwrap_or_default();
-    let prs: Vec<Value> = nodes
-        .into_iter()
-        .filter(|n| n["number"].is_number())
-        .map(|n| {
-            serde_json::json!({
-                "number": n["number"],
-                "title": n["title"],
-                "url": n["url"],
-                "isDraft": n["isDraft"],
-                "updatedAt": n["updatedAt"],
-                "createdAt": n["createdAt"],
-                "author": { "login": n["author"]["login"].as_str().unwrap_or("ghost") },
-                "repository": n["repository"],
-                "additions": n["additions"],
-                "deletions": n["deletions"],
-                "changedFiles": n["changedFiles"],
-                "reviewDecision": n["reviewDecision"],
-                "labels": n["labels"]["nodes"],
-                "ci": n["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"],
-                "files": n["files"]["nodes"].as_array().map(|f| f.iter().map(|x| x["path"].clone()).collect::<Vec<_>>()),
-                "requestedAt": n["timelineItems"]["nodes"][0]["createdAt"],
-            })
-        })
-        .collect();
+    let mut prs: Vec<Value> = Vec::new();
+    let mut after: Option<String> = None;
+    loop {
+        let first = SEARCH_PAGE.min(SEARCH_CAP - prs.len());
+        let mut args = vec![
+            "api".to_string(),
+            "graphql".into(),
+            "-f".into(),
+            format!("query={SEARCH_QUERY}"),
+            "-f".into(),
+            format!("q={q}"),
+            "-F".into(),
+            format!("first={first}"),
+        ];
+        if let Some(cursor) = &after {
+            args.extend(["-f".into(), format!("after={cursor}")]);
+        }
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        let out = run(gh, &args, None).await.map_err(search_error)?;
+        let data = parse(&out).map_err(search_error)?;
+        let search = &data["data"]["search"];
+        prs.extend(search["nodes"].as_array().into_iter().flatten().filter_map(pr_row));
+        let next = search["pageInfo"]["endCursor"].as_str().filter(|_| search["pageInfo"]["hasNextPage"] == true);
+        match next {
+            Some(cursor) if prs.len() < SEARCH_CAP => after = Some(cursor.to_string()),
+            _ => break,
+        }
+    }
     Ok(Value::Array(prs))
 }
 
@@ -290,5 +334,32 @@ pub async fn pr_diff(app: AppHandle, config: State<'_, ConfigState>, repo: Strin
             worktree::local_diff(&app, &config, &repo, number, base_ref.trim()).await
         }
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_error_explains_github_timeouts() {
+        let html = "`gh api graphql ...` failed: invalid character '<' looking for beginning of value".to_string();
+        assert!(search_error(html).starts_with("GitHub took too long"));
+        assert_eq!(search_error("HTTP 401: Bad credentials".into()), "HTTP 401: Bad credentials");
+    }
+
+    #[test]
+    fn pr_row_skips_non_prs_and_flattens_fields() {
+        assert!(pr_row(&serde_json::json!({})).is_none());
+        let row = pr_row(&serde_json::json!({
+            "number": 7,
+            "author": null,
+            "files": { "nodes": [{ "path": "a.rs" }, { "path": "b/c.rs" }] },
+            "commits": { "nodes": [{ "commit": { "statusCheckRollup": { "state": "SUCCESS" } } }] },
+        }))
+        .unwrap();
+        assert_eq!(row["author"]["login"], "ghost");
+        assert_eq!(row["files"], serde_json::json!(["a.rs", "b/c.rs"]));
+        assert_eq!(row["ci"], "SUCCESS");
     }
 }

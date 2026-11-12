@@ -5,17 +5,19 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, isSampleMode, setSampleMode, type ClaudeEvent, type ToolStatus, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
-import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, anchorLabel, answerOf, applyVerification, carryFindingIds, findingId, worthVerifying, type EarlierFinding, type Finding, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
+import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, anchorLabel, answerOf, applyVerification, carryFindingIds, findingId, worthVerifying, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
 import type { OutlineKey, RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import type { DiffMode } from "./components/DiffView";
-import { AnalysisView, CommandPalette, DescriptionDialog, DiffView, FilterDialog, GuidedReview, InfoDialog, Onboarding, preloadViews, Settings, SubmitReview } from "./lazy";
+import { AnalysisView, CommandPalette, DescriptionDialog, DiffView, FilterDialog, GuidedReview, InfoDialog, Onboarding, preloadViews, Settings, SubmitReview, WhatsNew } from "./lazy";
+import { appVersion, hasNotes, versionToAnnounce } from "./whatsNew";
 import { AgentContext, harnessOf } from "./harness";
 import { setupBroken } from "./setup";
 import { Inbox, InboxRail, prKey, type InboxView } from "./components/Inbox";
 import { Toolbar } from "./components/Toolbar";
 import { useElementWidth } from "./hooks";
 import { comboLabel, matches, shortcutLabel, type Command } from "./commands";
+import { ShortcutHints } from "./components/ShortcutHints";
 import { runOnce, useNativeMenu } from "./nativeMenu";
 import { closeSettingsWindow, EV as SETTINGS_EV, openSettingsWindow, SETTINGS_LABEL, useSettingsWindow, type SettingsData } from "./settingsWindow";
 import { emitTo, listen } from "@tauri-apps/api/event";
@@ -28,11 +30,13 @@ import { compileGlobs, filePath, ignoreWhitespace } from "./diffUtils";
 import { fileIcon, SEVERITY } from "./icons";
 import { emptySession, flushSessions, useSessions, useStoredState, type ChatItem } from "./sessions";
 import type { SettingsSection } from "./components/Settings";
-import { ownerVisible, useSettings } from "./settings";
+import { applyTheme, applyZoom } from "./platform";
+import { ownerVisible, stepZoom, useSettings } from "./settings";
 import { useUpdater } from "./updates";
 import { LruCache, readInboxCache, writeInboxCache } from "./cache";
 import { waitingSince } from "./risk";
 import { notify, useReviewNotifications } from "./notify";
+import { bucket, minutes, track } from "./telemetry";
 
 interface Loaded {
   key: string;
@@ -134,6 +138,11 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [infoDialog, setInfoDialog] = useState<"shortcuts" | "about" | null>(null);
+  /** The version whose release notes are open in What's new. */
+  const [whatsNew, setWhatsNew] = useState<string | null>(null);
+  /** Held until onboarding is out of the way, so the notes never cover the first-run screens. */
+  const [announce, setAnnounce] = useState<string | null>(null);
+  const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
   const [recheckRuns, setRecheckRuns] = useState<Record<string, { running: boolean; error?: string }>>({});
@@ -192,6 +201,12 @@ export default function App() {
   const analysis = session?.analysis;
 
   useEffect(preloadViews, []);
+  // Checked once per launch, against the settings as they were when the app opened.
+  useEffect(() => {
+    versionToAnnounce(settings.onboarded).then(setAnnounce).catch(() => {});
+    appVersion().then(setCurrentVersion).catch(() => {});
+  }, []);
+  useEffect(() => track("app_opened", { harness: settings.harness, auto_analyze: settings.autoAnalyze, onboarded: settings.onboarded }), []);
 
   // The backend needs tool paths, the data folder and Claude options before it runs anything.
   useEffect(() => {
@@ -211,10 +226,8 @@ export default function App() {
       .catch(() => setConfigReady(true));
   }, [settings.ghPath, settings.claudePath, settings.harness, settings.codexPath, settings.geminiPath, settings.copilotPath, settings.dataDir, settings.model, settings.effort]);
 
-  useEffect(() => {
-    if (settings.theme === "system") delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = settings.theme;
-  }, [settings.theme]);
+  useEffect(() => applyTheme(settings.theme), [settings.theme]);
+  useEffect(() => applyZoom(settings.zoom), [settings.zoom]);
 
   const reloadOrgs = useCallback(() => {
     setOrgsError(null);
@@ -294,6 +307,13 @@ export default function App() {
       : !settings.onboarded
         ? firstStep
         : null;
+  // Show What's new once nothing else is taking over the window.
+  useEffect(() => {
+    if (announce && !onboarding) {
+      setWhatsNew(announce);
+      setAnnounce(null);
+    }
+  }, [announce, onboarding]);
 
   // Shortcuts come from the command list (menus and palette use the same list); Escape closes Settings.
   const commandsRef = useRef<Command[]>([]);
@@ -454,6 +474,7 @@ export default function App() {
         costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
       setGuideRuns((g) => ({ ...g, [k]: { running: false } }));
+      track("walkthrough_ready", { harness: settings.harness, sections: bucket(steps.length) });
       return true;
     } catch (e) {
       setGuideRuns((g) => ({ ...g, [k]: { running: false, error: errorText(e) } }));
@@ -474,6 +495,7 @@ export default function App() {
     let tokens = 0;
     let cost = 0;
     let overBudget = false;
+    const started = Date.now();
     const left = () => (budget === undefined ? undefined : Math.max(budget - cost, 0));
     const logTools = (e: ClaudeEvent) => {
       if (e.type === "result" && e.subtype === "error_max_budget_usd") overBudget = true;
@@ -495,13 +517,21 @@ export default function App() {
       // What the reviewer already did with findings: on this PR's last analysis, and on the repository's other PRs.
       const before = sessions[k];
       const earlier: EarlierFinding[] = (before?.analysis?.findings ?? []).map((finding) => ({ finding, state: before?.findingStates?.[findingId(finding)] }));
-      const dismissedInRepo = Object.entries(sessions)
+      // Finding ids are "path|title" (see findingId), so the file comes back out of the id.
+      const dismissedInRepo: RepoDismissal[] = Object.entries(sessions)
         .filter(([other]) => other !== k && other.startsWith(`${pr.repository.nameWithOwner}#`))
-        .flatMap(([, s]) => Object.entries(s.findingStates ?? {}))
-        .filter(([, st]) => st.state === "dismissed")
-        .sort((x, y) => y[1].at - x[1].at)
+        .flatMap(([other, s]) => Object.entries(s.findingStates ?? {}).map(([id, st]) => ({ other, id, st })))
+        .filter(({ st }) => st.state === "dismissed")
+        .sort((x, y) => y.st.at - x.st.at)
         .slice(0, 12)
-        .map(([id, st]) => ({ title: id.slice(id.indexOf("|") + 1), reason: st.reason }));
+        .map(({ other, id, st }) => {
+          const bar = id.indexOf("|");
+          return { title: id.slice(bar + 1), path: bar > 0 ? id.slice(0, bar) : undefined, reason: st.reason, pr: other.slice(other.lastIndexOf("#")) };
+        });
+      if (dismissedInRepo.length) {
+        const line = `Using ${dismissedInRepo.length === 1 ? "1 dismissal" : `${dismissedInRepo.length} dismissals`} from other pull requests in this repository`;
+        setRun(k, (r) => ({ ...r, log: [...r.log, line, ...dismissedInRepo.map((d) => `  ${d.pr}: ${d.title}${d.path ? ` (${d.path})` : ""}`)] }));
+      }
       const prompt = buildAnalysisPrompt(details, {
         instructions: [settings.reviewInstructions, settings.repoInstructions[pr.repository.nameWithOwner] ?? ""].filter((x) => x.trim()).join("\n"),
         since: opts.since,
@@ -526,12 +556,14 @@ export default function App() {
         }
       }, { schema: ANALYSIS_SCHEMA, maxBudgetUsd: budget });
       let parsed = parseAnalysis(answer);
-      if (parsed) parsed = carryFindingIds(parsed, earlier.map((x) => x.finding));
+      if (parsed) parsed = { ...carryFindingIds(parsed, earlier.map((x) => x.finding)), repoDismissals: dismissedInRepo.length ? dismissedInRepo : undefined };
 
       // Second pass, in a fresh session so it doesn't inherit the analysis's reasoning. If it fails, the findings stay as they are.
       const toCheck = parsed ? parsed.findings.flatMap((f, i) => (worthVerifying(f) ? [i] : [])) : [];
-      if (parsed && settings.verifyFindings && toCheck.length && left() !== 0) {
-        setRun(k, (r) => ({ ...r, step: "Double-checking the findings…", log: [...r.log, `Double-checking ${toCheck.length === 1 ? "1 finding" : `${toCheck.length} findings`}`] }));
+      const claimCount = parsed?.claims.length ?? 0;
+      if (parsed && settings.verifyFindings && (toCheck.length || claimCount) && left() !== 0) {
+        const what = [toCheck.length && (toCheck.length === 1 ? "1 finding" : `${toCheck.length} findings`), claimCount && (claimCount === 1 ? "1 claim" : `${claimCount} claims`)].filter(Boolean).join(" and ");
+        setRun(k, (r) => ({ ...r, step: "Double-checking the findings…", log: [...r.log, `Double-checking ${what}`] }));
         const verifyId = `verify-${k}-${Date.now()}`;
         runIds.current[k] = verifyId;
         try {
@@ -545,8 +577,11 @@ export default function App() {
             }
           }, { schema: VERIFY_SCHEMA, maxBudgetUsd: left() });
           const verified = parseVerify(verdicts);
-          if (verified) parsed = applyVerification(parsed, verified);
-          else setRun(k, (r) => ({ ...r, log: [...r.log, "The double-check gave no readable result; the findings are unchanged."] }));
+          if (verified) {
+            parsed = applyVerification(parsed, verified);
+            const changed = parsed.claims.filter((c) => c.check?.status === "changed").length;
+            if (changed) setRun(k, (r) => ({ ...r, log: [...r.log, `The double-check changed ${changed === 1 ? "1 claim verdict" : `${changed} claim verdicts`}`] }));
+          } else setRun(k, (r) => ({ ...r, log: [...r.log, "The double-check gave no readable result; the findings and claims are unchanged."] }));
         } catch (e) {
           setRun(k, (r) => ({ ...r, log: [...r.log, `Couldn't double-check the findings: ${errorText(e)}`] }));
         }
@@ -576,6 +611,17 @@ export default function App() {
         notify(`Analysis ready: ${pr.repository.name}#${pr.number}`, `${pr.title}\n${crit ? `${crit} critical or high ${crit === 1 ? "finding" : "findings"}` : `${parsed.findings.length} findings, none critical or high`}`).catch(() => {});
       }
       setRun(k, (r) => ({ ...r, running: false, step: "", error: parsed ? undefined : `${agent} finished, but its answer didn't contain a readable result.` }));
+      track(parsed ? "analysis_finished" : "analysis_failed", {
+        harness: settings.harness,
+        background: !!opts.background,
+        since_last_review: !!opts.since,
+        verified: settings.verifyFindings,
+        decision: parsed?.recommendation?.decision,
+        high_findings: parsed ? bucket(parsed.findings.filter((f) => f.severity === "critical" || f.severity === "high").length) : undefined,
+        findings: parsed ? bucket(parsed.findings.length) : undefined,
+        duration_min: minutes(Date.now() - started),
+        reason: parsed ? undefined : "unreadable",
+      });
       // The verdict is on screen; the guided review follows on its own.
       if (parsed && !parsed.walkthrough && sessionId && left() !== 0) void createWalkthrough(k, wt, sessionId, left());
     } catch (e) {
@@ -583,6 +629,7 @@ export default function App() {
         ? `Stopped at the $${budget} limit for automatic analyses. Start the review yourself, or raise the limit in Settings › Agent.`
         : errorText(e);
       setRun(k, (r) => ({ ...r, running: false, error }));
+      track("analysis_failed", { harness: settings.harness, background: !!opts.background, reason: overBudget ? "budget" : "error", duration_min: minutes(Date.now() - started) });
     }
   };
   const startAnalysis = async (opts: { since?: string } = {}) => {
@@ -599,6 +646,7 @@ export default function App() {
     push({ role: "user", text, context: context?.label });
     const prompt = context ? `${context.prompt}\n\n${text}` : text;
     setChatRunning((c) => ({ ...c, [k]: true }));
+    track("chat_sent", { harness: settings.harness, with_context: !!context });
     const runId = `chat-${k}-${Date.now()}`;
     runIds.current[`chat-${k}`] = runId;
     try {
@@ -637,6 +685,7 @@ export default function App() {
 
   /** Swaps the inbox between GitHub and the built-in sample, starting from an empty list either way. */
   const switchInbox = (toSample: boolean) => {
+    if (toSample) track("sample_opened");
     setSampleMode(toSample);
     setSample(toSample);
     setSelected(null);
@@ -716,6 +765,7 @@ export default function App() {
     });
     update(k, (x) => ({ ...x, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
     if (!text.trim()) throw new Error(`${agent} didn't return a description. Try again.`);
+    track("description_drafted", { harness: settings.harness });
     return text.trim();
   };
   const saveDescription = async (body: string) => {
@@ -748,6 +798,7 @@ export default function App() {
     });
     update(k, (x) => ({ ...x, tokens: (x.tokens ?? 0) + tokensOf(usage), costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0) }));
     if (!text.trim()) throw new Error(`${agent} didn't return a reply. Try again.`);
+    track("reply_drafted", { harness: settings.harness });
     return text.trim();
   };
   const replyToThread = async (t: ReviewThread, body: string) => {
@@ -791,6 +842,7 @@ export default function App() {
         costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
       setRecheckRuns((r) => ({ ...r, [k]: { running: false } }));
+      track("findings_rechecked", { harness: settings.harness, findings: bucket(findings.length) });
     } catch (e) {
       setRecheckRuns((r) => ({ ...r, [k]: { running: false, error: errorText(e) } }));
     }
@@ -1012,6 +1064,14 @@ export default function App() {
           suggestions: ["Is this a real problem?", "How would you fix it?", "Draft a review comment for this"],
         };
       }
+      const u = k === "u" ? analysis.unmentioned?.[i] : undefined;
+      if (u) {
+        return {
+          label: `Not in description: ${u.text}`,
+          prompt: `The question is about this change, which the PR description doesn't mention: "${u.text}" (${u.anchors.map(anchorLabel).join(", ") || "no location"}).`,
+          suggestions: ["Why might this have changed?", "Is this safe?", "Draft a question for the author"],
+        };
+      }
       const c = k === "c" ? analysis.claims[i] : undefined;
       if (c) {
         return {
@@ -1074,8 +1134,8 @@ export default function App() {
   const canAnalyze = !!(details && !run?.running);
   const commands: Command[] = [
     { id: "refresh", menu: "File", label: "Refresh pull requests", keys: { key: "r", ctrl: true }, altKeys: [{ key: "F5" }], run: refresh },
-    { id: "github", menu: "File", label: "Open pull request on GitHub", enabled: !!selected, run: () => selected && openUrl(selected.url), separatorBefore: true },
-    { id: "editor", menu: "File", label: "Open worktree in VS Code", enabled: !!session?.worktree, run: openInEditor },
+    { id: "github", menu: "File", label: "Open pull request on GitHub", keys: { key: "o", ctrl: true, shift: true }, enabled: !!selected, run: () => selected && openUrl(selected.url), separatorBefore: true },
+    { id: "editor", menu: "File", label: "Open worktree in VS Code", keys: { key: "e", ctrl: true }, enabled: !!session?.worktree, run: openInEditor },
     { id: "settings", menu: "File", label: "Settings…", keys: { key: ",", ctrl: true }, run: () => openSettings("general"), separatorBefore: true },
     { id: "quit", menu: "File", label: "Quit", keys: { key: "q", ctrl: true }, run: () => getCurrentWindow().close(), separatorBefore: true },
 
@@ -1092,6 +1152,9 @@ export default function App() {
     { id: "theme-system", menu: "View", label: "System theme", checked: settings.theme === "system", run: () => updateSettings({ theme: "system" }), separatorBefore: true },
     { id: "theme-light", menu: "View", label: "Light theme", checked: settings.theme === "light", run: () => updateSettings({ theme: "light" }) },
     { id: "theme-dark", menu: "View", label: "Dark theme", checked: settings.theme === "dark", run: () => updateSettings({ theme: "dark" }) },
+    { id: "zoom-in", menu: "View", label: "Zoom in", keys: { key: "=", ctrl: true }, altKeys: [{ key: "+", ctrl: true, shift: true }, { key: "+", ctrl: true }], run: () => updateSettings({ zoom: stepZoom(settings.zoom, 1) }), separatorBefore: true },
+    { id: "zoom-out", menu: "View", label: "Zoom out", keys: { key: "-", ctrl: true }, run: () => updateSettings({ zoom: stepZoom(settings.zoom, -1) }) },
+    { id: "zoom-reset", menu: "View", label: "Actual size", keys: { key: "0", ctrl: true }, enabled: settings.zoom !== 1, run: () => updateSettings({ zoom: 1 }) },
 
     { id: "analyze", menu: "Review", label: analysis ? "Re-run analysis" : "Start review", enabled: canAnalyze, run: () => { setTab("analysis"); startAnalysis(); } },
     { id: "guide", menu: "Review", label: "Create guided review", enabled: !!(analysis && !analysis.walkthrough && session?.sessionId && !(key && guideRuns[key]?.running)), run: () => { setDiffMode("guided"); setTab("diff"); generateWalkthrough(); } },
@@ -1106,6 +1169,7 @@ export default function App() {
     { id: "sample", menu: "Help", label: sample ? "Leave the sample" : "Try a sample pull request", run: () => (sample ? leaveSample() : enterSample()), separatorBefore: true },
     { id: "setup", menu: "Help", label: "Check setup…", enabled: !sample, run: () => { setSettingsOpen(false); setSetupOpen(true); checkTools(); } },
     { id: "updates", menu: "Help", label: "Check for updates…", enabled: updater.supported, run: () => updater.checkNow(true), separatorBefore: true },
+    { id: "whats-new", menu: "Help", label: "What's new", enabled: !!currentVersion && hasNotes(currentVersion), run: () => currentVersion && setWhatsNew(currentVersion) },
     { id: "about", menu: "Help", label: "About BetterLGTM", run: () => setInfoDialog("about") },
   ];
   commandsRef.current = commands;
@@ -1272,18 +1336,18 @@ export default function App() {
             {details?.title ?? selected.title} <span className="muted" style={{ fontWeight: 400 }}>#{selected.number}</span>
           </h1>
           <div className="seg" role="group" aria-label="View">
-            <button type="button" className={tab === "analysis" ? "on" : ""} aria-pressed={tab === "analysis"} onClick={() => setTab("analysis")} title="Analysis">
+            <button type="button" data-cmd="tab-analysis" className={tab === "analysis" ? "on" : ""} aria-pressed={tab === "analysis"} onClick={() => setTab("analysis")} title="Analysis">
               <ListChecks size={13} /><span className="lbl-text">Analysis</span>{critHigh > 0 && <span className="cnt crit">{critHigh}</span>}
             </button>
-            <button type="button" className={tab === "diff" ? "on" : ""} aria-pressed={tab === "diff"} onClick={() => setTab("diff")} title="Diff">
+            <button type="button" data-cmd="tab-diff" className={tab === "diff" ? "on" : ""} aria-pressed={tab === "diff"} onClick={() => setTab("diff")} title="Diff">
               <FileDiff size={13} /><span className="lbl-text">Diff</span><span className="cnt">{files.length}</span>
             </button>
           </div>
-          <button type="button" className="tb" aria-label="Open on GitHub" title="Open on GitHub" onClick={() => openUrl(selected.url)}><ExternalLink size={15} /></button>
-          <button type="button" className="btn" disabled={!session?.worktree} aria-label="Open in editor" title={session?.worktree ?? "The worktree is created when the review starts"} onClick={openInEditor}>
+          <button type="button" data-cmd="github" className="tb" aria-label="Open on GitHub" title="Open on GitHub" onClick={() => openUrl(selected.url)}><ExternalLink size={15} /></button>
+          <button type="button" data-cmd="editor" className="btn" disabled={!session?.worktree} aria-label="Open in editor" title={session?.worktree ?? "The worktree is created when the review starts"} onClick={openInEditor}>
             <Code size={14} /><span className="lbl-text">Open in editor</span>
           </button>
-          <button type="button" className="btn primary" disabled={!details} aria-label="Submit review" title="Submit review on GitHub" onClick={() => setReviewOpen(true)}>
+          <button type="button" data-cmd="submit" className="btn primary" disabled={!details} aria-label="Submit review" title="Submit review on GitHub" onClick={() => setReviewOpen(true)}>
             <Send size={14} /><span className="lbl-text">Submit review…</span>{(session?.inReview.length ?? 0) + (session?.draftComments?.length ?? 0) > 0 && <span className="cnt on-primary">{(session?.inReview.length ?? 0) + (session?.draftComments?.length ?? 0)}</span>}
           </button>
         </div>
@@ -1362,6 +1426,7 @@ export default function App() {
             onState={setFindingState}
             threads={loaded && loaded.key === key ? loaded.threads : []}
             ownPr={!!orgs?.login && details.author.login === orgs.login}
+            analysisHead={analysisHead}
             onEditDescription={() => setDescOpen(true)}
             onThreadDraft={session?.worktree || selected ? draftReply : undefined}
             onThreadReply={replyToThread}
@@ -1470,7 +1535,7 @@ export default function App() {
               onSample={enterSample}
               onContinue={() => { setSetupOpen(false); setSetupSkipped(setupIsBroken); setFirstStep("agent"); }}
               onStep={setFirstStep}
-              onDone={() => updateSettings({ onboarded: true })}
+              onDone={() => { updateSettings({ onboarded: true }); track("onboarding_finished", { harness: settings.harness }); }}
             />
           </Suspense>
         </div>
@@ -1582,6 +1647,7 @@ export default function App() {
         <span className="sb opt"><Lock size={13} />Read-only</span>
       </footer>
       <Suspense fallback={null}>
+      <ShortcutHints commandsRef={commandsRef} />
       {paletteOpen && <CommandPalette items={paletteItems} extra={openPrItem} onClose={() => setPaletteOpen(false)} />}
       {descOpen && details && (
         <DescriptionDialog key={key} current={details.body ?? ""} onDraft={draftDescription} onSave={saveDescription} onClose={() => setDescOpen(false)} />
@@ -1612,6 +1678,7 @@ export default function App() {
           files={files}
           inReview={session?.inReview ?? []}
           ownPr={!!orgs?.login && details.author.login === orgs.login}
+          analysisHead={analysisHead}
           checks={checks?.results}
           states={findingStates}
           drafts={session?.draftComments ?? []}
@@ -1635,6 +1702,7 @@ export default function App() {
           }}
         />
       )}
+      {whatsNew && <WhatsNew version={whatsNew} onClose={() => setWhatsNew(null)} />}
       {infoDialog && <InfoDialog kind={infoDialog} commands={commands} vim={settings.vimKeys} onClose={() => setInfoDialog(null)} />}
       </Suspense>
     </div>
