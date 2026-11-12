@@ -70,7 +70,7 @@ export function SubmitReview(p: Props) {
     findings.map((finding, index) => ({
       index,
       finding,
-      checked: p.checks?.[index]?.status !== "fixed" && !p.states?.[index] && (p.inReview.length ? p.inReview.includes(index) : finding.severity === "critical" || finding.severity === "high"),
+      checked: p.checks?.[index]?.status !== "fixed" && finding.check?.status !== "disputed" && !p.states?.[index] && (p.inReview.length ? p.inReview.includes(index) : finding.severity === "critical" || finding.severity === "high"),
       text: commentText(finding),
       where: finding.anchors.map((a) => commentLines(p.files, a)).find(Boolean) ?? null,
       suggest: false,
