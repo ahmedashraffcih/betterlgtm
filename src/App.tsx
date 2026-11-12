@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { applyTheme } from "./platform";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Check, Code, Download, ExternalLink, History, FileDiff, GitBranch, GitPullRequestArrow, Inbox as InboxIcon, ListChecks, ListOrdered, Loader, Lock, MessageSquare, RefreshCw, RotateCw, Send, Terminal, TriangleAlert, Sparkles } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -224,10 +225,7 @@ export default function App() {
       .catch(() => setConfigReady(true));
   }, [settings.ghPath, settings.claudePath, settings.harness, settings.codexPath, settings.geminiPath, settings.dataDir, settings.model, settings.effort]);
 
-  useEffect(() => {
-    if (settings.theme === "system") delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = settings.theme;
-  }, [settings.theme]);
+  useEffect(() => applyTheme(settings.theme), [settings.theme]);
 
   const reloadOrgs = useCallback(() => {
     setOrgsError(null);
