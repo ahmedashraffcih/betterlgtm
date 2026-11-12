@@ -2,7 +2,7 @@ import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Suspense, useEffect, useState } from "react";
 import { Settings } from "../lazy";
-import { applyTheme } from "../platform";
+import { applyTheme, applyZoom } from "../platform";
 import { useSettings } from "../settings";
 import { EV, initialSection, type SettingsData } from "../settingsWindow";
 import type { SettingsSection } from "./Settings";
@@ -25,6 +25,7 @@ export function SettingsWindow() {
   }, []);
 
   useEffect(() => applyTheme(settings.theme), [settings.theme]);
+  useEffect(() => applyZoom(settings.zoom), [settings.zoom]);
 
   return (
     <div className="app">
