@@ -42,7 +42,7 @@ pub async fn claude_run(
     // Codex reads a schema from a file. Removed when the run ends, however it ends.
     let schema_file = match (harness, overridden, schema.as_deref()) {
         (crate::harness::Harness::Codex, true, Some(s)) => {
-            let path = std::env::temp_dir().join(format!("betterlgtm-schema-{run_id}.json"));
+            let path = schema_file_path(&run_id);
             std::fs::write(&path, s).map_err(|e| e.to_string())?;
             Some(TempFile(path))
         }
@@ -130,11 +130,31 @@ pub fn claude_cancel(runs: State<'_, Runs>, run_id: String) {
     }
 }
 
+/// Where a run's schema file goes. Run ids carry the PR key (`owner/repo#12`), so only letters,
+/// digits and dashes are kept: the file must stay directly in the temp folder.
+fn schema_file_path(run_id: &str) -> std::path::PathBuf {
+    let safe: String = run_id.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).collect();
+    std::env::temp_dir().join(format!("betterlgtm-schema-{safe}.json"))
+}
+
 /// A file deleted when it goes out of scope.
 struct TempFile(std::path::PathBuf);
 
 impl Drop for TempFile {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn schema_file_for_a_pr_run_id_stays_in_the_temp_dir() {
+        let path = schema_file_path("verify-owner/repo#123-1731400000000");
+        assert_eq!(path.parent(), Some(std::env::temp_dir().as_path()));
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(!name.contains('/') && !name.contains('#'), "{name}");
     }
 }
