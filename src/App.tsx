@@ -30,7 +30,7 @@ import { compileGlobs, filePath, ignoreWhitespace } from "./diffUtils";
 import { fileIcon, SEVERITY } from "./icons";
 import { emptySession, flushSessions, useSessions, useStoredState, type ChatItem } from "./sessions";
 import type { SettingsSection } from "./components/Settings";
-import { applyZoom } from "./platform";
+import { applyTheme, applyZoom } from "./platform";
 import { ownerVisible, stepZoom, useSettings } from "./settings";
 import { useUpdater } from "./updates";
 import { LruCache, readInboxCache, writeInboxCache } from "./cache";
@@ -225,10 +225,7 @@ export default function App() {
       .catch(() => setConfigReady(true));
   }, [settings.ghPath, settings.claudePath, settings.harness, settings.codexPath, settings.geminiPath, settings.dataDir, settings.model, settings.effort]);
 
-  useEffect(() => {
-    if (settings.theme === "system") delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = settings.theme;
-  }, [settings.theme]);
+  useEffect(() => applyTheme(settings.theme), [settings.theme]);
   useEffect(() => applyZoom(settings.zoom), [settings.zoom]);
 
   const reloadOrgs = useCallback(() => {
