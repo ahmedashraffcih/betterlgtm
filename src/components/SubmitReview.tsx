@@ -146,6 +146,8 @@ export function SubmitReview(p: Props) {
     }
   };
 
+  /** Nothing checked and every claim matches: the prompt would only have the closing instruction. */
+  const nothingToHandOff = !chosen.length && !(p.analysis?.claims ?? []).some((c) => c.verdict !== "implemented");
   /** On your own PR the fix usually happens in your coding agent, not in a comment. */
   const copyForAgent = () => {
     if (!p.analysis) return;
@@ -262,7 +264,13 @@ export function SubmitReview(p: Props) {
           {/* One group, so in a narrow window the buttons wrap together. */}
           <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
             {p.ownPr && p.analysis && (
-              <button type="button" className="btn" onClick={copyForAgent} disabled={sending} title="Copy the checked findings as a prompt for your coding agent">
+              <button
+                type="button"
+                className="btn"
+                onClick={copyForAgent}
+                disabled={sending || nothingToHandOff}
+                title={nothingToHandOff ? "Check a finding first" : "Copy the checked findings as a prompt for your coding agent"}
+              >
                 {copied ? <Check size={14} className="tone-ok" /> : <ClipboardCopy size={14} />}{copied ? "Copied" : "Copy for agent"}
               </button>
             )}
