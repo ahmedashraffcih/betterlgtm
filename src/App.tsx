@@ -614,7 +614,7 @@ export default function App() {
         setFocusPane("outline");
       }
       if (parsed && opts.background && settings.notifications) {
-        const crit = parsed.findings.filter((f) => f.severity === "critical" || f.severity === "high").length;
+        const crit = parsed.findings.filter((f) => (f.severity === "critical" || f.severity === "high") && f.check?.status !== "disputed").length;
         notify(`Analysis ready: ${pr.repository.name}#${pr.number}`, `${pr.title}\n${crit ? `${crit} critical or high ${crit === 1 ? "finding" : "findings"}` : `${parsed.findings.length} findings, none critical or high`}`).catch(() => {});
       }
       setRun(k, (r) => ({ ...r, running: false, step: "", error: parsed ? undefined : `${agent} finished, but its answer didn't contain a readable result.` }));
@@ -1042,7 +1042,7 @@ export default function App() {
     }
   }, [autoQueue, analyzing.size, settings.autoAnalyzeLimit]);
   const queued = useMemo(() => new Set(autoQueue.map(prKey)), [autoQueue]);
-  const critHigh = analysis?.findings.filter((f) => f.severity === "critical" || f.severity === "high").length ?? 0;
+  const critHigh = analysis?.findings.filter((f) => (f.severity === "critical" || f.severity === "high") && f.check?.status !== "disputed").length ?? 0;
   const ci = details?.statusCheckRollup ?? [];
   const ciFailing = ci.some((c) => ["FAILURE", "ERROR", "TIMED_OUT"].includes((c.conclusion ?? c.state ?? "").toUpperCase()));
   const ciPending = ci.some((c) => ["IN_PROGRESS", "QUEUED", "PENDING"].includes((c.status ?? c.state ?? "").toUpperCase()));
