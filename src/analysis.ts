@@ -675,7 +675,8 @@ export function applyVerification(a: Analysis, v: NonNullable<ReturnType<typeof 
     findings,
     dropped: dropped.length ? dropped : undefined,
     claims,
-    recommendation: (dropped.length || changed) && v.recommendation ? v.recommendation : a.recommendation,
+    // The verifier's recommendation assumes the findings it refutes are gone. Disputed ones stay, so it can't be used then.
+    recommendation: (dropped.length || changed) && v.recommendation && !findings.some((f) => f.check?.status === "disputed") ? v.recommendation : a.recommendation,
   };
 }
 
@@ -701,6 +702,16 @@ export interface FindingState {
   state: FindingStateKind;
   reason?: string;
   at: number;
+}
+
+/**
+ * Whether a finding starts ticked in Submit review: what the reviewer added to the review, or else the
+ * critical and high ones. A disputed finding isn't ticked by default, but adding it to the review counts as deciding.
+ */
+export function startsTicked(f: Finding, o: { fixed: boolean; hasState: boolean; inReview: number[]; index: number }): boolean {
+  if (o.fixed || o.hasState) return false;
+  if (o.inReview.length) return o.inReview.includes(o.index);
+  return f.check?.status !== "disputed" && (f.severity === "critical" || f.severity === "high");
 }
 
 /** Identifies a finding across analysis runs: the id carried over from an earlier run, or its first file and its title. */
