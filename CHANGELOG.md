@@ -2,6 +2,10 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.6.1] — 2026-11-12
+
+- **Large review queues load again**: with a few hundred review requests (usually team requests), the inbox failed with "invalid character '<'" because GitHub gave up on the search. The inbox now loads pull requests 25 at a time, up to 200, and says so plainly if GitHub still times out.
+
 ## [0.6.0] — 2026-11-12
 
 - **Shortcut hints**: hold ⌘ (macOS) or Ctrl (Windows, Linux) to see the shortcut on every button that has one, with the rest listed at the bottom.
