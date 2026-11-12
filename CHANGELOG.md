@@ -2,6 +2,16 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.6.2] — 2026-11-12
+
+- **Copilot CLI (experimental)** as a review agent, read-only like the others.
+- **Copy for agent**: on your own pull requests, copy the checked findings (or one finding) as a prompt for your coding agent.
+- **Double-checked claims**: the second pass checks description claims too, and marks the ones it confirms or corrects.
+- **Changes not in the description** are listed under the description check.
+- **Zoom**: ⌘= / ⌘- / ⌘0 (Ctrl on Windows and Linux), also in **Settings › General**.
+- **Dismissals** from other pull requests only hide the same point in the same file, and the analysis lists the ones it used.
+- **Fixed**: a console window flashed on Windows for every background command; the macOS sidebar didn't follow the app's theme.
+
 ## [0.6.1] — 2026-11-12
 
 - **Large review queues load again**: with a few hundred review requests (usually team requests), the inbox failed with "invalid character '<'" because GitHub gave up on the search. The inbox now loads pull requests 25 at a time, up to 200, and says so plainly if GitHub still times out.
