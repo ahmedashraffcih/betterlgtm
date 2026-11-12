@@ -39,6 +39,15 @@ pub async fn claude_run(
     let (harness, overridden) = run_agent(&config.harness, harness.as_deref());
     let name = harness.name();
     let program = config.agent_path(harness);
+    // Codex reads a schema from a file. Removed when the run ends, however it ends.
+    let schema_file = match (harness, overridden, schema.as_deref()) {
+        (crate::harness::Harness::Codex, true, Some(s)) => {
+            let path = std::env::temp_dir().join(format!("betterlgtm-schema-{run_id}.json"));
+            std::fs::write(&path, s).map_err(|e| e.to_string())?;
+            Some(TempFile(path))
+        }
+        _ => None,
+    };
     let mut cmd = crate::process::command(&program);
     harness.arguments(
         &mut cmd,
@@ -51,6 +60,7 @@ pub async fn claude_run(
             chat: chat.unwrap_or(false),
             schema: schema.as_deref(),
             max_budget_usd,
+            schema_file: schema_file.as_ref().map(|f| f.0.as_path()),
         },
     );
     cmd.current_dir(&cwd)
@@ -117,5 +127,14 @@ pub async fn claude_run(
 pub fn claude_cancel(runs: State<'_, Runs>, run_id: String) {
     if let Some(tx) = runs.0.lock().unwrap().remove(&run_id) {
         let _ = tx.send(());
+    }
+}
+
+/// A file deleted when it goes out of scope.
+struct TempFile(std::path::PathBuf);
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
     }
 }
