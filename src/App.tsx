@@ -9,7 +9,8 @@ import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, anc
 import type { OutlineKey, RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import type { DiffMode } from "./components/DiffView";
-import { AnalysisView, CommandPalette, DescriptionDialog, DiffView, FilterDialog, GuidedReview, InfoDialog, Onboarding, preloadViews, Settings, SubmitReview } from "./lazy";
+import { AnalysisView, CommandPalette, DescriptionDialog, DiffView, FilterDialog, GuidedReview, InfoDialog, Onboarding, preloadViews, Settings, SubmitReview, WhatsNew } from "./lazy";
+import { appVersion, hasNotes, versionToAnnounce } from "./whatsNew";
 import { AgentContext, harnessOf } from "./harness";
 import { setupBroken } from "./setup";
 import { Inbox, InboxRail, prKey, type InboxView } from "./components/Inbox";
@@ -136,6 +137,11 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [infoDialog, setInfoDialog] = useState<"shortcuts" | "about" | null>(null);
+  /** The version whose release notes are open in What's new. */
+  const [whatsNew, setWhatsNew] = useState<string | null>(null);
+  /** Held until onboarding is out of the way, so the notes never cover the first-run screens. */
+  const [announce, setAnnounce] = useState<string | null>(null);
+  const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
   const [recheckRuns, setRecheckRuns] = useState<Record<string, { running: boolean; error?: string }>>({});
@@ -194,6 +200,11 @@ export default function App() {
   const analysis = session?.analysis;
 
   useEffect(preloadViews, []);
+  // Checked once per launch, against the settings as they were when the app opened.
+  useEffect(() => {
+    versionToAnnounce(settings.onboarded).then(setAnnounce).catch(() => {});
+    appVersion().then(setCurrentVersion).catch(() => {});
+  }, []);
   useEffect(() => track("app_opened", { harness: settings.harness, auto_analyze: settings.autoAnalyze, onboarded: settings.onboarded }), []);
 
   // The backend needs tool paths, the data folder and Claude options before it runs anything.
@@ -296,6 +307,13 @@ export default function App() {
       : !settings.onboarded
         ? firstStep
         : null;
+  // Show What's new once nothing else is taking over the window.
+  useEffect(() => {
+    if (announce && !onboarding) {
+      setWhatsNew(announce);
+      setAnnounce(null);
+    }
+  }, [announce, onboarding]);
 
   // Shortcuts come from the command list (menus and palette use the same list); Escape closes Settings.
   const commandsRef = useRef<Command[]>([]);
@@ -1127,6 +1145,7 @@ export default function App() {
     { id: "sample", menu: "Help", label: sample ? "Leave the sample" : "Try a sample pull request", run: () => (sample ? leaveSample() : enterSample()), separatorBefore: true },
     { id: "setup", menu: "Help", label: "Check setup…", enabled: !sample, run: () => { setSettingsOpen(false); setSetupOpen(true); checkTools(); } },
     { id: "updates", menu: "Help", label: "Check for updates…", enabled: updater.supported, run: () => updater.checkNow(true), separatorBefore: true },
+    { id: "whats-new", menu: "Help", label: "What's new", enabled: !!currentVersion && hasNotes(currentVersion), run: () => currentVersion && setWhatsNew(currentVersion) },
     { id: "about", menu: "Help", label: "About BetterLGTM", run: () => setInfoDialog("about") },
   ];
   commandsRef.current = commands;
@@ -1657,6 +1676,7 @@ export default function App() {
           }}
         />
       )}
+      {whatsNew && <WhatsNew version={whatsNew} onClose={() => setWhatsNew(null)} />}
       {infoDialog && <InfoDialog kind={infoDialog} commands={commands} vim={settings.vimKeys} onClose={() => setInfoDialog(null)} />}
       </Suspense>
     </div>
