@@ -4,7 +4,7 @@
 
 <h1 align="center">BetterLGTM</h1>
 
-<p align="center">Mean it when you say lgtm.<br>A desktop app for reviewing GitHub pull requests with Claude Code, Codex or Gemini CLI.</p>
+<p align="center">Mean it when you say lgtm.<br>A desktop app for reviewing GitHub pull requests with Claude Code, Codex, Gemini CLI or Copilot CLI.</p>
 
 <p align="center">
   <a href="https://drmas.github.io/betterlgtm/">Website</a> ·
@@ -18,13 +18,13 @@
   <img src="docs/screenshots/analysis-light.png" alt="BetterLGTM showing a pull request analysis: a request-changes verdict, a short summary, and the findings and description claims that need attention">
 </picture>
 
-BetterLGTM lists the pull requests waiting for your review, checks each one out in its own git worktree, and has your coding agent (Claude Code, Codex or Gemini CLI) compare the description with the code. You get a verdict, a short summary, and the findings that need your attention, each linked to the lines it's about. A second pass double-checks each finding against the code, and then it walks you through the change section by section.
+BetterLGTM lists the pull requests waiting for your review, checks each one out in its own git worktree, and has your coding agent (Claude Code, Codex, Gemini CLI or Copilot CLI) compare the description with the code. You get a verdict, a short summary, and the findings that need your attention, each linked to the lines it's about. A second pass double-checks each finding against the code, and then it walks you through the change section by section.
 
 It runs on your machine with the `gh` and agent command-line tools you already have. There's no account and no server.
 
 ## Features
 
-- **Your choice of agent.** Run reviews with Claude Code, Codex or Gemini CLI (experimental). Pick one during setup or in **Settings › Agent**; each runs read-only.
+- **Your choice of agent.** Run reviews with Claude Code, Codex, Gemini CLI (experimental) or Copilot CLI (experimental). Pick one during setup or in **Settings › Agent**; each runs read-only.
 - **Guided setup.** The first run checks `gh`, your agent and `git`, shows the command that fixes anything missing or signed out, and lets you choose what the inbox shows. **Try a sample pull request** shows a finished review without any of them.
 - **Review inbox.** Pull requests where your review is requested, directly or through a team, grouped by organization and refreshed on a timer. Switch to **Mine** for your own open pull requests. Each row shows CI, review state, size and a risk estimate, and **Sort and filter** sorts by risk, waiting time, size or last update, filters by CI, risk, review decision and analysis, and picks which organizations and repositories to show. Your choices are kept. A desktop notification and a count on the app icon tell you when a review is requested or requested again. Hide the organizations you don't care about.
 - **A worktree per PR.** Each pull request is checked out next to a shared clone, so the agent reads real files, not just the diff, and your own working copy is never touched.
@@ -75,6 +75,7 @@ From version 0.2.1 the app updates itself: when a new release is out, choose **I
   - [Claude Code](https://claude.com/claude-code): `claude auth login`
   - [Codex](https://developers.openai.com/codex/cli): `codex login`
   - [Gemini CLI](https://geminicli.com) (experimental): run `gemini` once and choose how to sign in
+  - [Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) (experimental): `copilot login`
 - `git`
 - Linux: WebKitGTK 4.1 (`webkit2gtk-4.1`)
 
@@ -108,7 +109,7 @@ On macOS, use <kbd>Cmd</kbd> in place of <kbd>Ctrl</kbd>.
 
 - **Local only.** GitHub is reached through your `gh` and the model through your own agent CLI. BetterLGTM has no backend and never sees your tokens.
 - **Anonymous usage stats.** Release builds send counts of app opens, analyses, submitted reviews and a few other actions to PostHog, with the app version, operating system and a random ID made on your computer. They never include code, findings, chat, PR descriptions, or repository, organization, PR or account names. Turn it off in **Settings › General › Share anonymous usage stats**. Builds from source send nothing. The full list of events is in [`src/telemetry.ts`](src/telemetry.ts).
-- **Read-only agents.** Claude Code runs with only these tools allowed: `Read`, `Grep`, `Glob`, `LS`, and `git log`, `git show`, `git diff`, `git blame`, `git merge-base` and `rg` through Bash. Codex runs in its read-only sandbox, and may search the web. Gemini CLI runs in its read-only plan mode. None of them can edit files or post anything to GitHub. Reviews are posted by the app, through your `gh`, only when you press the submit button.
+- **Read-only agents.** Claude Code runs with only these tools allowed: `Read`, `Grep`, `Glob`, `LS`, and `git log`, `git show`, `git diff`, `git blame`, `git merge-base` and `rg` through Bash. Codex runs in its read-only sandbox, and may search the web. Gemini CLI runs in its read-only plan mode. Copilot CLI is offered only its file reading, search and shell tools, and its shell runs only the same git commands, `rg` and commands it considers read-only; MCP servers are turned off. None of them can edit files or post anything to GitHub. Reviews are posted by the app, through your `gh`, only when you press the submit button.
 - **Costs.** Analyses use your agent's plan or API usage. The status bar shows the tokens used per PR.
 
 ### Where things are stored

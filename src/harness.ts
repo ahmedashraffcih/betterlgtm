@@ -2,7 +2,7 @@ import { createContext, useContext } from "react";
 import type { Settings } from "./settings";
 
 /** The coding agents the app can run a review with. The backend has the matching list in `harness.rs`. */
-export type HarnessId = "claude" | "codex" | "gemini";
+export type HarnessId = "claude" | "codex" | "gemini" | "copilot";
 
 export interface Fix {
   label: string;
@@ -19,7 +19,7 @@ export interface HarnessInfo {
   /** The command it's installed as. */
   command: string;
   /** The setting that holds a full path to it. */
-  pathKey: "claudePath" | "codexPath" | "geminiPath";
+  pathKey: "claudePath" | "codexPath" | "geminiPath" | "copilotPath";
   install: { unix: Fix[]; windows: Fix[] };
   signIn: Fix;
   /** Models offered in the menu, by the name the agent takes. Any other name can be typed. */
@@ -79,6 +79,22 @@ export const HARNESSES: Record<HarnessId, HarnessInfo> = {
     models: [],
     effort: false,
     limits: "Experimental: runs in Gemini CLI's read-only plan mode. The effort setting and the spending limit don't apply, and cost isn't reported.",
+  },
+  copilot: {
+    id: "copilot",
+    name: "Copilot CLI",
+    short: "Copilot",
+    maker: "GitHub",
+    command: "copilot",
+    pathKey: "copilotPath",
+    install: {
+      unix: [NPM("@github/copilot"), { label: "About Copilot CLI", url: "https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli" }],
+      windows: [NPM("@github/copilot"), { label: "About Copilot CLI", url: "https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli" }],
+    },
+    signIn: { label: "Sign in", command: "copilot login" },
+    models: [],
+    effort: true,
+    limits: "Experimental: can read files and run read-only commands, and nothing else. The spending limit doesn't apply, and cost isn't reported.",
   },
 };
 

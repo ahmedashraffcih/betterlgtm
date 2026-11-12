@@ -15,13 +15,15 @@ use crate::process::run;
 pub struct Config {
     pub gh_path: String,
     pub claude_path: String,
-    /// The agent that runs reviews: claude, codex or gemini. Empty means Claude Code.
+    /// The agent that runs reviews: claude, codex, gemini or copilot. Empty means Claude Code.
     #[serde(default)]
     pub harness: String,
     #[serde(default)]
     pub codex_path: String,
     #[serde(default)]
     pub gemini_path: String,
+    #[serde(default)]
+    pub copilot_path: String,
     /// Where clones and worktrees live. Empty means `~/.betterlgtm`.
     pub data_dir: String,
     /// Model name for the chosen agent. Empty means the agent's own default.
@@ -38,6 +40,7 @@ impl Default for Config {
             harness: String::new(),
             codex_path: String::new(),
             gemini_path: String::new(),
+            copilot_path: String::new(),
             data_dir: String::new(),
             model: String::new(),
             effort: String::new(),
@@ -52,6 +55,7 @@ impl Config {
             Harness::Claude => &self.claude_path,
             Harness::Codex => &self.codex_path,
             Harness::Gemini => &self.gemini_path,
+            Harness::Copilot => &self.copilot_path,
         };
         if set.trim().is_empty() { harness.command().to_string() } else { set.trim().to_string() }
     }
@@ -129,6 +133,23 @@ async fn agent_account(harness: Harness, path: &str) -> Value {
                 .is_some_and(|text| text.contains("\"selectedType\"") || text.contains("\"selectedAuthType\""));
             json!({ "signedIn": env || saved, "method": if env { Some("an environment variable") } else { None } })
         }
+        Harness::Copilot => {
+            // Copilot CLI has no command for this either. It saves who signed in with `/login`
+            // in its config, and also takes a token from the environment.
+            let env = ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"].iter().any(|k| std::env::var(k).is_ok_and(|v| !v.is_empty()));
+            let dir = std::env::var_os("COPILOT_HOME").map(PathBuf::from).or_else(|| {
+                std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|home| PathBuf::from(home).join(".copilot"))
+            });
+            let saved = dir
+                .and_then(|d| std::fs::read_to_string(d.join("config.json")).ok())
+                .is_some_and(|text| text.contains("\"lastLoggedInUser\"") || text.contains("\"loggedInUsers\""));
+            if env || saved {
+                json!({ "signedIn": true, "method": if env { Some("an environment variable") } else { None } })
+            } else {
+                // Copilot can also sign in in ways this can't see, so don't claim it's signed out.
+                json!({})
+            }
+        }
     }
 }
 
@@ -147,7 +168,8 @@ pub async fn tool_status(app: AppHandle, state: State<'_, ConfigState>) -> Resul
     );
     let gh = gh.map(|v| v.lines().next().unwrap_or("").to_string());
     let login = login.map(|v| v.trim().to_string());
-    let agent = agent.map(|v| v.lines().last().unwrap_or("").trim().to_string());
+    // Copilot CLI follows its version with a line about updating.
+    let agent = agent.map(|v| if harness == Harness::Copilot { v.lines().next() } else { v.lines().last() }.unwrap_or("").trim().to_string());
     let git = git.map(|v| v.trim().to_string());
     // Every agent the app can run, and where each one was found, so one can be picked.
     let agents: Vec<Value> = Harness::ALL

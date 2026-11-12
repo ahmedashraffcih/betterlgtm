@@ -38,7 +38,7 @@ export interface Settings {
   /** Treat lines that differ only in whitespace as unchanged. */
   hideWhitespace: boolean;
   // The agent that runs reviews
-  /** Which coding agent reads the code: Claude Code, Codex or Gemini CLI. */
+  /** Which coding agent reads the code: Claude Code, Codex, Gemini CLI or Copilot CLI. */
   harness: HarnessId;
   /** Model name for the chosen agent. Empty means the agent's own default. */
   model: string;
@@ -65,6 +65,7 @@ export interface Settings {
   /** Full paths to the other agents. Empty means the usual command name. */
   codexPath: string;
   geminiPath: string;
+  copilotPath: string;
   dataDir: string;
 }
 
@@ -104,6 +105,7 @@ export const DEFAULT_SETTINGS: Settings = {
   claudePath: "claude",
   codexPath: "",
   geminiPath: "",
+  copilotPath: "",
   dataDir: "",
 };
 

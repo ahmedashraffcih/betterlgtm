@@ -274,6 +274,7 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
         claude: { harness: "claude", agentName: "Claude Code", agent: "2.1.318 (Claude Code)", agentFile: "/home/you/.local/bin/claude", agentAccount: { signedIn: true, method: "claude.ai", plan: "max", email: "you@example.com" } },
         codex: { harness: "codex", agentName: "Codex", agent: "codex-cli 0.166.0", agentFile: "/home/you/.local/bin/codex", agentAccount: { signedIn: true, method: "ChatGPT" } },
         gemini: { harness: "gemini", agentName: "Gemini CLI", agent: undefined, agentError: "Could not run `gemini`: No such file or directory (os error 2). Is it installed and on PATH?", agentFile: null, agentAccount: {} },
+        copilot: { harness: "copilot", agentName: "Copilot CLI", agent: "GitHub Copilot CLI 1.0.109.", agentFile: "/home/you/.local/bin/copilot", agentAccount: { signedIn: true } },
       }[mockHarness] ?? { harness: "claude" };
       const ok = {
         gh: "gh version 2.103.3 (2026-10-26)", ghFile: "/usr/bin/gh", login: "you",
@@ -282,6 +283,7 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
           { id: "claude", name: "Claude Code", file: "/home/you/.local/bin/claude" },
           { id: "codex", name: "Codex", file: "/home/you/.local/bin/codex" },
           { id: "gemini", name: "Gemini CLI", file: null },
+          { id: "copilot", name: "Copilot CLI", file: "/home/you/.local/bin/copilot" },
         ],
         git: "git version 2.56.0", dataDir: "/home/you/.betterlgtm",
       };
