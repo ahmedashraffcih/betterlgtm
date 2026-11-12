@@ -5,7 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, isSampleMode, setSampleMode, type ClaudeEvent, type ToolStatus, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
-import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, VERIFY_SCHEMA_STRICT, WALKTHROUGH_SCHEMA, anchorLabel, answerOf, applyVerification, carryFindingIds, findingId, worthVerifying, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
+import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, VERIFY_SCHEMA_STRICT, WALKTHROUGH_SCHEMA, anchorLabel, answerOf, applyVerification, carryFindingIds, findingId, findingsSummary, worthVerifying, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
 import type { OutlineKey, RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import type { DiffMode } from "./components/DiffView";
@@ -590,7 +590,8 @@ export default function App() {
           }
         } catch (e) {
           setRun(k, (r) => ({ ...r, log: [...r.log, `Couldn't double-check the findings: ${errorText(e)}`] }));
-          if (crossAgent) parsed = { ...parsed, verifyFailed: { by: crossAgent, error: errorText(e) } };
+          // A cancelled run isn't the other agent failing.
+          if (crossAgent && errorText(e) !== "Cancelled") parsed = { ...parsed, verifyFailed: { by: crossAgent, error: errorText(e) } };
         }
       }
 
@@ -614,8 +615,7 @@ export default function App() {
         setFocusPane("outline");
       }
       if (parsed && opts.background && settings.notifications) {
-        const crit = parsed.findings.filter((f) => (f.severity === "critical" || f.severity === "high") && f.check?.status !== "disputed").length;
-        notify(`Analysis ready: ${pr.repository.name}#${pr.number}`, `${pr.title}\n${crit ? `${crit} critical or high ${crit === 1 ? "finding" : "findings"}` : `${parsed.findings.length} findings, none critical or high`}`).catch(() => {});
+        notify(`Analysis ready: ${pr.repository.name}#${pr.number}`, `${pr.title}\n${findingsSummary(parsed.findings)}`).catch(() => {});
       }
       setRun(k, (r) => ({ ...r, running: false, step: "", error: parsed ? undefined : `${agent} finished, but its answer didn't contain a readable result.` }));
       track(parsed ? "analysis_finished" : "analysis_failed", {

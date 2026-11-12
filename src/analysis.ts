@@ -714,6 +714,24 @@ export function startsTicked(f: Finding, o: { fixed: boolean; hasState: boolean;
   return f.check?.status !== "disputed" && (f.severity === "critical" || f.severity === "high");
 }
 
+/** A finding another agent refuted, which the reviewer still has to decide on. */
+export const isDisputed = (f: Finding) => f.check?.status === "disputed";
+
+/** The findings line of the "Analysis ready" notification. Disputed findings are named, not counted as open. */
+export function findingsSummary(findings: Finding[]): string {
+  const disputed = findings.filter(isDisputed).length;
+  const serious = findings.filter((f) => (f.severity === "critical" || f.severity === "high") && !isDisputed(f)).length;
+  const main = serious
+    ? `${serious} critical or high ${serious === 1 ? "finding" : "findings"}`
+    : `${findings.length} ${findings.length === 1 ? "finding" : "findings"}, none critical or high`;
+  return disputed ? `${main} (${disputed} disputed)` : main;
+}
+
+/** Outline order: by severity, and within one severity the disputed findings after the others. */
+export function outlineOrder(x: { f: Finding }, y: { f: Finding }): number {
+  return SEVERITY_RANK[x.f.severity] - SEVERITY_RANK[y.f.severity] || Number(isDisputed(x.f)) - Number(isDisputed(y.f));
+}
+
 /** Identifies a finding across analysis runs: the id carried over from an earlier run, or its first file and its title. */
 export const findingId = (f: Finding) => f.id ?? `${f.anchors[0]?.path ?? ""}|${f.title.trim().toLowerCase()}`;
 

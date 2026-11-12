@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import type { FileData } from "react-diff-view";
-import { anchorLabel, buildHandoffPrompt, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck, type FindingState } from "../analysis";
+import { anchorLabel, buildHandoffPrompt, isDisputed, outlineOrder, type Analysis, type Anchor, type CheckStatus, type Decision, type FindingCheck, type FindingState } from "../analysis";
 import { contextMenu, copyText } from "../contextMenu";
 import { errorText, type PrDetails, type ReviewThread } from "../api";
 import { categoryIcon, SEVERITY, VERDICT } from "../icons";
@@ -87,8 +87,6 @@ function checkLabel(c: { status: string; by?: HarnessId }): string {
   if (c.status === "disputed") return "Disputed";
   return "Not confirmed";
 }
-
-const isDisputed = (f: { check?: { status: string } }) => f.check?.status === "disputed";
 
 function StateBadge({ state }: { state?: FindingState }) {
   if (!state) return null;
@@ -219,9 +217,8 @@ export function AnalysisView(p: Props) {
   const live = a.findings.map((f, i) => ({ f, i })).filter(({ i }) => !isDismissed(i));
   const dismissed = a.findings.map((f, i) => ({ f, i })).filter(({ i }) => isDismissed(i));
   // Disputed findings go after the undisputed ones and don't count: two agents disagree on them.
-  const byDispute = (x: { f: typeof a.findings[number] }, y: { f: typeof a.findings[number] }) => Number(isDisputed(x.f)) - Number(isDisputed(y.f));
-  const major = live.filter(({ f }) => f.severity === "critical" || f.severity === "high").sort(byDispute);
-  const minor = live.filter(({ f }) => f.severity === "medium" || f.severity === "low").sort(byDispute);
+  const major = live.filter(({ f }) => f.severity === "critical" || f.severity === "high").sort(outlineOrder);
+  const minor = live.filter(({ f }) => f.severity === "medium" || f.severity === "low").sort(outlineOrder);
   const crit = live.filter(({ f }) => f.severity === "critical" && !isDisputed(f)).length;
   const high = live.filter(({ f }) => f.severity === "high" && !isDisputed(f)).length;
 
@@ -244,7 +241,8 @@ export function AnalysisView(p: Props) {
     <button type="button" data-nav className={["row", sub && "sub", p.selected === k && "sel", (check?.status === "fixed" || state?.state === "resolved" || state?.state === "dismissed") && "fixed"].filter(Boolean).join(" ")} onClick={() => select(k)} onContextMenu={findingMenu(k)} title={text}>
       <Icon size={14} className={tone} />
       <span className="ellipsis" style={{ flex: 1 }}>{text}</span>
-      {state ? <StateBadge state={state} /> : check ? <CheckBadge check={check} /> : disputed ? <span className="check-badge check-high">Disputed</span> : null}
+      {disputed && !state && <span className="check-badge check-high">Disputed</span>}
+      {state ? <StateBadge state={state} /> : <CheckBadge check={check} />}
       {meta && <span className="rm">{meta}</span>}
     </button>
   );
@@ -476,7 +474,7 @@ function Overview(p: Props & { analysis: Analysis }) {
   const count = (s: string) => a.findings.filter((f) => f.severity === s && !isDisputed(f)).length;
   const disputed = a.findings.filter(isDisputed);
   const disputedBy = disputed.find((f) => f.check?.by)?.check?.by;
-  const derived: Decision = major.length || problems.some(({ c }) => c.verdict !== "partial") ? "request_changes" : a.findings.length || problems.length ? "comment" : "approve";
+  const derived: Decision = major.length || problems.some(({ c }) => c.verdict !== "partial") ? "request_changes" : a.findings.some((f) => !isDisputed(f)) || problems.length ? "comment" : "approve";
   const decision = DECISION[a.recommendation?.decision ?? derived];
   const matching = a.claims.length - problems.length;
 
@@ -684,7 +682,7 @@ function Detail(p: Props & { analysis: Analysis }) {
         )}
         {f.check?.status === "disputed" && (
           <p className="check-note check-high">
-            <strong>{agent} reported this, and {f.check.by ? HARNESSES[f.check.by].short : "the double-check"} disagrees:</strong> {f.check.note || "it found no support in the code."} You decide: it isn't counted or ticked for posting until you do.
+            <strong>{f.check.by ? HARNESSES[f.check.by].short : "The double-check"} disagrees with this finding:</strong> {f.check.note || "it found no support in the code."} You decide: it isn't counted or ticked for posting until you do.
           </p>
         )}
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, lineHeight: 1.35 }}>{f.title}</h2>
