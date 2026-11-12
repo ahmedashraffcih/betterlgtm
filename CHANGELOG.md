@@ -2,6 +2,13 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.6.0] — 2026-11-12
+
+- **Shortcut hints**: hold ⌘ (macOS) or Ctrl (Windows, Linux) to see the shortcut on every button that has one, with the rest listed at the bottom.
+- **New shortcuts**: ⌘E / Ctrl+E opens the worktree in your editor, ⌘⇧O / Ctrl+Shift+O opens the pull request on GitHub.
+- **What's new**: after an update, the first launch shows what changed in the new version. Fresh installs skip it; **Help › What's new** shows it again.
+- **Anonymous usage stats**: counts of app opens, analyses, reviews and feature use, with the app version and operating system. Never code, findings, chat, or repository, pull request or account names. Turn it off in **Settings › General**.
+
 ## [0.5.1] — 2026-11-10
 
 - **Guided review skips generated files**: lockfiles, build output, snapshots and generated code are left out of the sections and the progress count. The Files view still shows them.
