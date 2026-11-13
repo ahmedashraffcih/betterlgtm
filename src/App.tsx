@@ -5,7 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, isSampleMode, setSampleMode, type ClaudeEvent, type ToolStatus, type BlastRadius, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
-import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, WALKTHROUGH_SCHEMA_PROBES, anchorLabel, answerOf, applyVerification, carryFindingIds, currentStates, findingId, keepAnswers, settledNote, worthVerifying, type Analysis, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseChangeMap, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
+import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, WALKTHROUGH_SCHEMA_PROBES, anchorLabel, answerOf, applyVerification, carryFindingIds, currentStates, findingId, keepAnswers, settledNote, worthVerifying, type Analysis, type WalkStep, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseChangeMap, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
 import type { OutlineKey, RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import type { DiffMode } from "./components/DiffView";
@@ -174,6 +174,8 @@ export default function App() {
   const diffMode = settings.diffMode;
   const setDiffMode = (m: DiffMode) => updateSettings({ diffMode: m });
   const [guideStep, setGuideStep] = useState(0);
+  /** The guided review section in view, for the chat. Not `walkthrough[guideStep]`: the review leaves out empty steps. */
+  const [guideTopic, setGuideTopic] = useState<WalkStep | undefined>();
   const [guideRuns, setGuideRuns] = useState<Record<string, { running: boolean; error?: string }>>({});
   // Below this width the inbox sits collapsed as a strip unless the user expands it.
   const [appRef, appWidth] = useElementWidth<HTMLDivElement>();
@@ -607,7 +609,7 @@ export default function App() {
         costUsd: (s.costUsd ?? 0) + cost,
       }));
       if (parsed && !opts.background) {
-        setGuideStep(0);
+        setGuideStep(0); setGuideTopic(undefined);
         setOutlineKey("s0");
         setFocusPane("outline");
       }
@@ -685,7 +687,7 @@ export default function App() {
     setTab("analysis");
     setDiffTarget({ path: null, range: null, finding: null });
     setOutlineKey("s0");
-    setGuideStep(0);
+    setGuideStep(0); setGuideTopic(undefined);
   };
 
   /** Swaps the inbox between GitHub and the built-in sample, starting from an empty list either way. */
@@ -732,7 +734,7 @@ export default function App() {
   const generateWalkthrough = async () => {
     const s = key ? sessions[key] : undefined;
     if (!key || !s?.worktree || !s.sessionId) return;
-    if (await createWalkthrough(key, s.worktree, s.sessionId)) setGuideStep(0);
+    if (await createWalkthrough(key, s.worktree, s.sessionId)) setGuideStep(0); setGuideTopic(undefined);
   };
 
   /** Claude drafts the overall review summary, continuing the PR's session so it knows the change. */
@@ -1095,7 +1097,7 @@ export default function App() {
         };
       }
     }
-    const step = tab === "diff" && diffMode === "guided" ? analysis?.walkthrough?.[guideStep] : undefined;
+    const step = tab === "diff" && diffMode === "guided" ? guideTopic ?? analysis?.walkthrough?.[guideStep] : undefined;
     if (step) {
       return {
         label: `Step ${guideStep + 1}: ${step.title}`,
@@ -1277,7 +1279,7 @@ export default function App() {
           label: s.title,
           detail: `Section ${i + 1}`,
           icon: <ListOrdered size={14} />,
-          run: () => { setDiffMode("guided"); setTab("diff"); setGuideStep(i); },
+          run: () => { setDiffMode("guided"); setTab("diff"); setGuideStep(i); setGuideTopic(undefined); },
         })),
         ...files.map((f) => {
           const path = filePath(f);
@@ -1467,7 +1469,7 @@ export default function App() {
             canGenerate={!!(session?.sessionId && session.worktree)}
             onSplit={setSplit}
             onMode={setDiffMode}
-            onStep={setGuideStep}
+            onStep={(i, s) => { setGuideStep(i); setGuideTopic(s); }}
             onReviewed={setReviewed}
             onGenerate={generateWalkthrough}
             hide={hideRules}

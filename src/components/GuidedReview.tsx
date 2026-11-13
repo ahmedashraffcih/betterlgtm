@@ -21,8 +21,9 @@ interface Props {
   canGenerate: boolean;
   onSplit: (split: boolean) => void;
   onMode: (m: DiffMode) => void;
-  /** Reports the section in view, so the chat context follows the scroll. */
-  onStep: (i: number) => void;
+  /** Reports the section in view, so the chat context follows the scroll. Sections without changes are left out
+   * here, so the index can differ from the walkthrough's: the step itself says which one it is. */
+  onStep: (i: number, step: WalkStep) => void;
   onReviewed: (hunkKeys: string[], reviewed: boolean) => void;
   onGenerate: () => void;
   /** Generated and test files to leave out of the sections and the progress count. */
@@ -40,6 +41,13 @@ interface Props {
 function ProbeCard({ step, answer, agent, onAnswer, onAsk, onOpenAnchor }: { step: WalkStep; answer?: ProbeAnswer; agent: string; onAnswer: (a: ProbeAnswer) => void; onAsk: () => void; onOpenAnchor: (a: Anchor) => void }) {
   const probe = step.probe!;
   const outcome = probeOutcome(probe, answer);
+  // Picking a choice removes the button that had focus; move it to the answer so the keyboard isn't lost.
+  const revealRef = useRef<HTMLDivElement>(null);
+  const before = useRef(outcome);
+  useEffect(() => {
+    if (before.current === "open" && outcome !== "open") revealRef.current?.focus();
+    before.current = outcome;
+  }, [outcome]);
   const pick = (choice: ProbeAnswer["choice"]) => onAnswer({ choice, at: Date.now() });
   if (outcome === "open") {
     return (
@@ -56,7 +64,7 @@ function ProbeCard({ step, answer, agent, onAnswer, onAsk, onOpenAnchor }: { ste
   const right = probe.choices[probe.answer];
   const head = outcome === "right" ? <><strong>You were right:</strong> {right}</> : <><strong>The code does:</strong> {right}{outcome === "wrong" && typeof answer?.choice === "number" ? <span className="muted"> (you picked: {probe.choices[answer.choice]})</span> : null}</>;
   return (
-    <div className={`probe probe-${outcome === "right" ? "right" : outcome === "wrong" ? "wrong" : "shown"}`} role="group" aria-label="Answer from the code">
+    <div ref={revealRef} tabIndex={-1} className={`probe probe-${outcome === "right" ? "right" : outcome === "wrong" ? "wrong" : "shown"}`} role="group" aria-label="Answer from the code">
       <div className="probe-q">{probe.question}</div>
       <div>{head}</div>
       {probe.why && <div>{probe.why}</div>}
@@ -191,6 +199,10 @@ export function GuidedReview(p: Props) {
   ].filter(Boolean).join(" and ") + ` ${hidden === 1 ? "file" : "files"} left out`;
   const steps = useMemo(() => (p.steps ? resolveSteps(p.steps, shown) : []), [p.steps, shown]);
   const [active, setActive] = useState(Math.min(p.current, Math.max(steps.length - 1, 0)));
+  // Report the starting section too, not only scrolls and jumps: the chat context reads it before any scroll.
+  useEffect(() => {
+    if (steps[active]) p.onStep(active, steps[active]);
+  }, [steps]);
 
   const stepDone = (s: Step) => allReviewed(s.keys, p.reviewed);
   const partsDone = (s: Step) => s.parts.filter((x) => allReviewed(x.keys, p.reviewed)).length;
@@ -203,7 +215,7 @@ export function GuidedReview(p: Props) {
     const el = sections.current[i];
     if (el && scroller.current) scroller.current.scrollTo({ top: el.offsetTop - 8 });
     setActive(i);
-    p.onStep(i);
+    p.onStep(i, steps[i]);
   };
 
   // Scroll spy: the section whose top has passed the top edge is the one being read.
@@ -217,7 +229,7 @@ export function GuidedReview(p: Props) {
     if (sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 4) idx = steps.length - 1;
     if (idx !== active) {
       setActive(idx);
-      p.onStep(idx);
+      p.onStep(idx, steps[idx]);
     }
   };
 
@@ -254,6 +266,11 @@ export function GuidedReview(p: Props) {
         </select>
       ) : (
         <span style={{ flex: 1 }} />
+      )}
+      {narrow && asked.total > 0 && (
+        <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }} title={`${asked.answered} answered, ${asked.skipped} skipped`}>
+          {asked.answered + asked.skipped} of {asked.total} asked
+        </span>
       )}
       {hidden > 0 && !narrow && (
         <span className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }} title="Generated files and tests are left out, as set in Settings → Review. The Files view shows them.">
