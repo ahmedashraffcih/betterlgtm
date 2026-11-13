@@ -249,6 +249,7 @@ what the code does in one concrete case (an edge case or a failure, not trivia),
 - "why": one or two sentences on why the code does that. "evidence": the line that decides it.
 - Ask only about behavior that none of these already describes, so the question doesn't repeat what the reviewer has read:
 ${probes.avoid.length ? probes.avoid.map((x) => `  - ${oneLine(x, 120)}`).join("\n") : "  (nothing flagged)"}
+- Don't add "Not sure" or "None of the above" as a choice: the app adds "Not sure" itself.
 - Add no probe when no step qualifies. Shape: "probe": { "question": "...", "choices": ["...", "..."], "answer": 1, "why": "...", "evidence": { "path": "src/x.ts", "startLine": 12, "endLine": 12 } }`
     : "";
   return `${WALKTHROUGH_RULES}${generatedNote(generatedPatterns)}${ask}
@@ -441,9 +442,12 @@ function asProbe(v: unknown): Probe | undefined {
   // Any unusable choice drops the question: filtering it out would shift which index is right.
   const raw = asArray<unknown>(p.choices);
   const choices = raw.filter((c): c is string => typeof c === "string" && !!c.trim());
-  if (choices.length !== raw.length || choices.length < 2 || choices.length > 4 || !Number.isInteger(p.answer) || (p.answer as number) < 0 || (p.answer as number) >= choices.length) return undefined;
+  // Agents without a schema may give the index as text ("1").
+  const given: unknown = p.answer;
+  const answer = typeof given === "string" && given.trim() ? Number(given) : given;
+  if (choices.length !== raw.length || choices.length < 2 || choices.length > 4 || !Number.isInteger(answer) || (answer as number) < 0 || (answer as number) >= choices.length) return undefined;
   const evidence = asAnchors([p.evidence])[0];
-  return { question: p.question, choices, answer: p.answer as number, why: asText(p.why), ...(evidence ? { evidence } : {}) };
+  return { question: p.question, choices, answer: answer as number, why: asText(p.why), ...(evidence ? { evidence } : {}) };
 }
 
 /** What a run answered: the data when it was given a schema, otherwise its text. */
@@ -736,6 +740,13 @@ export function probeOutcome(p: Probe, a?: ProbeAnswer): "open" | "right" | "wro
   if (!a) return "open";
   if (a.choice === "unsure" || a.choice === "skipped") return a.choice;
   return a.choice === p.answer ? "right" : "wrong";
+}
+
+/** The answers that still belong to a question in these steps; the rest are for questions that are gone. */
+export function keepAnswers(answers: Record<string, ProbeAnswer> | undefined, steps: WalkStep[]): Record<string, ProbeAnswer> | undefined {
+  if (!answers) return answers;
+  const live = new Set(steps.filter((s) => s.probe).map(probeKey));
+  return Object.fromEntries(Object.entries(answers).filter(([k]) => live.has(k)));
 }
 
 /** "Not sure" counts as answered: the reviewer took the question. */

@@ -5,7 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, isSampleMode, setSampleMode, type ClaudeEvent, type ToolStatus, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
-import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, WALKTHROUGH_SCHEMA_PROBES, anchorLabel, answerOf, applyVerification, carryFindingIds, findingId, worthVerifying, type Analysis, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
+import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, WALKTHROUGH_SCHEMA_PROBES, anchorLabel, answerOf, applyVerification, carryFindingIds, findingId, keepAnswers, worthVerifying, type Analysis, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
 import type { OutlineKey, RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import type { DiffMode } from "./components/DiffView";
@@ -473,6 +473,7 @@ export default function App() {
         ...x,
         sessionId,
         analysis: x.analysis ? { ...x.analysis, walkthrough: steps } : x.analysis,
+        probeAnswers: keepAnswers(x.probeAnswers, steps),
         tokens: (x.tokens ?? 0) + tokensOf(usage),
         costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
