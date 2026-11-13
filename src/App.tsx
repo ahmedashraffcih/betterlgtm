@@ -1459,6 +1459,11 @@ export default function App() {
             onReviewed={setReviewed}
             onGenerate={generateWalkthrough}
             hide={hideRules}
+            predict={settings.predictFirst}
+            answers={session?.probeAnswers}
+            onAnswer={(pk, a) => key && update(key, (s) => ({ ...s, probeAnswers: { ...(s.probeAnswers ?? {}), [pk]: a } }))}
+            onAsk={() => { setChatOpen(true); setChatFocus((n) => n + 1); }}
+            onOpenAnchor={(a) => openAnchor(a, null)}
           />
         )}
         {details && tab === "diff" && (diffMode === "files" || diffRange === "since") && (
