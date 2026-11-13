@@ -724,6 +724,25 @@ export interface FindingState {
   at: number;
 }
 
+/** What the reviewer did with a predict-first question. */
+export type ProbeAnswer = { choice: number | "unsure" | "skipped"; at: number };
+
+/** Keys an answer to the step and its question, so a regenerated question starts unanswered. */
+export const probeKey = (s: WalkStep) => `${s.title}|${s.probe?.question ?? ""}`;
+
+export function probeOutcome(p: Probe, a?: ProbeAnswer): "open" | "right" | "wrong" | "unsure" | "skipped" {
+  if (!a) return "open";
+  if (a.choice === "unsure" || a.choice === "skipped") return a.choice;
+  return a.choice === p.answer ? "right" : "wrong";
+}
+
+/** "Not sure" counts as answered: the reviewer took the question. */
+export function probeProgress(steps: WalkStep[], answers: Record<string, ProbeAnswer> | undefined): { answered: number; skipped: number; total: number } {
+  const asked = steps.filter((s) => s.probe);
+  const outcomes = asked.map((s) => probeOutcome(s.probe!, answers?.[probeKey(s)]));
+  return { answered: outcomes.filter((o) => o === "right" || o === "wrong" || o === "unsure").length, skipped: outcomes.filter((o) => o === "skipped").length, total: asked.length };
+}
+
 /** Identifies a finding across analysis runs: the id carried over from an earlier run, or its first file and its title. */
 export const findingId = (f: Finding) => f.id ?? `${f.anchors[0]?.path ?? ""}|${f.title.trim().toLowerCase()}`;
 

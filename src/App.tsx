@@ -5,7 +5,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, isSampleMode, setSampleMode, type ClaudeEvent, type ToolStatus, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
-import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, anchorLabel, answerOf, applyVerification, carryFindingIds, findingId, worthVerifying, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
+import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, WALKTHROUGH_SCHEMA_PROBES, anchorLabel, answerOf, applyVerification, carryFindingIds, findingId, worthVerifying, type Analysis, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
 import type { OutlineKey, RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import type { DiffMode } from "./components/DiffView";
@@ -451,19 +451,22 @@ export default function App() {
   };
 
   /** Groups the PR's changes into guided review steps, continuing the analysis session. Returns whether it worked. */
-  const createWalkthrough = async (k: string, wt: string, session: string, maxBudgetUsd?: number) => {
+  const createWalkthrough = async (k: string, wt: string, session: string, maxBudgetUsd?: number, analyzed?: Analysis) => {
     setGuideRuns((g) => ({ ...g, [k]: { running: true } }));
     try {
       let answer: unknown = "";
       let sessionId = session;
       let usage: ClaudeUsage = {};
-      await api.claudeRun(`guide-${k}-${Date.now()}`, wt, buildWalkthroughPrompt(settings.generatedPatterns), session, (e) => {
+      // Predict-first questions avoid what the findings and risks already say, so they don't quiz what was just read.
+      const flagged = analyzed ?? sessions[k]?.analysis;
+      const probes = settings.predictFirst ? { avoid: [...(flagged?.findings ?? []).map((f) => f.title), ...(flagged?.risks ?? []).map((r) => `${r.area}: ${r.why}`)] } : undefined;
+      await api.claudeRun(`guide-${k}-${Date.now()}`, wt, buildWalkthroughPrompt(settings.generatedPatterns, probes), session, (e) => {
         if (e.type === "result") {
           answer = answerOf(e);
           sessionId = e.session_id ?? sessionId;
           usage = e;
         }
-      }, { schema: WALKTHROUGH_SCHEMA, maxBudgetUsd });
+      }, { schema: probes ? WALKTHROUGH_SCHEMA_PROBES : WALKTHROUGH_SCHEMA, maxBudgetUsd });
       const steps = parseWalkthrough(answer);
       if (!steps) throw new Error(`${agent}'s answer didn't contain review steps. Try again.`);
       update(k, (x) => ({
@@ -623,7 +626,7 @@ export default function App() {
         reason: parsed ? undefined : "unreadable",
       });
       // The verdict is on screen; the guided review follows on its own.
-      if (parsed && !parsed.walkthrough && sessionId && left() !== 0) void createWalkthrough(k, wt, sessionId, left());
+      if (parsed && !parsed.walkthrough && sessionId && left() !== 0) void createWalkthrough(k, wt, sessionId, left(), parsed);
     } catch (e) {
       const error = overBudget
         ? `Stopped at the $${budget} limit for automatic analyses. Start the review yourself, or raise the limit in Settings › Agent.`
