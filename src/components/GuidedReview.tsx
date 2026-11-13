@@ -347,7 +347,7 @@ export function GuidedReview(p: Props) {
                 </div>
                 <div className="selectable" style={{ maxWidth: 760, padding: "2px 0 10px" }}>
                   {p.predict && step.probe && (
-                    <ProbeCard step={step} answer={p.answers?.[probeKey(step)]} agent={agent} onAnswer={(a) => p.onAnswer(probeKey(step), a)} onAsk={p.onAsk} onOpenAnchor={p.onOpenAnchor} />
+                    <ProbeCard step={step} answer={p.answers?.[probeKey(step)]} agent={agent} onAnswer={(a) => p.onAnswer(probeKey(step), a)} onAsk={() => { if (si !== active) jumpTo(si); p.onAsk(); }} onOpenAnchor={p.onOpenAnchor} />
                   )}
                   {/* The explanation waits until the question is answered or skipped. */}
                   {!(p.predict && step.probe && probeOutcome(step.probe, p.answers?.[probeKey(step)]) === "open") && <Markdown text={step.why} />}

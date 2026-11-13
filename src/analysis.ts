@@ -438,8 +438,10 @@ function parseSteps(v: unknown): WalkStep[] | undefined {
 function asProbe(v: unknown): Probe | undefined {
   const p = v as Partial<Probe> | undefined;
   if (!p || typeof p.question !== "string" || !p.question.trim()) return undefined;
-  const choices = asArray<unknown>(p.choices).filter((c): c is string => typeof c === "string" && !!c.trim());
-  if (choices.length < 2 || choices.length > 4 || !Number.isInteger(p.answer) || (p.answer as number) < 0 || (p.answer as number) >= choices.length) return undefined;
+  // Any unusable choice drops the question: filtering it out would shift which index is right.
+  const raw = asArray<unknown>(p.choices);
+  const choices = raw.filter((c): c is string => typeof c === "string" && !!c.trim());
+  if (choices.length !== raw.length || choices.length < 2 || choices.length > 4 || !Number.isInteger(p.answer) || (p.answer as number) < 0 || (p.answer as number) >= choices.length) return undefined;
   const evidence = asAnchors([p.evidence])[0];
   return { question: p.question, choices, answer: p.answer as number, why: asText(p.why), ...(evidence ? { evidence } : {}) };
 }
@@ -727,8 +729,8 @@ export interface FindingState {
 /** What the reviewer did with a predict-first question. */
 export type ProbeAnswer = { choice: number | "unsure" | "skipped"; at: number };
 
-/** Keys an answer to the step and its question, so a regenerated question starts unanswered. */
-export const probeKey = (s: WalkStep) => `${s.title}|${s.probe?.question ?? ""}`;
+/** Keys an answer to the step, its question and its choices: the answer is an index, so new or reordered choices start unanswered. */
+export const probeKey = (s: WalkStep) => `${s.title}|${s.probe?.question ?? ""}|${s.probe?.choices.join("\u0001") ?? ""}`;
 
 export function probeOutcome(p: Probe, a?: ProbeAnswer): "open" | "right" | "wrong" | "unsure" | "skipped" {
   if (!a) return "open";
