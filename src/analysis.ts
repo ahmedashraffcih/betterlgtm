@@ -63,6 +63,20 @@ export interface WalkStep {
   /** Markdown bullets: what changed and why. */
   why: string;
   changes: Anchor[];
+  /** Asked before `why` is shown, when the reviewer turned predict-first on. */
+  probe?: Probe;
+}
+
+/** A multiple-choice question about how the code behaves, answered from the code (not by running it). */
+export interface Probe {
+  question: string;
+  choices: string[];
+  /** Index of the right choice. */
+  answer: number;
+  /** One or two sentences: why that's what the code does. */
+  why: string;
+  /** The line that decides it. */
+  evidence?: Anchor;
 }
 
 export type Decision = "approve" | "comment" | "request_changes";
@@ -131,6 +145,21 @@ export const WALKTHROUGH_SCHEMA = {
   type: "object",
   properties: {
     walkthrough: { type: "array", items: { type: "object", properties: { title: TEXT, why: LINES, changes: ANCHORS }, required: ["title", "why", "changes"] } },
+  },
+  required: ["walkthrough"],
+};
+
+const PROBE = {
+  type: "object",
+  properties: { question: TEXT, choices: LINES, answer: { type: "integer" }, why: TEXT, evidence: ANCHORS.items },
+  required: ["question", "choices", "answer", "why"],
+};
+
+/** WALKTHROUGH_SCHEMA with the optional predict-first question on a step. */
+export const WALKTHROUGH_SCHEMA_PROBES = {
+  type: "object",
+  properties: {
+    walkthrough: { type: "array", items: { type: "object", properties: { title: TEXT, why: LINES, changes: ANCHORS, probe: PROBE }, required: ["title", "why", "changes"] } },
   },
   required: ["walkthrough"],
 };
@@ -210,8 +239,19 @@ export const VERIFY_SCHEMA = {
 };
 
 /** Asks the analysis session to group the PR's changes into guided review steps. */
-export function buildWalkthroughPrompt(generatedPatterns: string[] = []): string {
-  return `${WALKTHROUGH_RULES}${generatedNote(generatedPatterns)}
+export function buildWalkthroughPrompt(generatedPatterns: string[] = [], probes?: { avoid: string[] }): string {
+  const ask = probes
+    ? `
+
+The reviewer wants to predict before reading. On at most 2 steps that change behavior, add a "probe": a question about
+what the code does in one concrete case (an edge case or a failure, not trivia), to answer before reading the step.
+- "choices": 2–4 short answers, all plausible; put the right one at a random position. "answer" is its 0-based index.
+- "why": one or two sentences on why the code does that. "evidence": the line that decides it.
+- Ask only about behavior that none of these already describes, so the question doesn't repeat what the reviewer has read:
+${probes.avoid.length ? probes.avoid.map((x) => `  - ${oneLine(x, 120)}`).join("\n") : "  (nothing flagged)"}
+- Add no probe when no step qualifies. Shape: "probe": { "question": "...", "choices": ["...", "..."], "answer": 1, "why": "...", "evidence": { "path": "src/x.ts", "startLine": 12, "endLine": 12 } }`
+    : "";
+  return `${WALKTHROUGH_RULES}${generatedNote(generatedPatterns)}${ask}
 
 Use the PR you analyzed earlier in this session (git diff against the base branch).
 Give the result as one JSON object: { ${WALKTHROUGH_SHAPE} }`;
@@ -383,10 +423,25 @@ function asSeverity(v: unknown): Severity {
 }
 
 function parseSteps(v: unknown): WalkStep[] | undefined {
+  let probes = 0;
   const steps = asArray<WalkStep>(v)
     .filter((s) => s && typeof s.title === "string")
-    .map((s) => ({ title: s.title, why: asText(s.why), changes: asAnchors(s.changes) }));
+    .map((s) => {
+      const probe = probes < 2 ? asProbe(s.probe) : undefined;
+      if (probe) probes++;
+      return { title: s.title, why: asText(s.why), changes: asAnchors(s.changes), ...(probe ? { probe } : {}) };
+    });
   return steps.length ? steps : undefined;
+}
+
+/** A usable question, or nothing: 2–4 choices, a right answer among them, and a question. */
+function asProbe(v: unknown): Probe | undefined {
+  const p = v as Partial<Probe> | undefined;
+  if (!p || typeof p.question !== "string" || !p.question.trim()) return undefined;
+  const choices = asArray<unknown>(p.choices).filter((c): c is string => typeof c === "string" && !!c.trim());
+  if (choices.length < 2 || choices.length > 4 || !Number.isInteger(p.answer) || (p.answer as number) < 0 || (p.answer as number) >= choices.length) return undefined;
+  const evidence = asAnchors([p.evidence])[0];
+  return { question: p.question, choices, answer: p.answer as number, why: asText(p.why), ...(evidence ? { evidence } : {}) };
 }
 
 /** What a run answered: the data when it was given a schema, otherwise its text. */
