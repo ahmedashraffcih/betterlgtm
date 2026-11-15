@@ -2,6 +2,12 @@
 
 All notable changes to BetterLGTM are listed here. Versions follow [semantic versioning](https://semver.org/).
 
+## [0.7.0] — 2026-11-15
+
+- **PR map**: **Diff › Map** draws the changed files grouped by folder, with their links, findings and review state.
+- **Files that may be affected**: the map can add the unchanged files that import the changed ones, one or two imports away (TypeScript, JavaScript, Python, Go, Rust).
+- **Fixed**: findings whose conversation was resolved on GitHub stayed open; a pinch on Linux zoomed the whole window instead of the map.
+
 ## [0.6.2] — 2026-11-12
 
 - **Copilot CLI (experimental)** as a review agent, read-only like the others.
