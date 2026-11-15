@@ -235,7 +235,7 @@ export function Settings(p: Props) {
             <p className="lead">Defaults for the Diff tab. You can still switch while reviewing; the last choice is remembered.</p>
             <div className="set-group">
               <Row label="Diff view" hint="Guided groups related changes into sections">
-                <Seg label="Diff view" value={s.diffMode} options={[["guided", "Guided"], ["files", "Files"]]} onChange={(v) => p.update({ diffMode: v })} />
+                <Seg label="Diff view" value={s.diffMode} options={[["guided", "Guided"], ["files", "Files"], ["map", "Map"]]} onChange={(v) => p.update({ diffMode: v })} />
               </Row>
               <Row label="Diff layout" hint="Split needs a wide window">
                 <Seg label="Diff layout" value={s.diffLayout} options={[["unified", "Unified"], ["split", "Split"]]} onChange={(v) => p.update({ diffLayout: v })} />

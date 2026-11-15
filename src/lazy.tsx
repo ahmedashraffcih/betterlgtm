@@ -17,6 +17,8 @@ function view<C extends ComponentType<any>>(load: () => Promise<C>) {
 
 export const AnalysisView = view(() => import("./components/AnalysisView").then((m) => m.AnalysisView));
 export const GuidedReview = view(() => import("./components/GuidedReview").then((m) => m.GuidedReview));
+// The map isn't preloaded: React Flow and the layout engine only load when someone opens it.
+export const PrMap = view(() => import("./components/PrMap").then((m) => m.PrMap));
 export const DiffView = view(() => import("./components/DiffView").then((m) => m.DiffView));
 export const Settings = view(() => import("./components/Settings").then((m) => m.Settings));
 export const SubmitReview = view(() => import("./components/SubmitReview").then((m) => m.SubmitReview));

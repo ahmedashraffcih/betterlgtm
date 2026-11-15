@@ -1,4 +1,4 @@
-import { ArrowLeft, CaseSensitive, Check, ChevronDown, ChevronUp, Columns2, Eye, Files, Flag, FolderSearch, ListOrdered, MessageSquare, MessageSquarePlus, Regex, Rows3, Search, Space, X } from "lucide-react";
+import { Waypoints, ArrowLeft, CaseSensitive, Check, ChevronDown, ChevronUp, Columns2, Eye, Files, Flag, FolderSearch, ListOrdered, MessageSquare, MessageSquarePlus, Regex, Rows3, Search, Space, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Decoration, Diff, Hunk, getChangeKey, getCollapsedLinesCountBetween, insertHunk, textLinesToHunk,
@@ -12,9 +12,9 @@ import { useTokens } from "../highlightAsync";
 import { useElementWidth } from "../hooks";
 import { useAgent } from "../harness";
 
-export type DiffMode = "guided" | "files";
+export type DiffMode = "guided" | "files" | "map";
 
-/** Switch between the guided review (changes grouped into steps) and the plain file list. */
+/** Switch between the guided review (changes grouped into steps), the plain file list and the PR map. */
 export function DiffModeSwitch({ mode, onMode, compact }: { mode: DiffMode; onMode: (m: DiffMode) => void; compact?: boolean }) {
   return (
     <div className="seg" role="group" aria-label="Diff mode">
@@ -23,6 +23,9 @@ export function DiffModeSwitch({ mode, onMode, compact }: { mode: DiffMode; onMo
       </button>
       <button type="button" className={mode === "files" ? "on" : ""} aria-pressed={mode === "files"} title="All files" onClick={() => onMode("files")}>
         <Files size={13} />{!compact && "Files"}
+      </button>
+      <button type="button" className={mode === "map" ? "on" : ""} aria-pressed={mode === "map"} title="Map of the changed files" onClick={() => onMode("map")}>
+        <Waypoints size={13} />{!compact && "Map"}
       </button>
     </div>
   );

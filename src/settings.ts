@@ -28,7 +28,7 @@ export interface Settings {
   includeTeams: boolean;
   showDrafts: boolean;
   // Review
-  diffMode: "guided" | "files";
+  diffMode: "guided" | "files" | "map";
   diffLayout: "unified" | "split";
   hideGenerated: boolean;
   /** The reviewer's own globs for files to treat as generated, on top of the built-in list. */

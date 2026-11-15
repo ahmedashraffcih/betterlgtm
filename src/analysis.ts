@@ -65,6 +65,28 @@ export interface WalkStep {
   changes: Anchor[];
 }
 
+export const MAP_EDGE_KINDS = ["imports", "calls", "renders", "implements", "tests", "configures"] as const;
+export type MapEdgeKind = (typeof MAP_EDGE_KINDS)[number];
+
+/** A relationship between two changed files that matters for reading the PR. */
+export interface MapEdge {
+  from: string;
+  to: string;
+  kind: MapEdgeKind;
+  /** Up to a short sentence: what the link means for this PR. */
+  why?: string;
+}
+
+/**
+ * The agent's part of the PR map: what each changed file does, and how the changed files relate.
+ * The files themselves come from the diff; this only labels and links them.
+ */
+export interface ChangeMap {
+  /** One line per changed file, keyed by path. */
+  roles: Record<string, string>;
+  edges: MapEdge[];
+}
+
 export type Decision = "approve" | "comment" | "request_changes";
 
 export interface Analysis {
@@ -75,6 +97,8 @@ export interface Analysis {
   findings: Finding[];
   /** Guided review steps. Missing in analyses from older versions; can be generated separately. */
   walkthrough?: WalkStep[];
+  /** Roles and links for the PR map. Comes with the guided review; missing in older ones. */
+  map?: ChangeMap;
   /** Repository guideline files Claude followed, such as REVIEW.md. */
   guidelines?: string[];
   /** Sensitive areas the PR touches. */
@@ -112,7 +136,15 @@ const WALKTHROUGH_RULES = `Group the changes into review steps for a guided revi
 - Title up to 8 words. "why" is 1–3 short bullets: what changed and why it matters.
 - "changes" lists line ranges in the new version of each file. For deleted files use startLine 0 and endLine 0.`;
 
-const WALKTHROUGH_SHAPE = `"walkthrough": [{ "title": "...", "why": ["..."], "changes": [{ "path": "src/x.ts", "startLine": 10, "endLine": 40 }] }]`;
+const MAP_RULES = `Also describe the changed files for a map of the PR:
+- "nodes": every changed file except generated ones, with "role": what the file does in this PR, up to 8 words.
+- "edges": how the changed files depend on each other, as the code shows it (an import, a call, a component
+  that renders another, a type implemented, a test of the file, config the file reads). Only between changed files,
+  "from" is the file that depends on "to". "why" is up to 12 words on what the link means for this PR.
+  Only edges you saw in the code; leave out links that don't help to read the PR. Use paths exactly as in the diff.`;
+
+const WALKTHROUGH_SHAPE = `"walkthrough": [{ "title": "...", "why": ["..."], "changes": [{ "path": "src/x.ts", "startLine": 10, "endLine": 40 }] }],
+"map": { "nodes": [{ "path": "src/x.ts", "role": "..." }], "edges": [{ "from": "src/y.ts", "to": "src/x.ts", "kind": "calls", "why": "..." }] }`;
 
 // Schemas for `claude --json-schema`. They fix the structure; the prompts explain what goes in each field.
 const TEXT = { type: "string" };
@@ -131,6 +163,17 @@ export const WALKTHROUGH_SCHEMA = {
   type: "object",
   properties: {
     walkthrough: { type: "array", items: { type: "object", properties: { title: TEXT, why: LINES, changes: ANCHORS }, required: ["title", "why", "changes"] } },
+    map: {
+      type: "object",
+      properties: {
+        nodes: { type: "array", items: { type: "object", properties: { path: TEXT, role: TEXT }, required: ["path", "role"] } },
+        edges: {
+          type: "array",
+          items: { type: "object", properties: { from: TEXT, to: TEXT, kind: { enum: [...MAP_EDGE_KINDS] }, why: TEXT }, required: ["from", "to", "kind"] },
+        },
+      },
+      required: ["nodes", "edges"],
+    },
   },
   required: ["walkthrough"],
 };
@@ -213,6 +256,8 @@ export const VERIFY_SCHEMA = {
 export function buildWalkthroughPrompt(generatedPatterns: string[] = []): string {
   return `${WALKTHROUGH_RULES}${generatedNote(generatedPatterns)}
 
+${MAP_RULES}
+
 Use the PR you analyzed earlier in this session (git diff against the base branch).
 Give the result as one JSON object: { ${WALKTHROUGH_SHAPE} }`;
 }
@@ -254,7 +299,7 @@ const STATE_NOTE: Record<FindingStateKind, string> = {
 
 const oneLine = (text: string, max: number) => text.replace(/\s+/g, " ").trim().slice(0, max);
 
-const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+export const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 export function buildAnalysisPrompt(pr: PrDetails, o: AnalysisOptions = {}): string {
   const { since, issues = [], threads = [], earlier = [], dismissedInRepo = [] } = o;
@@ -429,6 +474,35 @@ export function parseWalkthrough(answer: unknown): WalkStep[] | null {
   return null;
 }
 
+/**
+ * Reads the map's roles and edges from the guided review answer. Paths are only trimmed here;
+ * the map view drops any that aren't in the diff, so a wrong path never draws a node.
+ */
+export function parseChangeMap(answer: unknown): ChangeMap | undefined {
+  for (const data of candidates(answer)) {
+    const m = data.map;
+    if (!m || typeof m !== "object") continue;
+    const roles: Record<string, string> = {};
+    for (const n of asArray<{ path?: unknown; role?: unknown }>(m.nodes)) {
+      if (n && typeof n.path === "string" && n.path.trim() && typeof n.role === "string" && n.role.trim()) roles[n.path.trim()] = n.role.trim();
+    }
+    const seen = new Set<string>();
+    const edges: MapEdge[] = [];
+    for (const e of asArray<Record<string, unknown>>(m.edges)) {
+      if (!e || typeof e.from !== "string" || typeof e.to !== "string") continue;
+      const from = e.from.trim();
+      const to = e.to.trim();
+      const kind = MAP_EDGE_KINDS.includes(e.kind as MapEdgeKind) ? (e.kind as MapEdgeKind) : "calls";
+      const id = `${from}\u0000${to}`;
+      if (!from || !to || from === to || seen.has(id)) continue;
+      seen.add(id);
+      edges.push({ from, to, kind, why: typeof e.why === "string" && e.why.trim() ? e.why.trim() : undefined });
+    }
+    if (Object.keys(roles).length || edges.length) return { roles, edges };
+  }
+  return undefined;
+}
+
 /** Reads the analysis out of Claude's final answer. Returns null when there is none. */
 export function parseAnalysis(answer: unknown): Analysis | null {
   for (const data of candidates(answer)) {
@@ -470,6 +544,7 @@ export function parseAnalysis(answer: unknown): Analysis | null {
           finding: typeof c.finding === "number" ? remap.get(c.finding) : undefined,
         })),
         walkthrough: parseSteps(data.walkthrough),
+        map: parseChangeMap(data),
         unmentioned: asArray<Unmentioned>(data.unmentioned)
           .filter((u) => u && typeof u.text === "string" && u.text.trim())
           .map((u) => ({ text: u.text, anchors: asAnchors(u.anchors) })),

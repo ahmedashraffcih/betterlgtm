@@ -13,9 +13,9 @@ const requests: ReviewRequest[] = [
     updatedAt: new Date(Date.now() - 2 * 3600e3).toISOString(),
     author: { login: "lkowal" },
     repository: { name: "payments-api", nameWithOwner: "acme/payments-api" },
-    additions: 21,
-    deletions: 2,
-    changedFiles: 2,
+    additions: 39,
+    deletions: 3,
+    changedFiles: 6,
     reviewDecision: "REVIEW_REQUIRED",
     labels: [{ name: "payments", color: "1d76db" }],
     ci: "SUCCESS",
@@ -76,9 +76,9 @@ const details: PrDetails = {
   headRefName: "feat/idempotency-keys",
   baseRefName: "main",
   headRefOid: "4e1b07c9a1b2c3d4",
-  additions: 21,
-  deletions: 2,
-  changedFiles: 2,
+  additions: 39,
+  deletions: 3,
+  changedFiles: 6,
   reviewDecision: "REVIEW_REQUIRED",
   latestReviews: [
     { author: { login: "mchen" }, state: "APPROVED", submittedAt: new Date(Date.now() - 50 * 60e3).toISOString() },
@@ -128,6 +128,44 @@ index 3333333..4444444 100644
 -  res.status(201).json(serialize(charge));
 +  res.status(201).json(serialize(charge));
  });
+diff --git a/src/idempotency/types.ts b/src/idempotency/types.ts
+index 7777777..8888888 100644
+--- a/src/idempotency/types.ts
++++ b/src/idempotency/types.ts
+@@ -1,3 +1,6 @@
+ export interface CachedResponse {
+-  body: unknown;
++  status: number;
++  body: unknown;
++  /** When the response was first sent, for debugging retries. */
++  savedAt: string;
+ }
+diff --git a/src/infra/redis.ts b/src/infra/redis.ts
+new file mode 100644
+index 0000000..9999999
+--- /dev/null
++++ b/src/infra/redis.ts
+@@ -0,0 +1,5 @@
++import Redis from "ioredis";
++
++// One connection for the whole process.
++export const redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
++export default redis;
+diff --git a/test/charges.idempotency.test.ts b/test/charges.idempotency.test.ts
+new file mode 100644
+index 0000000..aaaaaaa
+--- /dev/null
++++ b/test/charges.idempotency.test.ts
+@@ -0,0 +1,9 @@
++import { app } from "../src/app";
++import request from "supertest";
++
++test("a repeated key returns the first response", async () => {
++  const first = await request(app).post("/v1/charges").set("Idempotency-Key", "k1").send({ amount: 100 });
++  const again = await request(app).post("/v1/charges").set("Idempotency-Key", "k1").send({ amount: 100 });
++  expect(again.body).toEqual(first.body);
++  expect(again.status).toBe(first.status);
++});
 diff --git a/package-lock.json b/package-lock.json
 index 5555555..6666666 100644
 --- a/package-lock.json
@@ -202,9 +240,28 @@ const verification = {
 };
 
 const walkthrough = [
-  { title: "Idempotency store in Redis", why: ["New `lookup()` and `save()` keep responses for 24 h", "Replaces the empty `remember()` stub"], changes: [{ path: "src/idempotency/store.ts", startLine: 10, endLine: 28 }] },
+  { title: "Idempotency store in Redis", why: ["New `lookup()` and `save()` keep responses for 24 h", "Replaces the empty `remember()` stub", "`CachedResponse` now carries the status code"], changes: [{ path: "src/infra/redis.ts", startLine: 1, endLine: 5 }, { path: "src/idempotency/types.ts", startLine: 1, endLine: 6 }, { path: "src/idempotency/store.ts", startLine: 10, endLine: 28 }] },
   { title: "Charge route uses the store", why: ["Reads `Idempotency-Key` and returns cached responses", "Saves the first response after charging"], changes: [{ path: "src/http/charges.ts", startLine: 38, endLine: 48 }] },
+  { title: "Test for repeated keys", why: ["Sends the same key twice and expects the same response"], changes: [{ path: "test/charges.idempotency.test.ts", startLine: 1, endLine: 9 }] },
 ];
+
+/** The guided review's map: what each file does and how the changed files depend on each other. */
+const changeMap = {
+  nodes: [
+    { path: "src/http/charges.ts", role: "Returns cached responses for repeated keys" },
+    { path: "src/idempotency/store.ts", role: "Looks up and saves responses in Redis" },
+    { path: "src/idempotency/types.ts", role: "Cached response gains a status code" },
+    { path: "src/infra/redis.ts", role: "New shared Redis connection" },
+    { path: "test/charges.idempotency.test.ts", role: "Repeated key returns the first response" },
+  ],
+  edges: [
+    { from: "src/http/charges.ts", to: "src/idempotency/store.ts", kind: "calls", why: "Calls lookup() before charging" },
+    { from: "src/idempotency/store.ts", to: "src/infra/redis.ts", kind: "imports", why: "Every read and write goes through this connection" },
+    { from: "src/idempotency/store.ts", to: "src/idempotency/types.ts", kind: "imports", why: "Saves and returns CachedResponse" },
+    { from: "test/charges.idempotency.test.ts", to: "src/http/charges.ts", kind: "tests", why: "Only the sequential case; no concurrent test" },
+    { from: "src/http/charges.ts", to: "src/nowhere.ts", kind: "calls", why: "Not in the diff, so the map drops it" },
+  ],
+};
 
 /** A large synthetic diff (PR 1290) for checking diff performance. */
 function bigDiff(): string {
@@ -350,7 +407,7 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
         : isAnalysis
         ? "```json\n" + JSON.stringify(analysis) + "\n```"
         : isGuide
-          ? "```json\n" + JSON.stringify({ walkthrough }) + "\n```"
+          ? "```json\n" + JSON.stringify({ walkthrough, map: changeMap }) + "\n```"
           : "ok";
       onEvent?.({ type: "assistant", message: { content: [{ type: "text", text: isAnalysis || isGuide || isRecheck || isVerify ? "Done." : "This is a sample answer from the browser preview." }] } });
       onEvent?.({ type: "result", session_id: "mock-session", result, usage: { input_tokens: 12000, output_tokens: 900 } });

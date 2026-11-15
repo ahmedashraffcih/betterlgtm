@@ -5,11 +5,11 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
 import { api, describeToolUse, errorText, isSampleMode, setSampleMode, type ClaudeEvent, type ToolStatus, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
-import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, anchorLabel, answerOf, applyVerification, carryFindingIds, currentStates, findingId, settledNote, worthVerifying, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
+import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, anchorLabel, answerOf, applyVerification, carryFindingIds, currentStates, findingId, settledNote, worthVerifying, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseChangeMap, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
 import type { OutlineKey, RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
 import type { DiffMode } from "./components/DiffView";
-import { AnalysisView, CommandPalette, DescriptionDialog, DiffView, FilterDialog, GuidedReview, InfoDialog, Onboarding, preloadViews, Settings, SubmitReview, WhatsNew } from "./lazy";
+import { AnalysisView, CommandPalette, DescriptionDialog, DiffView, FilterDialog, GuidedReview, InfoDialog, Onboarding, preloadViews, PrMap, Settings, SubmitReview, WhatsNew } from "./lazy";
 import { appVersion, hasNotes, versionToAnnounce } from "./whatsNew";
 import { AgentContext, harnessOf } from "./harness";
 import { setupBroken } from "./setup";
@@ -466,10 +466,11 @@ export default function App() {
       }, { schema: WALKTHROUGH_SCHEMA, maxBudgetUsd });
       const steps = parseWalkthrough(answer);
       if (!steps) throw new Error(`${agent}'s answer didn't contain review steps. Try again.`);
+      const map = parseChangeMap(answer);
       update(k, (x) => ({
         ...x,
         sessionId,
-        analysis: x.analysis ? { ...x.analysis, walkthrough: steps } : x.analysis,
+        analysis: x.analysis ? { ...x.analysis, walkthrough: steps, map } : x.analysis,
         tokens: (x.tokens ?? 0) + tokensOf(usage),
         costUsd: (x.costUsd ?? 0) + (usage.total_cost_usd ?? 0),
       }));
@@ -1112,7 +1113,7 @@ export default function App() {
   // ⌘F / Ctrl+F: the search lives in the file diff, so switch to it, then open or focus the search box.
   const findInDiff = () => {
     setTab("diff");
-    if (diffMode === "guided") setDiffMode("files");
+    if (diffMode !== "files") setDiffMode("files");
     let tries = 0;
     const open = () => {
       const input = document.querySelector<HTMLInputElement>('input[aria-label="Search the diff"]');
@@ -1142,6 +1143,7 @@ export default function App() {
     { id: "find", menu: "View", label: "Find in diff…", enabled: !!details, keys: { key: "f", ctrl: true }, run: findInDiff },
     { id: "guided", menu: "View", label: "Guided review", checked: diffMode === "guided", run: () => { setDiffMode("guided"); if (selected) setTab("diff"); }, separatorBefore: true },
     { id: "files", menu: "View", label: "All files", checked: diffMode === "files", run: () => { setDiffMode("files"); if (selected) setTab("diff"); } },
+    { id: "map", menu: "View", label: "Map of changes", checked: diffMode === "map", run: () => { setDiffMode("map"); if (selected) setTab("diff"); } },
     { id: "split", menu: "View", label: "Split diff", checked: split, run: () => setSplit(!split) },
     { id: "theme-system", menu: "View", label: "System theme", checked: settings.theme === "system", run: () => updateSettings({ theme: "system" }), separatorBefore: true },
     { id: "theme-light", menu: "View", label: "Light theme", checked: settings.theme === "light", run: () => updateSettings({ theme: "light" }) },
@@ -1450,6 +1452,23 @@ export default function App() {
             onReviewed={setReviewed}
             onGenerate={generateWalkthrough}
             hide={hideRules}
+          />
+        )}
+        {details && tab === "diff" && diffMode === "map" && diffRange === "all" && (
+          <PrMap
+            files={diffFiles}
+            steps={analysis?.walkthrough}
+            map={analysis?.map}
+            findings={analysis?.findings ?? []}
+            risks={analysis?.risks ?? []}
+            reviewed={reviewedHunks}
+            hide={hideRules}
+            generating={key ? guideRuns[key] : undefined}
+            canGenerate={!!(session?.sessionId && session.worktree)}
+            onMode={setDiffMode}
+            onGenerate={generateWalkthrough}
+            onOpenStep={(i) => { setGuideStep(i); setDiffMode("guided"); }}
+            onOpenFile={(path) => { setDiffTarget({ path, range: null, finding: null }); setDiffMode("files"); }}
           />
         )}
         {details && tab === "diff" && (diffMode === "files" || diffRange === "since") && (
