@@ -4,7 +4,7 @@ import { Check, Code, Download, ExternalLink, History, FileDiff, GitBranch, GitP
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { parseDiff, type FileData } from "react-diff-view";
-import { api, describeToolUse, errorText, isSampleMode, setSampleMode, type ClaudeEvent, type ToolStatus, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
+import { api, describeToolUse, errorText, isSampleMode, setSampleMode, type ClaudeEvent, type ToolStatus, type BlastRadius, type LastReview, type LinkedIssue, type PrDetails, type ReviewRequest, type ReviewThread } from "./api";
 import { ANALYSIS_SCHEMA, RECHECK_SCHEMA, VERIFY_SCHEMA, WALKTHROUGH_SCHEMA, anchorLabel, answerOf, applyVerification, carryFindingIds, currentStates, findingId, settledNote, worthVerifying, type EarlierFinding, type Finding, type RepoDismissal, type FindingState, buildAnalysisPrompt, buildDescriptionPrompt, buildReplyPrompt, buildSummaryPrompt, buildRecheckPrompt, buildVerifyPrompt, buildWalkthroughPrompt, parseAnalysis, parseChangeMap, parseRecheck, parseVerify, parseWalkthrough, type Anchor } from "./analysis";
 import type { OutlineKey, RunState } from "./components/AnalysisView";
 import { ClaudePanel, type ChatContext } from "./components/ClaudePanel";
@@ -952,6 +952,21 @@ export default function App() {
   const hasNewCommits = !!(details && lastReview && lastReview.commitId !== details.headRefOid);
   const rangeFiles = diffRange === "since" && since?.files ? since.files : files;
   const diffFiles = useMemo(() => (settings.hideWhitespace ? ignoreWhitespace(rangeFiles) : rangeFiles), [rangeFiles, settings.hideWhitespace]);
+  // The map's files that may be affected: read from the worktree's imports when the map is open, once per checkout and diff.
+  const [radii, setRadii] = useState<Record<string, { sig: string; data?: BlastRadius; loading?: boolean; error?: string }>>({});
+  const mapShown = !!details && tab === "diff" && diffMode === "map" && diffRange === "all";
+  const changedPaths = useMemo(() => files.map(filePath), [files]);
+  const radiusSig = `${session?.worktree ?? ""}\n${details?.headRefOid ?? ""}\n${changedPaths.join("\n")}`;
+  useEffect(() => {
+    const worktree = session?.worktree;
+    if (!mapShown || !key || !worktree || !changedPaths.length || radii[key]?.sig === radiusSig) return;
+    const k = key;
+    const sig = radiusSig;
+    setRadii((r) => ({ ...r, [k]: { sig, loading: true } }));
+    api.blastRadius(worktree, changedPaths)
+      .then((data) => setRadii((r) => (r[k]?.sig === sig ? { ...r, [k]: { sig, data } } : r)))
+      .catch((e) => setRadii((r) => (r[k]?.sig === sig ? { ...r, [k]: { sig, error: errorText(e) } } : r)));
+  }, [mapShown, key, radiusSig]);
   /** Lines picked in the diff that the next chat question is about. */
   const [lineContext, setLineContext] = useState<ChatContext | null>(null);
   useEffect(() => setLineContext(null), [key]);
@@ -1469,6 +1484,8 @@ export default function App() {
             onGenerate={generateWalkthrough}
             onOpenStep={(i) => { setGuideStep(i); setDiffMode("guided"); }}
             onOpenFile={(path) => { setDiffTarget({ path, range: null, finding: null }); setDiffMode("files"); }}
+            radius={key && session?.worktree ? radii[key] ?? { loading: true } : undefined}
+            onOpenElsewhere={session?.worktree ? (path) => openInVsCode(session.worktree!, path) : undefined}
           />
         )}
         {details && tab === "diff" && (diffMode === "files" || diffRange === "since") && (

@@ -43,6 +43,32 @@ export interface ToolStatus {
   dataDir: string;
 }
 
+/** An unchanged file that depends on the PR's changes, from the imports in the worktree. */
+export interface AffectedFile {
+  path: string;
+  /** 1 when it imports a changed file, 2 when it imports a file that does. */
+  hops: number;
+  test: boolean;
+  /** Files on the map it imports: changed files for hop 1, hop-1 files for hop 2. */
+  imports: string[];
+  /** The changed files it depends on, directly or not. */
+  reaches: string[];
+}
+
+/** What the PR's changes reach, worked out from imports in the worktree, without the agent. */
+export interface BlastRadius {
+  /** Imports between changed files. */
+  links: { from: string; to: string }[];
+  affected: AffectedFile[];
+  /** Affected files over the limit, left out. */
+  more: number;
+  /** Source files read. */
+  scanned: number;
+  languages: string[];
+  /** The repository has more source files than are read. */
+  truncated: boolean;
+}
+
 export interface ReviewRequest {
   number: number;
   title: string;
@@ -179,6 +205,8 @@ export const api = {
   fileAt: (repo: string, sha: string, path: string) => invoke<string>("file_at", { repo, sha, path }),
   searchWorktree: (cwd: string, pattern: string, regex: boolean, caseSensitive: boolean) =>
     invoke<{ path: string; line: number; text: string }[]>("search_worktree", { cwd, pattern, regex, caseSensitive }),
+  /** Unchanged files that import the changed ones, read from the worktree's imports. */
+  blastRadius: (cwd: string, changed: string[]) => invoke<BlastRadius>("blast_radius", { cwd, changed }),
   listOrgs: () => invoke<{ login: string; orgs: string[] }>("list_orgs"),
   setConfig: (config: { ghPath: string; claudePath: string; harness: string; codexPath: string; geminiPath: string; copilotPath: string; dataDir: string; model: string; effort: string }) =>
     real<void>("set_config", { config }),

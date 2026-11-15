@@ -1,5 +1,6 @@
 mod claude;
 mod config;
+mod deps;
 mod gh;
 mod harness;
 mod process;
@@ -22,6 +23,14 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::new().with_denylist(&["settings"]).build())
         .manage(claude::Runs::default())
         .manage(config::ConfigState::default())
+        .setup(|app| {
+            #[cfg(target_os = "linux")]
+            if let Some(main) = tauri::Manager::get_webview_window(app, "main") {
+                window::route_pinch(&main);
+            }
+            let _ = app;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             config::set_config,
             config::tool_status,
@@ -42,6 +51,7 @@ pub fn run() {
             worktree::prepare_worktree,
             worktree::diff_since,
             worktree::search_worktree,
+            deps::blast_radius,
             claude::claude_run,
             claude::claude_cancel,
             store::sessions_load,

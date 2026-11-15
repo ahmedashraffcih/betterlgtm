@@ -290,6 +290,26 @@ export async function mockInvoke(cmd: string, args: Record<string, unknown> = {}
       return requests;
     case "file_at":
       return Array.from({ length: 40 }, (_, i) => (i === 9 ? 'import { redis } from "../infra/redis";' : `// line ${i + 1}`)).join("\n");
+    case "blast_radius":
+      return {
+        links: [
+          { from: "src/http/charges.ts", to: "src/idempotency/store.ts" },
+          { from: "src/idempotency/store.ts", to: "src/infra/redis.ts" },
+          { from: "test/charges.idempotency.test.ts", to: "src/http/charges.ts" },
+        ],
+        affected: [
+          { path: "src/http/router.ts", hops: 1, test: false, imports: ["src/http/charges.ts"], reaches: ["src/http/charges.ts"] },
+          { path: "src/jobs/retry.ts", hops: 1, test: false, imports: ["src/idempotency/store.ts", "src/idempotency/types.ts"], reaches: ["src/idempotency/store.ts", "src/idempotency/types.ts"] },
+          { path: "src/infra/health.ts", hops: 1, test: false, imports: ["src/infra/redis.ts"], reaches: ["src/infra/redis.ts"] },
+          { path: "test/redis.test.ts", hops: 1, test: true, imports: ["src/infra/redis.ts"], reaches: ["src/infra/redis.ts"] },
+          { path: "src/server.ts", hops: 2, test: false, imports: ["src/http/router.ts", "src/infra/health.ts"], reaches: ["src/http/charges.ts", "src/infra/redis.ts"] },
+          { path: "src/worker.ts", hops: 2, test: false, imports: ["src/jobs/retry.ts"], reaches: ["src/idempotency/store.ts", "src/idempotency/types.ts"] },
+        ],
+        more: 0,
+        scanned: 214,
+        languages: ["TypeScript/JavaScript"],
+        truncated: false,
+      };
     case "search_worktree":
       return [
         { path: "src/idempotency/store.ts", line: 13, text: "  const raw = await redis.get(`idem:${key}`);" },

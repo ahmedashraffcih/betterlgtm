@@ -1,9 +1,10 @@
 import { Background, Controls, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/base.css";
-import { Check, FileSymlink, ListOrdered, Loader, Shield, Sparkles, X } from "lucide-react";
+import { Check, Code2, FileSymlink, FlaskConical, ListOrdered, Loader, Radar, Shield, Sparkles, X } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
 import type { FileData } from "react-diff-view";
 import { SEVERITY_RANK, type ChangeMap, type Finding, type MapEdge, type Risk, type Severity, type WalkStep } from "../analysis";
+import type { AffectedFile, BlastRadius } from "../api";
 import { allReviewed, filePath, fileStats, findFile, hiddenKind, hunkKey, type HideRules } from "../diffUtils";
 import { useAgent } from "../harness";
 import { useElementWidth } from "../hooks";
@@ -26,6 +27,22 @@ interface Props {
   onOpenStep: (i: number) => void;
   /** Opens a file in the Files view. */
   onOpenFile: (path: string) => void;
+  /** Files outside the diff that import the changed ones, from the worktree. */
+  radius?: { data?: BlastRadius; loading?: boolean; error?: string };
+  /** Opens an unchanged file in the editor; missing without a worktree. */
+  onOpenElsewhere?: (path: string) => void;
+}
+
+/** How far out from the changed files the map shows files that may be affected. */
+type Reach = 0 | 1 | 2;
+const REACH_KEY = "betterlgtm.mapReach";
+function loadReach(): Reach {
+  try {
+    const v = localStorage.getItem(REACH_KEY);
+    return v === "0" ? 0 : v === "2" ? 2 : 1;
+  } catch {
+    return 1;
+  }
 }
 
 type Status = "add" | "modify" | "delete" | "rename";
@@ -45,7 +62,12 @@ interface FileInfo {
   worst?: Severity;
   risks: string[];
   reviewed: boolean;
+  /** Set for files outside the diff that import changed ones. */
+  affected?: AffectedFile;
 }
+
+/** A link on the map: from the agent, from the imports between changed files, or to an affected file. */
+type ShownEdge = MapEdge & { source: "agent" | "imports" | "affected" };
 
 const NODE_W = 230;
 const NODE_H = 62;
@@ -59,7 +81,7 @@ const STATUS: Record<Status, { letter: string; label: string }> = {
 const dirOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
 
 /** Everything the map shows about each changed file, from the diff, the guided review and the findings. */
-function describeFiles(p: Props): { infos: FileInfo[]; edges: MapEdge[]; hiddenGenerated: number } {
+function describeFiles(p: Props, reach: Reach): { infos: FileInfo[]; edges: ShownEdge[]; hiddenGenerated: number; affected: number } {
   // Generated files would only add noise; tests stay, since what they test is worth seeing.
   const shown = p.files.filter((f) => hiddenKind(f, { ...p.hide, tests: false }) !== "generated");
   const byPath = new Map<string, FileInfo>();
@@ -106,19 +128,49 @@ function describeFiles(p: Props): { infos: FileInfo[]; edges: MapEdge[]; hiddenG
     info.findings.sort((a, b) => SEVERITY_RANK[p.findings[a].severity] - SEVERITY_RANK[p.findings[b].severity]);
     info.worst = info.findings.length ? p.findings[info.findings[0]].severity : undefined;
   }
-  // An edge is drawn only when both ends are changed files that are on the map.
+  // An edge is drawn only when both ends are files on the map.
   const seen = new Set<string>();
-  const edges: MapEdge[] = [];
+  const edges: ShownEdge[] = [];
+  const add = (from: string, to: string, e: Omit<ShownEdge, "from" | "to">) => {
+    const id = `${from}\u0000${to}`;
+    if (from === to || seen.has(id)) return;
+    seen.add(id);
+    edges.push({ ...e, from, to });
+  };
   for (const e of p.map?.edges ?? []) {
     const from = resolve(e.from);
     const to = resolve(e.to);
-    if (!from || !to || from === to) continue;
-    const id = `${from.path}\u0000${to.path}`;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    edges.push({ ...e, from: from.path, to: to.path });
+    if (from && to) add(from.path, to.path, { ...e, source: "agent" });
   }
-  return { infos: [...byPath.values()], edges, hiddenGenerated: p.files.length - shown.length };
+  // Imports the agent didn't mention, read from the code.
+  for (const l of p.radius?.data?.links ?? []) {
+    const from = byPath.get(l.from);
+    const to = byPath.get(l.to);
+    if (from && to && !seen.has(`${to.path}\u0000${from.path}`)) add(from.path, to.path, { kind: "imports", source: "imports" });
+  }
+  const changedCount = byPath.size;
+  for (const a of p.radius?.data?.affected ?? []) {
+    if (a.hops > reach || byPath.has(a.path)) continue;
+    byPath.set(a.path, {
+      path: a.path,
+      name: a.path.split("/").pop() ?? a.path,
+      dir: dirOf(a.path),
+      status: "modify",
+      add: 0,
+      del: 0,
+      steps: [],
+      findings: [],
+      risks: [],
+      reviewed: false,
+      affected: a,
+    });
+  }
+  for (const info of byPath.values()) {
+    for (const to of info.affected?.imports ?? []) {
+      if (byPath.has(to)) add(info.path, to, { kind: info.affected?.test ? "tests" : "imports", source: "affected" });
+    }
+  }
+  return { infos: [...byPath.values()], edges, hiddenGenerated: p.files.length - shown.length, affected: byPath.size - changedCount };
 }
 
 interface Layout {
@@ -127,7 +179,7 @@ interface Layout {
 }
 
 /** Lays the files out with ELK: layered along the links, each directory in its own box. */
-async function layout(infos: FileInfo[], edges: MapEdge[]): Promise<Layout> {
+async function layout(infos: FileInfo[], edges: ShownEdge[]): Promise<Layout> {
   const { default: ELK } = await import("elkjs/lib/elk.bundled.js");
   const elk = new ELK();
   const dirs = [...new Set(infos.map((i) => i.dir))].sort();
@@ -163,6 +215,27 @@ async function layout(infos: FileInfo[], edges: MapEdge[]): Promise<Layout> {
 type FileNodeData = { info: FileInfo; dim: boolean; selected: boolean };
 type DirNodeData = { dir: string; dim: boolean };
 
+const AffectedNode = memo(function AffectedNode({ data }: NodeProps<Node<FileNodeData>>) {
+  const { info } = data;
+  const a = info.affected!;
+  const Icon = fileIcon(info.path);
+  const names = a.imports.map((x) => x.split("/").pop()).join(", ");
+  return (
+    <div className={["pm-node", "pm-affected", data.dim ? "pm-dim" : "", data.selected ? "pm-sel" : ""].join(" ")} title={`${info.path}\nNot changed. It imports ${a.hops === 1 ? "changed files" : "files that import changed files"}.`}>
+      <Handle type="target" position={Position.Left} className="pm-handle" isConnectable={false} />
+      <Handle type="source" position={Position.Right} className="pm-handle" isConnectable={false} />
+      <div className="pm-top">
+        <Icon size={13} style={{ color: "var(--faint)" }} />
+        <span className="pm-name ellipsis">{info.name}</span>
+        {a.test && <span className="pm-tag" title="A test"><FlaskConical size={11} />Test</span>}
+      </div>
+      <div className="pm-bottom">
+        <span className="pm-role ellipsis">{a.hops === 1 ? "Imports" : "Through"} <span className="mono">{names}</span></span>
+      </div>
+    </div>
+  );
+});
+
 const FileNode = memo(function FileNode({ data }: NodeProps<Node<FileNodeData>>) {
   const { info } = data;
   const Icon = fileIcon(info.path);
@@ -197,19 +270,62 @@ const DirNode = memo(function DirNode({ data }: NodeProps<Node<DirNodeData>>) {
   );
 });
 
-const nodeTypes = { file: FileNode, dir: DirNode };
+const nodeTypes = { file: FileNode, affected: AffectedNode, dir: DirNode };
 
-function Details(p: { info: FileInfo; edges: MapEdge[]; steps?: WalkStep[]; findings: Finding[]; onClose: () => void; onOpenStep: (i: number) => void; onOpenFile: (path: string) => void; onSelect: (path: string) => void }) {
+function AffectedDetails(p: { info: FileInfo; onClose: () => void; onSelect: (path: string) => void; onOpenElsewhere?: (path: string) => void }) {
   const { info } = p;
-  const out = p.edges.filter((e) => e.from === info.path);
-  const inc = p.edges.filter((e) => e.to === info.path);
+  const a = info.affected!;
+  const file = (path: string) => (
+    <li key={path}>
+      <button type="button" className="pm-link" onClick={() => p.onSelect(path)}><span className="mono">{path}</span></button>
+    </li>
+  );
+  return (
+    <aside className="pm-details selectable" aria-label={`Details for ${info.path}`}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="mono" style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{info.path}</div>
+          <div className="muted" style={{ fontSize: 12 }}>Not changed{a.test ? " · Test" : ""} · {a.hops === 1 ? "imports a changed file" : "two imports away"}</div>
+        </div>
+        <button type="button" className="tb" aria-label="Close details" onClick={p.onClose}><X size={14} /></button>
+      </div>
+      <p style={{ margin: "8px 0 0" }}>
+        {a.test
+          ? "This test reaches the changed code, so it's worth checking it still covers the new behaviour."
+          : "The PR doesn't touch this file, but it uses changed code, so its behaviour can change too."}
+      </p>
+      <h3>{a.hops === 1 ? "Imports" : "Through"}</h3>
+      <ul>{a.imports.map(file)}</ul>
+      {a.hops > 1 && (
+        <>
+          <h3>Depends on changes in</h3>
+          <ul>{a.reaches.map(file)}</ul>
+        </>
+      )}
+      <p className="muted" style={{ fontSize: 11, margin: "10px 0 0" }}>Found from the imports in the code, not by the agent.</p>
+      {p.onOpenElsewhere && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+          <button type="button" className="btn sm" style={{ justifyContent: "flex-start" }} onClick={() => p.onOpenElsewhere?.(info.path)}>
+            <Code2 size={13} />Open in VS Code
+          </button>
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function Details(p: { info: FileInfo; edges: ShownEdge[]; steps?: WalkStep[]; findings: Finding[]; onClose: () => void; onOpenStep: (i: number) => void; onOpenFile: (path: string) => void; onSelect: (path: string) => void }) {
+  const { info } = p;
+  const out = p.edges.filter((e) => e.from === info.path && e.source !== "affected");
+  const inc = p.edges.filter((e) => e.to === info.path && e.source !== "affected");
+  const users = p.edges.filter((e) => e.to === info.path && e.source === "affected").length;
   const name = (path: string) => path.split("/").pop() ?? path;
-  const link = (e: MapEdge, other: string, verb: string) => (
+  const link = (e: ShownEdge, other: string, verb: string) => (
     <li key={`${e.from}-${e.to}`}>
       <button type="button" className="pm-link" onClick={() => p.onSelect(other)}>
         <span className="muted">{verb}</span> <span className="mono">{name(other)}</span>
       </button>
-      {e.why && <div className="muted">{e.why}</div>}
+      {e.why ? <div className="muted">{e.why}</div> : e.source === "imports" && <div className="muted">Read from the imports</div>}
     </li>
   );
   return (
@@ -244,6 +360,7 @@ function Details(p: { info: FileInfo; edges: MapEdge[]; steps?: WalkStep[]; find
           </ul>
         </>
       )}
+      {users > 0 && <p className="muted" style={{ margin: "10px 0 0", fontSize: 12 }}>{users} unchanged {users === 1 ? "file uses" : "files use"} it. They're shown in grey.</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
         {info.steps.map((s) => (
           <button key={s} type="button" className="btn sm" style={{ justifyContent: "flex-start" }} onClick={() => p.onOpenStep(s)}>
@@ -262,7 +379,16 @@ function MapCanvas(p: Props) {
   const agent = useAgent().short;
   const [rootRef, width] = useElementWidth<HTMLDivElement>();
   const narrow = width > 0 && width < 700;
-  const { infos, edges, hiddenGenerated } = useMemo(() => describeFiles(p), [p.files, p.steps, p.map, p.findings, p.risks, p.reviewed, p.hide]);
+  const [reach, setReachState] = useState<Reach>(loadReach);
+  const setReach = (r: Reach) => {
+    setReachState(r);
+    try {
+      localStorage.setItem(REACH_KEY, String(r));
+    } catch {
+      // Only a preference; the map works without it.
+    }
+  };
+  const { infos, edges, hiddenGenerated, affected } = useMemo(() => describeFiles(p, reach), [p.files, p.steps, p.map, p.findings, p.risks, p.reviewed, p.hide, p.radius?.data, reach]);
   // The layout only depends on which files there are and how they link, not on badges or review state.
   const shape = useMemo(() => JSON.stringify([infos.map((i) => i.path), edges.map((e) => [e.from, e.to])]), [infos, edges]);
   const [laid, setLaid] = useState<{ shape: string; layout: Layout } | null>(null);
@@ -308,9 +434,7 @@ function MapCanvas(p: Props) {
       const pos = laid.layout.positions.get(info.path) ?? { x: 0, y: 0 };
       out.push({
         id: info.path,
-        type: "file",
-        // Without "nopan" the canvas starts a pan on mousedown and the click never reaches the file.
-        className: "nopan",
+        type: info.affected ? "affected" : "file",
         parentId: `dir:${info.dir}`,
         extent: "parent",
         position: pos,
@@ -333,7 +457,7 @@ function MapCanvas(p: Props) {
         source: e.from,
         target: e.to,
         label: lit ? e.kind : undefined,
-        className: [lit ? "pm-edge-lit" : "", dim ? "pm-edge-dim" : "", e.kind === "tests" ? "pm-edge-test" : ""].join(" "),
+        className: [lit ? "pm-edge-lit" : "", dim ? "pm-edge-dim" : "", e.kind === "tests" ? "pm-edge-test" : "", e.source === "affected" ? "pm-edge-affected" : ""].join(" "),
         markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
         zIndex: 2,
       };
@@ -366,7 +490,7 @@ function MapCanvas(p: Props) {
 
   return (
     <div ref={rootRef} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 8px 0 12px", borderBottom: "1px solid var(--line)", background: "var(--side)", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 8px 0 12px", borderBottom: "1px solid var(--line)", background: "var(--side)", flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
         <DiffModeSwitch mode="map" onMode={p.onMode} compact={narrow} />
         {p.steps && p.steps.length > 0 && !narrow && (
           <select aria-label="Highlight a section" value={step ?? ""} onChange={(e) => setStep(e.target.value === "" ? null : Number(e.target.value))} className="pm-select">
@@ -374,17 +498,27 @@ function MapCanvas(p: Props) {
             {p.steps.map((s, i) => <option key={i} value={i}>{i + 1}. {s.title}</option>)}
           </select>
         )}
+        {p.radius && (
+          <select aria-label="Show files that may be affected" title="Unchanged files that import the changed ones, read from the code" value={reach} onChange={(e) => setReach(Number(e.target.value) as Reach)} className="pm-select">
+            <option value={0}>Changed files only</option>
+            <option value={1}>+ files that import them</option>
+            <option value={2}>+ two imports away</option>
+          </select>
+        )}
+        {p.radius?.loading && <Loader size={13} className="spin tone-muted" aria-label="Reading the imports" />}
         <span style={{ flex: 1 }} />
-        {!narrow && (
+        {width >= 1000 && (
           <span className="pm-legend muted">
             <span><i className="pm-swatch pm-add" />Added</span>
             <span><i className="pm-swatch pm-modify" />Modified</span>
             <span><i className="pm-swatch pm-delete" />Deleted</span>
+            {reach > 0 && affected > 0 && <span><i className="pm-swatch pm-swatch-affected" />May be affected</span>}
             {hiddenGenerated > 0 && <span title="Generated files aren't on the map. The Files view shows them.">{hiddenGenerated} generated left out</span>}
           </span>
         )}
       </div>
       {notice}
+      {reach > 0 && <RadiusNote radius={p.radius} shown={affected} reach={reach} />}
       <div style={{ flex: 1, minHeight: 0, position: "relative" }} className="pm-canvas">
         {error ? (
           <div className="empty"><span style={{ color: "var(--crit)" }}>Couldn't lay out the map: {error}</span></div>
@@ -401,12 +535,18 @@ function MapCanvas(p: Props) {
             minZoom={0.15}
             maxZoom={2}
             proOptions={{ hideAttribution: true }}
-            onNodeMouseEnter={(_, n) => n.type === "file" && setHover(n.id)}
+            // Dragging pans from anywhere, files included. A press that moves less than this is still
+            // a click, so a little hand shake doesn't lose the click on a file.
+            paneClickDistance={4}
+            onNodeMouseEnter={(_, n) => n.type !== "dir" && setHover(n.id)}
             onNodeMouseLeave={() => setHover(null)}
-            onNodeClick={(_, n) => n.type === "file" && setSelected(n.id === selected ? null : n.id)}
+            onNodeClick={(_, n) => n.type !== "dir" && setSelected(n.id === selected ? null : n.id)}
             onNodeDoubleClick={(_, n) => {
               const info = infos.find((i) => i.path === n.id);
-              if (info) info.steps.length ? p.onOpenStep(info.steps[0]) : p.onOpenFile(info.path);
+              if (!info) return;
+              if (info.affected) p.onOpenElsewhere?.(info.path);
+              else if (info.steps.length) p.onOpenStep(info.steps[0]);
+              else p.onOpenFile(info.path);
             }}
             onPaneClick={() => setSelected(null)}
           >
@@ -415,7 +555,8 @@ function MapCanvas(p: Props) {
           </ReactFlow>
         )}
         {!laid && !error && infos.length > 0 && <div className="empty" style={{ position: "absolute", inset: 0 }}><Loader size={18} className="spin" /></div>}
-        {selectedInfo && (
+        {selectedInfo?.affected && <AffectedDetails info={selectedInfo} onClose={() => setSelected(null)} onSelect={select} onOpenElsewhere={p.onOpenElsewhere} />}
+        {selectedInfo && !selectedInfo.affected && (
           <Details
             info={selectedInfo}
             edges={edges}
@@ -428,6 +569,27 @@ function MapCanvas(p: Props) {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/** One line on what the affected files are, or why there are none. */
+function RadiusNote({ radius, shown, reach }: { radius?: Props["radius"]; shown: number; reach: Reach }) {
+  if (!radius || radius.loading) return null;
+  const d = radius.data;
+  let text: string;
+  if (radius.error) text = `Couldn't read the imports: ${radius.error}`;
+  else if (!d) return null;
+  else if (!d.languages.length) text = "Files that may be affected are found for TypeScript, JavaScript, Python, Go and Rust. This repository has none of them.";
+  else if (!shown) text = reach === 1 ? "No other file imports the changed files." : "No other file imports the changed files, even two imports away.";
+  else {
+    const tests = d.affected.filter((a) => a.hops <= reach && a.test).length;
+    text = `${shown} unchanged ${shown === 1 ? "file uses" : "files use"} the changed code${tests ? `, ${tests} of them ${tests === 1 ? "a test" : "tests"}` : ""}. Read from the imports in ${d.scanned.toLocaleString()} files${d.more ? `; ${d.more} more left out` : ""}${d.truncated ? "; the repository is too big to read all of it" : ""}.`;
+  }
+  return (
+    <div className="pm-radius muted" role="status">
+      <Radar size={13} style={{ flexShrink: 0 }} />
+      <span>{text}</span>
     </div>
   );
 }

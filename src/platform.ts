@@ -53,8 +53,28 @@ export function applyTheme(theme: Theme) {
  * Zoom the page, like a browser's zoom: text, code and spacing all scale together. In the app the
  * webview zooms itself; in a plain browser (sample data) CSS zoom stands in.
  */
+let pageZoom = 1;
+
 export function applyZoom(zoom: number) {
   const z = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  pageZoom = z;
   if (inTauri) getCurrentWebview().setZoom(z).catch(() => {});
   else document.documentElement.style.zoom = z === 1 ? "" : String(z);
 }
+
+/**
+ * On Linux the app stops WebKitGTK zooming the whole page on a two-finger pinch and sends each step
+ * here instead (`ratio` is the change in scale since the last step, x and y are in window pixels).
+ * Turn it into the ctrl + wheel event a browser sends for a pinch, so the PR map zooms under the
+ * fingers; anywhere else it does nothing.
+ */
+(window as unknown as { __betterlgtmPinch?: (ratio: number, x: number, y: number) => void }).__betterlgtmPinch = (ratio, x, y) => {
+  if (!(ratio > 0) || ratio === 1) return;
+  const clientX = x / pageZoom;
+  const clientY = y / pageZoom;
+  const target = document.elementFromPoint(clientX, clientY);
+  if (!target) return;
+  // React Flow zooms by 2^(-deltaY * 0.002) for a pinch off macOS, so this gives back the same ratio.
+  const deltaY = -500 * Math.log2(ratio);
+  target.dispatchEvent(new WheelEvent("wheel", { deltaY, deltaMode: 0, ctrlKey: true, clientX, clientY, bubbles: true, cancelable: true }));
+};
