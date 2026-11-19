@@ -831,6 +831,10 @@ export function startsTicked(f: Finding, o: { fixed: boolean; hasState: boolean;
 /** A finding another agent refuted, which the reviewer still has to decide on. */
 export const isDisputed = (f: Finding) => f.check?.status === "disputed";
 
+/** The worst severity among findings sorted worst first, leaving out disputed ones (for the PR map's file colour). */
+export const worstCounted = (findings: Finding[], indexes: number[]): Severity | undefined =>
+  findings[indexes.find((i) => !isDisputed(findings[i])) ?? -1]?.severity;
+
 /** The findings line of the "Analysis ready" notification. Disputed findings are named, not counted as open. */
 export function findingsSummary(findings: Finding[]): string {
   const disputed = findings.filter(isDisputed).length;
