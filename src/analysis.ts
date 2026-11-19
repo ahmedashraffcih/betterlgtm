@@ -198,13 +198,14 @@ const PROBE = {
   required: ["question", "choices", "answer", "why"],
 };
 
-/** WALKTHROUGH_SCHEMA with the optional predict-first question on a step. */
+/** WALKTHROUGH_SCHEMA with the optional predict-first question on a step. Built from it, so the PR map stays. */
+const STEP = WALKTHROUGH_SCHEMA.properties.walkthrough;
 export const WALKTHROUGH_SCHEMA_PROBES = {
-  type: "object",
+  ...WALKTHROUGH_SCHEMA,
   properties: {
-    walkthrough: { type: "array", items: { type: "object", properties: { title: TEXT, why: LINES, changes: ANCHORS, probe: PROBE }, required: ["title", "why", "changes"] } },
+    ...WALKTHROUGH_SCHEMA.properties,
+    walkthrough: { ...STEP, items: { ...STEP.items, properties: { ...STEP.items.properties, probe: PROBE } } },
   },
-  required: ["walkthrough"],
 };
 
 export const ANALYSIS_SCHEMA = {
